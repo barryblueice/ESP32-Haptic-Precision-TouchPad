@@ -67,13 +67,12 @@ void app_main(void) {
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
 
     // mp28167_set_vref_mv(dev_handle, 600);
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    while (1) {
-        float current_vref = mp28167_get_vref_mv(dev_handle);
-        ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
+    vTaskDelay(pdMS_TO_TICKS(10000));
+    
+    mp28167_set_vref_mv(dev_handle, 1800);
+    float current_vref = mp28167_get_vref_mv(dev_handle);
+    ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
 
         // mp28167_set_vref_mv(dev_handle, 200);
-        // vTaskDelay(pdMS_TO_TICKS(2000));
-    }
+        // vTaskDelay(pdMS_TO_TICKS(2000))
 }
