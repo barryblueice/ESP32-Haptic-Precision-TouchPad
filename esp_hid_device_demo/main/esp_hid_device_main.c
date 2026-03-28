@@ -923,7 +923,6 @@ void app_main(void)
     ret = esp_hid_gap_init(HID_DEV_MODE);
     ESP_ERROR_CHECK( ret );
 
-#if CONFIG_BT_BLE_ENABLED || CONFIG_BT_NIMBLE_ENABLED
 #if CONFIG_EXAMPLE_HID_DEVICE_ROLE == 2
     ret = esp_hid_ble_gap_adv_init(ESP_HID_APPEARANCE_KEYBOARD, ble_hid_config.device_name);
 #elif CONFIG_EXAMPLE_HID_DEVICE_ROLE == 3
@@ -932,43 +931,16 @@ void app_main(void)
     ret = esp_hid_ble_gap_adv_init(ESP_HID_APPEARANCE_GENERIC, ble_hid_config.device_name);
 #endif
     ESP_ERROR_CHECK( ret );
-#if CONFIG_BT_BLE_ENABLED
-    if ((ret = esp_ble_gatts_register_callback(esp_hidd_gatts_event_handler)) != ESP_OK) {
-        ESP_LOGE(TAG, "GATTS register callback failed: %d", ret);
-        return;
-    }
-#endif
+
     ESP_LOGI(TAG, "setting ble device");
     ESP_ERROR_CHECK(
         esp_hidd_dev_init(&ble_hid_config, ESP_HID_TRANSPORT_BLE, ble_hidd_event_callback, &s_ble_hid_param.hid_dev));
-#endif
 
-#if CONFIG_BT_HID_DEVICE_ENABLED
-    ESP_LOGI(TAG, "setting device name");
-    esp_bt_gap_set_device_name(bt_hid_config.device_name);
-    ESP_LOGI(TAG, "setting cod major, peripheral");
-    esp_bt_cod_t cod = {0};
-    cod.major = ESP_BT_COD_MAJOR_DEV_PERIPHERAL;
-    cod.minor = ESP_BT_COD_MINOR_PERIPHERAL_POINTING;
-    esp_bt_gap_set_cod(cod, ESP_BT_SET_COD_MAJOR_MINOR);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-    ESP_LOGI(TAG, "setting bt device");
-    ESP_ERROR_CHECK(
-        esp_hidd_dev_init(&bt_hid_config, ESP_HID_TRANSPORT_BT, bt_hidd_event_callback, &s_bt_hid_param.hid_dev));
-#if CONFIG_BT_SDP_COMMON_ENABLED
-    ESP_ERROR_CHECK(esp_sdp_register_callback(esp_sdp_cb));
-    ESP_ERROR_CHECK(esp_sdp_init());
-#endif /* CONFIG_BT_SDP_COMMON_ENABLED */
-#endif /* CONFIG_BT_HID_DEVICE_ENABLED */
-#if CONFIG_BT_NIMBLE_ENABLED
-    /* XXX Need to have template for store */
     ble_store_config_init();
 
     ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
-	/* Starting nimble task after gatts is initialized*/
     ret = esp_nimble_enable(ble_hid_device_host_task);
     if (ret) {
         ESP_LOGE(TAG, "esp_nimble_enable failed: %d", ret);
     }
-#endif
 }
