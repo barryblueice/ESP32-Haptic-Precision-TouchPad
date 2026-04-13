@@ -95,7 +95,6 @@ void ble_hid_demo_task(void *pvParameters)
 void ble_hid_task_start_up(void)
 {
     if (s_ble_hid_param.task_hdl) {
-        // Task already exists
         return;
     }
     xTaskCreate(ble_hid_demo_task, "ble_hid_demo_task", 3 * 1024, NULL, configMAX_PRIORITIES - 3,
