@@ -20,8 +20,6 @@
 #include "esp_hidd.h"
 #include "esp_hid_gap.h"
 
-#define REPORTID_MOUSE 0x01
-
 static const char *TAG = "HID_DEV_DEMO";
 
 typedef struct
@@ -34,37 +32,95 @@ typedef struct
 
 static local_param_t s_ble_hid_param = {0};
 
+#define REPORTID_TOUCHPAD         0x01
+#define REPORTID_MOUSE            0x02
+#define REPORTID_MAX_COUNT        0x03
+#define REPORTID_PTPHQA           0x04
+#define REPORTID_FEATURE          0x05
+#define REPORTID_FUNCTION_SWITCH  0x06
+#define REPORTID_HAPTIC_FEATURE    0x0C
+
+#define EPNUM_GENERIC_IN 0x81
+#define EPNUM_TP_IN    0x82
+#define EPNUM_MOUSE_IN 0x83
+
+#define LOGICAL_X  0x26, 0x7F, 0x0D
+#define LOGICAL_Y  0x26, 0x6F, 0x08
+#define PHYSICAL_X 0x46, 0xF0, 0x01
+#define PHYSICAL_Y 0x46, 0x46, 0x01
+#define PHYSICAL_UNIT_EXPONENT 0x55, 0x0E
+#define PHYSICAL_UNIT 0x65, 0x13
+
 const uint8_t hid_report_descriptor[] = {
-
-    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
-    0x09, 0x02,                         // USAGE (Mouse)
+    0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x05,                         // USAGE (Touch Pad)
     0xa1, 0x01,                         // COLLECTION (Application)
-    0x85, REPORTID_MOUSE,               // REPORT_ID
-    0x09, 0x01,                         // USAGE (Pointer)
-    0xa1, 0x00,  
+        0x85, 0x01,                     //   REPORT_ID (1) - Input Report
+        
+        0x09, 0x22,                     //   USAGE (Finger)
+        0xa1, 0x02,                     //   COLLECTION (Logical)
+            0x05, 0x0d,                 //     USAGE_PAGE (Digitizers)
+            0x09, 0x47,                 //     USAGE (Confidence)
+            0x09, 0x42,                 //     USAGE (Tip Switch)
+            0x15, 0x00,                 //     LOGICAL_MINIMUM (0)
+            0x25, 0x01,                 //     LOGICAL_MAXIMUM (1)
+            0x75, 0x01,                 //     REPORT_SIZE (1)
+            0x95, 0x02,                 //     REPORT_COUNT (2)
+            0x81, 0x02,                 //     INPUT (Data,Var,Abs)
+            
+            0x09, 0x51,                 //     USAGE (Contact Identifier)
+            0x25, 0x3f,                 //     LOGICAL_MAXIMUM (63)
+            0x75, 0x06,                 //     REPORT_SIZE (6)
+            0x95, 0x01,                 //     REPORT_COUNT (1)
+            0x81, 0x02,                 //     INPUT (Data,Var,Abs)
 
-    0x05, 0x09,                         // USAGE_PAGE (Button)
-    0x19, 0x01,                         // USAGE_MINIMUM (Button 1)
-        0x29, 0x03,                     // USAGE_MAXIMUM (Button 3)
-        0x15, 0x00,                     // LOGICAL_MINIMUM (0)
-        0x25, 0x01,                     // LOGICAL_MAXIMUM (1)
-        0x75, 0x01,                     // REPORT_SIZE (1)
-        0x95, 0x03,                     // REPORT_COUNT (3)
-        0x81, 0x02,                     // INPUT (Data,Var,Abs)
-        0x95, 0x05,                     // REPORT_COUNT (5)
-        0x81, 0x03,                     // INPUT (Cnst,Var,Abs)
+            0x05, 0x01,                 //     USAGE_PAGE (Generic Desktop)
+            0x09, 0x30,                 //     USAGE (X)
+            0x26, 0x80, 0x07,           //     LOGICAL_MAXIMUM (1920)
+            0x75, 0x10,                 //     REPORT_SIZE (16)
+            0x95, 0x01,                 //     REPORT_COUNT (1)
+            0x81, 0x02,                 //     INPUT (Data,Var,Abs)
 
-        0x05, 0x01,                     // USAGE_PAGE (Generic Desktop)
-        0x09, 0x30,                     // USAGE (X)
-        0x09, 0x31,                     // USAGE (Y)
-        0x15, 0x81,                     // LOGICAL_MINIMUM (-127)
-        0x25, 0x7f,                     // LOGICAL_MAXIMUM (127)
-        0x75, 0x08,                     // REPORT_SIZE (8)
-        0x95, 0x02,                     // REPORT_COUNT (2)
-        0x81, 0x06,                     // INPUT (Data,Var,Rel)
-    0xC0,                               // END_COLLECTION (Physical)
-    0xC0,                               // END_COLLECTION (Application)
+            0x09, 0x31,                 //     USAGE (Y)
+            0x26, 0x38, 0x04,           //     LOGICAL_MAXIMUM (1080)
+            0x81, 0x02,                 //     INPUT (Data,Var,Abs)
+        0xc0,                           //   END_COLLECTION (Finger 0)
 
+        0x05, 0x0d,                     //   USAGE_PAGE (Digitizers)
+        0x09, 0x56,                     //   USAGE (Scan Time)
+        0x27, 0xff, 0xff, 0x00, 0x00,   //   LOGICAL_MAXIMUM (65535)
+        0x75, 0x10,                 
+        0x95, 0x01,                 
+        0x81, 0x02,                     //   INPUT (Data,Var,Abs)
+
+        0x09, 0x54,                     //   USAGE (Contact count)
+        0x25, 0x7f,                     //   LOGICAL_MAXIMUM (127)
+        0x75, 0x08,                 
+        0x95, 0x01,                 
+        0x81, 0x02,                     //   INPUT (Data,Var,Abs)
+
+        0x05, 0x09,                     //   USAGE_PAGE (Button)
+        0x09, 0x01,                     //   USAGE (Button 1)
+        0x25, 0x01,                 
+        0x75, 0x01,                 
+        0x95, 0x01,                 
+        0x81, 0x02,                     //   INPUT (Data,Var,Abs)
+        0x95, 0x07,                     //   Padding (剩下的 7 bit)
+        0x81, 0x03,                     //   INPUT (Cnst,Var,Abs)
+    0xc0,                               // END_COLLECTION (TLC 1)
+
+    0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x0e,                         // USAGE (Configuration)
+    0xa1, 0x01,                         // COLLECTION (Application)
+        0x85, 0x02,                     //   REPORT_ID (2) - Feature Report
+        0x09, 0x22,                     //   USAGE (Finger)
+        0xa1, 0x02,                     //   COLLECTION (Logical)
+            0x09, 0x52,                 //     USAGE (Input Mode)
+            0x15, 0x00, 0x25, 0x0a,     //     LOGICAL_MIN/MAX (0, 10)
+            0x75, 0x08, 0x95, 0x01,     
+            0xb1, 0x02,                 //     FEATURE (Data,Var,Abs)
+        0xc0,                           
+    0xc0                                // END_COLLECTION (TLC 2)
 };
 
 static esp_hid_raw_report_map_t ble_report_maps[] = {
@@ -114,6 +170,8 @@ static void ble_hidd_event_callback(void *handler_args, esp_event_base_t base, i
     esp_hidd_event_t event = (esp_hidd_event_t)id;
     esp_hidd_event_data_t *param = (esp_hidd_event_data_t *)event_data;
     static const char *TAG = "HID_DEV_BLE";
+    
+    ESP_LOGW("DEBUG", "Event triggered: %d", (int)event);
 
     switch (event) {
     case ESP_HIDD_START_EVENT: {
@@ -190,7 +248,7 @@ void app_main(void)
     ret = esp_hid_gap_init(HID_DEV_MODE);
     ESP_ERROR_CHECK( ret );
 
-    ret = esp_hid_ble_gap_adv_init(ESP_HID_APPEARANCE_GENERIC, ble_hid_config.device_name);
+    ret = esp_hid_ble_gap_adv_init(0x03C9, ble_hid_config.device_name);
     ESP_ERROR_CHECK( ret );
 
     ESP_LOGI(TAG, "setting ble device");
