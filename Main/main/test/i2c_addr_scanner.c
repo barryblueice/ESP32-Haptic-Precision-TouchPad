@@ -6,12 +6,14 @@
 
 static const char *TAG = "I2C_SCANNER";
 
-#define I2C_MASTER_SCL_IO           GPIO_NUM_6      
-#define I2C_MASTER_SDA_IO           GPIO_NUM_7      
+#define I2C_MASTER_SCL_IO           GPIO_NUM_35      
+#define I2C_MASTER_SDA_IO           GPIO_NUM_36      
 #define I2C_MASTER_PORT             I2C_NUM_0
 
-void app_main(void)
-{
+void app_main(void) {
+    gpio_set_direction(14, GPIO_MODE_OUTPUT_OD);
+
+    gpio_set_level(14, 0);
     ESP_LOGI(TAG, "开始扫描 I2C 总线...");
 
     i2c_master_bus_config_t bus_config = {
