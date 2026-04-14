@@ -23,7 +23,7 @@ esp_err_t mp28167_set_vref_mv(i2c_master_dev_handle_t dev, uint16_t mv) {
     if (v_int > 2047) v_int = 2047;
 
     uint8_t v_h = (uint8_t)((v_int >> 3) & 0xFF);
-    uint8_t v_l = (uint8_t)(v_int & 0x07)
+    uint8_t v_l = (uint8_t)(v_int & 0x07);
 
     uint8_t data_l[] = {REG_VREF_L, v_l};
     uint8_t data_h[] = {REG_VREF_H, v_h};
