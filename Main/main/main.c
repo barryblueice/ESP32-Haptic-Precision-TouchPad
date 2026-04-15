@@ -56,19 +56,19 @@ void app_main(void) {
 
         case 1:
         
-            ESP_LOGI(TAG, "Starting in PTP 2.4G Mode...");
+            ESP_LOGW(TAG, "Starting in PTP 2.4G Mode...");
             break;
 
         case 2:
-            ESP_LOGI(TAG, "Starting in BLE PTP Mode...");
+            ESP_LOGW(TAG, "Starting in BLE PTP Mode...");
             break;
 
         case 3:
-            ESP_LOGI(TAG, "Starting in BLE Mouse Mode...");
+            ESP_LOGW(TAG, "Starting in BLE Mouse Mode...");
             break;
 
         default:
-            ESP_LOGI(TAG, "Starting in USB Wired Mode...");
+            ESP_LOGW(TAG, "Starting in USB Wired Mode...");
 
             usb_event_group = xEventGroupCreate();
 
