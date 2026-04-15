@@ -17,7 +17,7 @@ static const char *TAG = "IRQ_BUTTON";
 TimerHandle_t reboot_timer;
 
 void reboot_timer_callback(TimerHandle_t xTimer) {
-    if (current_mode == 2) {
+    if (current_mode == 3) {
         current_mode = 0;
         nvs_write_int("current_mode", current_mode);
         ESP_LOGW(TAG, "Button held for %d ms! Switching to Mode 0...", CONFIG_FUNC_TIMEOUT_MS);
