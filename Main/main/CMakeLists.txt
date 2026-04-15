@@ -8,6 +8,8 @@ set(srcs
     "USB/usbhid.c"
     
     "SYS/rtos_queue.c"
+
+    "GPIO/irq_func_btn.c"
 )
 
 idf_component_register(
