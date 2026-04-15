@@ -60,7 +60,11 @@ void app_main(void) {
             break;
 
         case 2:
-            ESP_LOGI(TAG, "Starting in BLE Mode...");
+            ESP_LOGI(TAG, "Starting in BLE PTP Mode...");
+            break;
+
+        case 3:
+            ESP_LOGI(TAG, "Starting in BLE Mouse Mode...");
             break;
 
         default:
