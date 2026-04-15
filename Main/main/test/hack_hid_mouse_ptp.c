@@ -110,7 +110,7 @@ void read_touch_task(void *pvParameters)
             if (ret == ESP_OK) {
                 if (ret == ESP_OK) {
                     printf("Raw Data: ");
-                    for(int i=0; i<128; i++) printf("%02x ", packet[i]);
+                    for(int i=0; i<32; i++) printf("%02x ", packet[i]);
                     printf("\n");
                 }
             }
@@ -143,7 +143,7 @@ void app_main(void) {
         0x23, 0x00, // Length/Control
         0x04, 0x00, // Reserved/Padding
         0x0f,       // Target Report ID
-        0x01        // 0x00: Standard, 0x01: Full RMI/PTP
+        0x00        // 0x00: Standard, 0x01: Full RMI/PTP
     };
 
     uint8_t final_buf[11];

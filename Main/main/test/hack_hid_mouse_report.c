@@ -110,7 +110,7 @@ void read_touch_task(void *pvParameters)
             if (ret == ESP_OK) {
                 if (ret == ESP_OK) {
                     printf("Raw Data: ");
-                    for(int i=0; i<128; i++) printf("%02x ", packet[i]);
+                    for(int i=0; i<32; i++) printf("%02x ", packet[i]);
                     printf("\n");
                 }
             }
@@ -120,7 +120,6 @@ void read_touch_task(void *pvParameters)
         vTaskDelay(pdMS_TO_TICKS(10)); 
     }
 }
-
 void app_main(void) {
     i2c_init();
 
@@ -135,23 +134,6 @@ void app_main(void) {
     tp_hw_reset();
 
     hid_init_sequence();
-
-    uint8_t magic_cmd[] = {
-        0x00, 0x3f, // Register Address
-        0x03,       // Report Type (Feature)
-        0x0f,       // Report ID
-        0x23, 0x00, // Length/Control
-        0x04, 0x00, // Reserved/Padding
-        0x0f,       // Target Report ID
-        0x01        // 0x00: Standard, 0x01: Full RMI/PTP
-    };
-
-    uint8_t final_buf[11];
-    final_buf[0] = 0x22;
-    memcpy(&final_buf[1], magic_cmd, sizeof(magic_cmd));
-
-    i2c_master_transmit(dev_handle, final_buf, sizeof(final_buf), -1);
-
 
     xTaskCreatePinnedToCore(
         read_touch_task,
