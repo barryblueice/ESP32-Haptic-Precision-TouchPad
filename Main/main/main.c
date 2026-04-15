@@ -14,9 +14,21 @@
 
 #include "USB/usbhid.h"
 
+#include "GPIO/GPIO_handle.h"
+
 #define TAG "SurfaceTouch"
 
 void app_main(void) {
+
+    gpio_set_direction(GPIO_NUM_5, GPIO_MODE_OUTPUT_OD);
+    gpio_set_direction(GPIO_NUM_6, GPIO_MODE_OUTPUT_OD);
+    gpio_set_direction(GPIO_NUM_7, GPIO_MODE_OUTPUT_OD);
+
+    gpio_set_level(GPIO_NUM_5, 0);
+    gpio_set_level(GPIO_NUM_6, 0);
+    gpio_set_level(GPIO_NUM_7, 0);
+
+    irq_func_btn_init();
 
     touchpad_init();
     
@@ -37,7 +49,7 @@ void app_main(void) {
 
     xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
 
-    xTaskCreatePinnedToCore(read_touch_task, "touch_task", 4096, NULL, 10, NULL, 1);
+    // xTaskCreatePinnedToCore(read_touch_task, "touch_task", 4096, NULL, 10, NULL, 1);
 
     while (1) {
         tud_task(); 
