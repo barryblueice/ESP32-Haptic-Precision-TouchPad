@@ -1,20 +1,32 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/timers.h" // 软件定时器
+#include "freertos/timers.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
 #include "esp_system.h"
 
+#include "NVS/nvs_handle.h"
+#include "SYS/hid_msg.h"
+
+#include "sdkconfig.h"
+
 #define BOOT_BUTTON_GPIO    0
-#define REBOOT_TIME_MS      3000
 
 static const char *TAG = "IRQ_BUTTON";
 TimerHandle_t reboot_timer;
 
 void reboot_timer_callback(TimerHandle_t xTimer) {
+    if (current_mode == 2) {
+        current_mode = 0;
+        nvs_write_int("current_mode", current_mode);
+        ESP_LOGW(TAG, "Button held for %d ms! Switching to Mode 0...", CONFIG_FUNC_TIMEOUT_MS);
+    } else {
+        nvs_write_int("current_mode", current_mode += 1);
+        ESP_LOGW(TAG, "Button held for %d ms! Switching to Mode %d...", CONFIG_FUNC_TIMEOUT_MS, current_mode);
+    }
     // ESP_LOGW(TAG, "Button held for 3s! Restarting to Download Mode...");
-    // esp_restart();
+    esp_restart();
 }
 
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
@@ -33,7 +45,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 }
 
 void irq_func_btn_init(void) {
-    reboot_timer = xTimerCreate("RebootTimer", pdMS_TO_TICKS(REBOOT_TIME_MS), pdFALSE, (void*)0, reboot_timer_callback);
+    reboot_timer = xTimerCreate("RebootTimer", pdMS_TO_TICKS(CONFIG_FUNC_TIMEOUT_MS), pdFALSE, (void*)0, reboot_timer_callback);
 
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_ANYEDGE,
