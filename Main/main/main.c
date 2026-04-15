@@ -99,7 +99,7 @@ void parse_touch_report(uint8_t *buf, size_t len) {
 
 void read_touch_task(void *pvParameters)
 {
-    uint8_t packet[128];
+    uint8_t packet[64];
     ESP_LOGI(TAG, "Touch task started on Core 1");
 
     while (1) {
@@ -110,7 +110,7 @@ void read_touch_task(void *pvParameters)
             if (ret == ESP_OK) {
                 if (ret == ESP_OK) {
                     printf("Raw Data: ");
-                    for(int i=0; i<128; i++) printf("%02x ", packet[i]);
+                    for(int i=0; i<64; i++) printf("%02x ", packet[i]);
                     printf("\n");
                 }
             }
