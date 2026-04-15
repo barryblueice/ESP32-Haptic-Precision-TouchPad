@@ -23,16 +23,22 @@ menu "TouchPad Configuration"
 
     menu "Receiver Configuration"
 
-    config RECEIVER_MAC_ADDR
-        string "Receiver MAC Address"
-        default "FF:FF:FF:FF:FF:FF"
-        help
-            Enter the MAC address of your PTP 2.4G Reciever in XX:XX:XX:XX:XX:XX format.
+        config RECEIVER_MAC_ADDR
+            string "Receiver MAC Address"
+            default "FF:FF:FF:FF:FF:FF"
+            help
+                Enter the MAC address of your PTP 2.4G Reciever in XX:XX:XX:XX:XX:XX format.
 
     endmenu
 
-    # menu  "Feature Options"
+    menu  "Feature Options"
 
-    # endmenu
+        config FUNC_TIMEOUT_MS
+            int "Press FUNC key to switch mode timeout (ms)"
+            default 3000
+            help
+                Enter the timeout value for mode switching in milliseconds. When FUNC key is pressed for the certain target duration of time, the device will switch modes after this duration.
+
+    endmenu
 
 endmenu

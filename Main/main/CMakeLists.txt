@@ -7,9 +7,12 @@ set(srcs
     "USB/usb_descriptor.c"
     "USB/usbhid.c"
     
+    "SYS/hid_msg.c"
     "SYS/rtos_queue.c"
 
     "GPIO/irq_func_btn.c"
+
+    "NVS/nvs_handle.c"
 )
 
 idf_component_register(

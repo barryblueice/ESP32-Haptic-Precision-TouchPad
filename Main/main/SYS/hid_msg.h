@@ -88,4 +88,12 @@ typedef struct __attribute__((packed)) {
     } payload;
 } wireless_msg_t;
 
+typedef enum {
+    WIRED_MODE = 0,
+    _2_4_MODE = 1,
+    BLE_MODE = 2
+} device_mode_t;
+
+extern int32_t current_mode;
+
 #endif

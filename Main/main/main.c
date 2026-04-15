@@ -16,6 +16,8 @@
 
 #include "GPIO/GPIO_handle.h"
 
+#include "NVS/nvs_handle.h"
+
 #define TAG "SurfaceTouch"
 
 void app_main(void) {
@@ -31,7 +33,18 @@ void app_main(void) {
     irq_func_btn_init();
 
     touchpad_init();
-    
+
+    nvs_init();
+
+    esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
+    if (nvs_err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to initialize NVS, storing default mode.");
+        nvs_write_int("current_mode", WIRED_MODE);
+        current_mode = WIRED_MODE;
+    } else {
+        ESP_LOGI(TAG, "Current mode loaded from NVS: %d", current_mode);
+    }
+
     tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
     mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
 
@@ -39,20 +52,37 @@ void app_main(void) {
     xQueueAddToSet(mouse_queue, main_queue_set);
     xQueueAddToSet(tp_queue, main_queue_set);
 
-    usb_event_group = xEventGroupCreate();
+    switch (current_mode) {
 
-    xTaskCreate(usb_mount_task, "mode_sel", 4096, NULL, 11, NULL);
+        case 1:
+        
+            ESP_LOGI(TAG, "Starting in PTP 2.4G Mode...");
+            break;
 
-    usbhid_init();
+        case 2:
+            ESP_LOGI(TAG, "Starting in BLE Mode...");
+            break;
 
-    // xTaskCreate(tp_i2c_task, "i2c_task", 4096, NULL, 10, NULL);
+        default:
+            ESP_LOGI(TAG, "Starting in USB Wired Mode...");
 
-    xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
+            usb_event_group = xEventGroupCreate();
 
-    // xTaskCreatePinnedToCore(read_touch_task, "touch_task", 4096, NULL, 10, NULL, 1);
+            xTaskCreate(usb_mount_task, "mode_sel", 4096, NULL, 11, NULL);
 
-    while (1) {
-        tud_task(); 
-        vTaskDelay(pdMS_TO_TICKS(1)); 
+            usbhid_init();
+
+            // xTaskCreate(tp_i2c_task, "i2c_task", 4096, NULL, 10, NULL);
+
+            xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
+
+            // xTaskCreatePinnedToCore(read_touch_task, "touch_task", 4096, NULL, 10, NULL, 1);
+
+            while (1) {
+                tud_task(); 
+                vTaskDelay(pdMS_TO_TICKS(1)); 
+            }
+            break;
+            
     }
 }
