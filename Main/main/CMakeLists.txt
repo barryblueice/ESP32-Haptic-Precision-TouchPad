@@ -1,7 +1,13 @@
 set(srcs
     "main.c"
+
     "I2C/i2c_cmd.c"
     "I2C/i2c_quene.c"
+
+    "USB/usb_descriptor.c"
+    "USB/usbhid.c"
+    
+    "SYS/rtos_queue.c"
 )
 
 idf_component_register(
