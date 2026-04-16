@@ -51,9 +51,9 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
   - [ ] Physical Buttons Support (left click & right click)
   - [x] Add a new HID port to support Mouse Mode compatibility.<br>
         (available for some old systems/BIOS that doesn't support PTP, like Windows 7)
-  - [x] 2.4G wireless mode development
+  - [x] 2.4G wireless mode support
+  - [ ] Bluetooth wireless mode support
   - [ ] Hacking on Haptic Sensitivity Adjustment Principle
-  - [ ] Bluetooth wireleess mode development
 
 # Current Issues:
  - Feedback adjustment may not support by Windows 11 original setting. It may need third-party setting software to config.
