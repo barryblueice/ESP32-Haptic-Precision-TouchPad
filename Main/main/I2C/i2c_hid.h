@@ -19,6 +19,7 @@
 #define POWER_ON         0x00
 
 #include "driver/i2c_master.h"
+#include "SYS/hid_msg.h"
 
 extern i2c_master_bus_handle_t bus_handle;
 extern i2c_master_dev_handle_t dev_handle;
@@ -33,5 +34,7 @@ void touchpad_init(void);
 void read_touch_task(void *pvParameters);
 esp_err_t touchpad_mode_set(bool is_ptp_mode);
 void i2c_queue_task(void *arg);
+void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report);
+void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report);
 
 #endif

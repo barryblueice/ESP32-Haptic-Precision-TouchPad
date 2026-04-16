@@ -18,6 +18,8 @@
 #define TAP_DEADZONE 30
 #define FILTER_ALPHA 0.5f
 
+#define SENSITIVITY 1.0f
+
 #define SCAN_INTERVAL_PER_FINGER 80
 
 typedef enum {
@@ -54,7 +56,6 @@ static int32_t slot_filter_y[5] = {0};
 static uint16_t history_x[5] = {0};
 static uint16_t history_y[5] = {0};
 
-static uint16_t mx = 0, my = 0;
 static uint8_t consecutive_errors[5] = {0};
 
 static bool slot_active[5] = {false};
@@ -212,5 +213,39 @@ void i2c_queue_task(void *arg) {
                 xQueueOverwrite(mouse_queue, &mouse_msg);
             }
         }
+    }
+}
+
+void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report) {
+    int move_x = (int)(msg->x * SENSITIVITY);
+    int move_y = (int)(msg->y * SENSITIVITY);
+
+    if (move_x > 127)  move_x = 127;
+    if (move_x < -127) move_x = -127;
+    if (move_y > 127)  move_y = 127;
+    if (move_y < -127) move_y = -127;
+
+    report->x = (int8_t)move_x;
+    report->y = (int8_t)move_y;
+    report->buttons = msg->buttons & 0x07;
+}
+
+void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report) {
+    report->scan_time = msg->scan_time;
+    report->contact_count = msg->actual_count;
+    report->buttons = (msg->button_mask > 0) ? 0x01 : 0x00;
+
+    for (int i = 0; i < 5; i++) {
+        report->fingers[i].x = msg->fingers[i].x;
+        report->fingers[i].y = msg->fingers[i].y;
+
+        uint8_t contact_id = (uint8_t)i; 
+        uint8_t status_byte = 0x01;
+
+        if (msg->fingers[i].tip_switch) {
+            status_byte |= 0x02;
+        }
+
+        report->fingers[i].tip_conf_id = (contact_id << 2) | status_byte;
     }
 }
