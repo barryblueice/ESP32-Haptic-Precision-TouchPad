@@ -23,7 +23,6 @@ void tp_i2c_int_task(void *pvParameters) {
     while (1) {
         if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY)) {
             if ((i2c_master_receive(dev_handle, packet, 64, 100)) == ESP_OK) {
-                // printf("Sending to Queue...\n");
                 xQueueSend(tp_data_queue, (void *)packet, portMAX_DELAY);
             }
         }
