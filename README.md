@@ -13,7 +13,7 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
 
 > [!IMPORTANT]
 > This project is basically an expanded and strengthened version of an existing project [ESP32 Precision TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad).<br>
-> Most of the functions will be developed by referring to the source code of previous projects.
+> Most of the functions will be developed by referring to the source code of previous projects.<br>
 > So the basic functions of these two projects are the same. This project has added more new features.
 
 > [!CAUTION]
@@ -23,7 +23,15 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
 
  - **TouchPad Main PCB:**
 
+<img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/5b6872fd-f712-44a8-9dfa-73c060ba20b4" />
+
+<img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/549454a9-c079-4c0e-b090-b5cde212baf4" />
+
  - **2.4G Reciever:**
+
+<img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/70d6ea15-2a78-452b-8408-d5225be4694f" />
+
+<img width="2160" height="633" alt="image" src="https://github.com/user-attachments/assets/5886436b-85f2-4d94-8240-d4105563b9e8" />
 
 ***
 
@@ -31,8 +39,6 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
   ## Hardware:
   - [x] PCB Design
   - [ ] Appearance Design (Modeling by SOLIDWORKS)
-  - [x] Adding battery to support 2.4G wireless (Fingerprint module is unavailable during 2.4G wireless state)
-  - [x] Adding battery to support wireless Bluetooth (Fingerprint module is unavailable during bluetooth wireless state)
 
   ## Software:
   - [x] Recognized as a Microsoft Precision TouchPad
