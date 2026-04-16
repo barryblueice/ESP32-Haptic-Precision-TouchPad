@@ -41,8 +41,6 @@
 #define TPD_REPORT_ID 0x01
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
 
-const float SENSITIVITY = 1.0f;
-
 #define REPORTID_DFU_CMD  0xFF
 
 void enter_dfu_mode(void)
@@ -215,59 +213,28 @@ void usbhid_init(void) {
 }
 
 void usbhid_task(void *arg) {
-    tp_multi_msg_t msg;
+    tp_multi_msg_t tp_msg;
     mouse_msg_t mouse_msg;
 
     while (1) {
-
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
 
         if (xActivatedMember == mouse_queue) {
-            if (xQueueReceive(mouse_queue, &mouse_msg, portMAX_DELAY)) {
-
+            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
                 mouse_hid_report_t report = {0};
-
-                int move_x = (int)(mouse_msg.x * SENSITIVITY);
-                int move_y = (int)(mouse_msg.y * SENSITIVITY);
-
-                if (move_x > 127)  move_x = 127;
-                if (move_x < -127) move_x = -127;
-
-                if (move_y > 127)  move_y = 127;
-                if (move_y < -127) move_y = -127;
-
-                report.x = (int8_t)move_x;
-                report.y = (int8_t)move_y;
-
-                report.buttons = mouse_msg.buttons & 0x07;
+                
+                parse_mouse_report(&mouse_msg, &report);
 
                 if (tud_hid_n_ready(2)) {
                     tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
                 }
             }
-        } else if (xActivatedMember == tp_queue) {
-            if (xQueueReceive(tp_queue, &msg, portMAX_DELAY)) {
+        } 
+        else if (xActivatedMember == tp_queue) {
+            if (xQueueReceive(tp_queue, &tp_msg, 0)) {
                 ptp_report_t report = {0};
-                report.scan_time = msg.scan_time;
                 
-                for (int i = 0; i < 5; i++) {
-                    report.fingers[i].x = msg.fingers[i].x;
-                    report.fingers[i].y = msg.fingers[i].y;
-
-                    uint8_t contact_id = (uint8_t)i; 
-                    uint8_t status_byte = 0;
-
-                    status_byte |= 0x01; 
-
-                    if (msg.fingers[i].tip_switch) {
-                        status_byte |= 0x02;
-                    }
-
-                    report.fingers[i].tip_conf_id = (contact_id << 2) | status_byte;
-                }
-
-                report.contact_count = msg.actual_count;
-                report.buttons = (msg.button_mask > 0) ? 0x01 : 0x00;
+                parse_ptp_report(&tp_msg, &report);
 
                 if (tud_hid_n_ready(1)) {
                     tud_hid_n_report(1, REPORTID_TOUCHPAD, &report, sizeof(report));
