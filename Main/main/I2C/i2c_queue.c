@@ -35,14 +35,10 @@ uint16_t global_scan_time = 0;
 
 static uint16_t raw_x_history[5][HISTORY_LEN] = {0};
 static uint16_t raw_y_history[5][HISTORY_LEN] = {0};
-static uint32_t filtered_x[5] = {0};
-static uint32_t filtered_y[5] = {0};
 static uint16_t last_raw_x[5] = {0};
 static uint16_t last_raw_y[5] = {0};
 static uint16_t origin_x[5] = {0};
 static uint16_t origin_y[5] = {0};
-
-static uint16_t history_actual_count = 0;
 
 static int64_t last_frame_time = 0;
 static uint32_t simulated_scan_time = 0;
@@ -55,8 +51,6 @@ static uint16_t get_median(uint16_t n1, uint16_t n2, uint16_t n3) {
 
 static int32_t slot_filter_x[5] = {0};
 static int32_t slot_filter_y[5] = {0};
-static uint16_t slot_origin_x[5] = {0};
-static uint16_t slot_origin_y[5] = {0};
 static uint16_t history_x[5] = {0};
 static uint16_t history_y[5] = {0};
 
@@ -90,8 +84,11 @@ void i2c_queue_task(void *arg) {
 
         if (xQueueReceive(tp_data_queue, tp_packet, portMAX_DELAY) == pdPASS) {
 
+            // printf("Raw Data: ");
+            // for(int i=0; i<64; i++) printf("%02x ", tp_packet[i]);
+            // printf("\n");
+
             if (current_tp_mode == PTP_MODE) {
-                tp_multi_msg_t tp_msg = {0};
                 int active_finger_count = 0;
 
                 update_simulated_scan_time(&tp_msg);
@@ -114,47 +111,54 @@ void i2c_queue_task(void *arg) {
                         raw_x_history[id][HISTORY_LEN-1] = rx;
                         raw_y_history[id][HISTORY_LEN-1] = ry;
 
-                        if (last_raw_x[id] == 0) {
-                            filtered_x[id] = rx << 8;
-                            filtered_y[id] = ry << 8;
+                        if (!slot_active[id]) {
+                            slot_filter_x[id] = rx << 8;
+                            slot_filter_y[id] = ry << 8;
                             origin_x[id] = rx;
                             origin_y[id] = ry;
                             tap_frozen[id] = true; 
                             touch_state[id] = TOUCH_TAP_CANDIDATE;
-                            mx = rx; my = ry;
-                        } else {
-                            uint16_t mx = get_median(raw_x_history[id][HISTORY_LEN-3], 
-                                                    raw_x_history[id][HISTORY_LEN-2], 
-                                                    raw_x_history[id][HISTORY_LEN-1]);
-                            uint16_t my = get_median(raw_y_history[id][HISTORY_LEN-3], 
-                                                    raw_y_history[id][HISTORY_LEN-2], 
-                                                    raw_y_history[id][HISTORY_LEN-1]);
+                            slot_active[id] = true;
+                            consecutive_errors[id] = 0;
 
-                            int dx_jump = mx - last_raw_x[id];
-                            int dy_jump = my - last_raw_y[id];
-                            if ((dx_jump*dx_jump + dy_jump*dy_jump) > (300*300)) {
-                                if (consecutive_errors[id] < 2) {
-                                    mx = last_raw_x[id]; my = last_raw_y[id];
-                                    consecutive_errors[id]++;
-                                } else {
-                                    consecutive_errors[id] = 0;
-                                }
+                            for(int h=0; h<HISTORY_LEN; h++) {
+                                raw_x_history[id][h] = rx; raw_y_history[id][h] = ry;
+                            }
+                        }
+
+                        uint16_t mx = get_median(raw_x_history[id][HISTORY_LEN-3], 
+                                                raw_x_history[id][HISTORY_LEN-2], 
+                                                raw_x_history[id][HISTORY_LEN-1]);
+                        uint16_t my = get_median(raw_y_history[id][HISTORY_LEN-3], 
+                                                raw_y_history[id][HISTORY_LEN-2], 
+                                                raw_y_history[id][HISTORY_LEN-1]);
+
+                        int dx_jump = mx - (slot_filter_x[id] >> 8);
+                        int dy_jump = my - (slot_filter_y[id] >> 8);
+                        if ((dx_jump*dx_jump + dy_jump*dy_jump) > (300*300)) {
+                            if (consecutive_errors[id] < 2) { 
+                                mx = (uint16_t)(slot_filter_x[id] >> 8); 
+                                my = (uint16_t)(slot_filter_y[id] >> 8);
+                                consecutive_errors[id]++;
                             } else {
                                 consecutive_errors[id] = 0;
                             }
-
-                            int alpha_speed = abs(rx - last_raw_x[id]) + abs(ry - last_raw_y[id]);
-                            uint32_t dynamic_alpha = (alpha_speed < 3) ? 64 : (alpha_speed < 12 ? 115 : 218);
-                            
-                            filtered_x[id] = (dynamic_alpha * (mx << 8) + (256 - dynamic_alpha) * filtered_x[id]) >> 8;
-                            filtered_y[id] = (dynamic_alpha * (my << 8) + (256 - dynamic_alpha) * filtered_y[id]) >> 8;
+                        } else {
+                            consecutive_errors[id] = 0;
                         }
 
-                        uint16_t fx = (uint16_t)(filtered_x[id] >> 8);
-                        uint16_t fy = (uint16_t)(filtered_y[id] >> 8);
+                        int alpha_speed = abs(rx - (int)last_raw_x[id]) + abs(ry - (int)last_raw_y[id]);
+                        uint32_t dynamic_alpha = (alpha_speed < 3) ? 64 : (alpha_speed < 12 ? 115 : 218);
+                        
+                        slot_filter_x[id] = (dynamic_alpha * (mx << 8) + (256 - dynamic_alpha) * slot_filter_x[id]) >> 8;
+                        slot_filter_y[id] = (dynamic_alpha * (my << 8) + (256 - dynamic_alpha) * slot_filter_y[id]) >> 8;
+
+                        uint16_t fx = (uint16_t)(slot_filter_x[id] >> 8);
+                        uint16_t fy = (uint16_t)(slot_filter_y[id] >> 8);
 
                         int dx_from_origin = abs((int)rx - (int)origin_x[id]);
                         int dy_from_origin = abs((int)ry - (int)origin_y[id]);
+
                         int active_dz = (active_finger_count > 0) ? (TAP_DEADZONE / 2) : TAP_DEADZONE;
 
                         if (dx_from_origin > active_dz || dy_from_origin > active_dz) {
@@ -172,9 +176,9 @@ void i2c_queue_task(void *arg) {
 
                         history_x[id] = tp_msg.fingers[id].x;
                         history_y[id] = tp_msg.fingers[id].y;
-                        
                         last_raw_x[id] = rx;
                         last_raw_y[id] = ry;
+                        
                         tp_msg.fingers[id].tip_switch = 1;
                         tp_msg.fingers[id].confidence = 1;
                         active_finger_count++;
@@ -185,8 +189,10 @@ void i2c_queue_task(void *arg) {
                         tp_msg.fingers[id].tip_switch = 0;
                         tp_msg.fingers[id].confidence = 0;
 
+                        slot_active[id] = false;
                         last_raw_x[id] = 0; last_raw_y[id] = 0;
                         origin_x[id] = 0; origin_y[id] = 0;
+                        slot_filter_x[id] = 0; slot_filter_y[id] = 0;
                         touch_state[id] = TOUCH_NONE;
                         tap_frozen[id] = false;
                         consecutive_errors[id] = 0;
