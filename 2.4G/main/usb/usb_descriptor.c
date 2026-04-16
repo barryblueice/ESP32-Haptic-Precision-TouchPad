@@ -19,22 +19,6 @@
 
 #define CONFIG_TOTAL_LEN  (TUD_CONFIG_DESC_LEN + 3 * TUD_HID_DESC_LEN)
 
-#if CONFIG_ELAN_LENOVO_33370A
-    #define LOGICAL_X  0x26, 0x5F, 0x0E
-    #define LOGICAL_Y  0x26, 0xD5, 0x08
-    #define PHYSICAL_X 0x46, 0xB4, 0x2D
-    #define PHYSICAL_Y 0x46, 0x20, 0x1C
-    #define PHYSICAL_UNIT_EXPONENT 0x55, 0x0D
-    #define PHYSICAL_UNIT 0x65, 0x11
-#elif CONFIG_MI_GOODIX_HAPTIC_ENGINE
-    #define LOGICAL_X  0x26, 0x7F, 0x0D
-    #define LOGICAL_Y  0x26, 0x6F, 0x08
-    #define PHYSICAL_X 0x46, 0xF0, 0x01
-    #define PHYSICAL_Y 0x46, 0x46, 0x01
-    #define PHYSICAL_UNIT_EXPONENT 0x55, 0x0E
-    #define PHYSICAL_UNIT 0x65, 0x13
-#endif
-
 const uint8_t generic_hid_report_descriptor[] = {
     TUD_HID_REPORT_DESC_GENERIC_INOUT(64)
 };
@@ -72,15 +56,47 @@ const uint8_t mouse_hid_report_descriptor[] = {
 
 };
 
+const uint8_t mouse_hid_report_descriptor[] = {
+
+    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
+    0x09, 0x02,                         // USAGE (Mouse)
+    0xa1, 0x01,                         // COLLECTION (Application)
+    0x85, REPORTID_MOUSE,               // REPORT_ID
+    0x09, 0x01,                         // USAGE (Pointer)
+    0xa1, 0x00,  
+
+    0x05, 0x09,                         // USAGE_PAGE (Button)
+    0x19, 0x01,                         // USAGE_MINIMUM (Button 1)
+        0x29, 0x03,                     // USAGE_MAXIMUM (Button 3)
+        0x15, 0x00,                     // LOGICAL_MINIMUM (0)
+        0x25, 0x01,                     // LOGICAL_MAXIMUM (1)
+        0x75, 0x01,                     // REPORT_SIZE (1)
+        0x95, 0x03,                     // REPORT_COUNT (3)
+        0x81, 0x02,                     // INPUT (Data,Var,Abs)
+        0x95, 0x05,                     // REPORT_COUNT (5)
+        0x81, 0x03,                     // INPUT (Cnst,Var,Abs)
+
+        0x05, 0x01,                     // USAGE_PAGE (Generic Desktop)
+        0x09, 0x30,                     // USAGE (X)
+        0x09, 0x31,                     // USAGE (Y)
+        0x15, 0x81,                     // LOGICAL_MINIMUM (-127)
+        0x25, 0x7f,                     // LOGICAL_MAXIMUM (127)
+        0x75, 0x08,                     // REPORT_SIZE (8)
+        0x95, 0x02,                     // REPORT_COUNT (2)
+        0x81, 0x06,                     // INPUT (Data,Var,Rel)
+    0xC0,                               // END_COLLECTION (Physical)
+    0xC0,                               // END_COLLECTION (Application)
+
+};
+
 const uint8_t ptp_hid_report_descriptor[] = {
-//TOUCH PAD input TLC
+    
+    //TOUCH PAD input TLC
     0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
     0x09, 0x05,                         // USAGE (Touch Pad)
     0xa1, 0x01,                         // COLLECTION (Application)
     0x85, REPORTID_TOUCHPAD,            // REPORT_ID (Touch pad)
 
-    #if !CONFIG_TOUCHPAD_SPECIFATION_MODEL
-
     // -------- Finger 0 --------
     0x09, 0x22,                         // USAGE (Finger)
     0xA1, 0x02,                         // COLLECTION (Logical)
@@ -104,204 +120,12 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0x5F, 0x0E,                   // LOGICAL_MAXIMUM (3679)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- Y Axis ----
-    0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xD5, 0x08,                   // LOGICAL_MAXIMUM (2261)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0xC0,                               // END_COLLECTION
-
-    // -------- Finger 1 --------
-    0x09, 0x22,                         // USAGE (Finger)
-    0xA1, 0x02,                         // COLLECTION (Logical)
-
-    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
-    0x09, 0x47,                         // USAGE (Confidence)
-    0x09, 0x42,                         // USAGE (Tip Switch)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x25, 0x01,                         // LOGICAL_MAXIMUM (1)
-    0x75, 0x01,                         // REPORT_SIZE (1)
-    0x95, 0x02,                         // REPORT_COUNT (2)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0x09, 0x51,                         // USAGE (Contact Identifier)
-    0x25, 0x3F,                         // LOGICAL_MAXIMUM (63)
-    0x75, 0x06,                         // REPORT_SIZE (6)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- X Axis ----
-    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
-    0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0x5F, 0x0E,                   // LOGICAL_MAXIMUM (3679)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- Y Axis ----
-    0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xD5, 0x08,                   // LOGICAL_MAXIMUM (2261)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0xC0,                               // END_COLLECTION
-
-    // -------- Finger 2 --------
-    0x09, 0x22,                         // USAGE (Finger)
-    0xA1, 0x02,                         // COLLECTION (Logical)
-
-    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
-    0x09, 0x47,                         // USAGE (Confidence)
-    0x09, 0x42,                         // USAGE (Tip Switch)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x25, 0x01,                         // LOGICAL_MAXIMUM (1)
-    0x75, 0x01,                         // REPORT_SIZE (1)
-    0x95, 0x02,                         // REPORT_COUNT (2)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0x09, 0x51,                         // USAGE (Contact Identifier)
-    0x25, 0x3F,                         // LOGICAL_MAXIMUM (63)
-    0x75, 0x06,                         // REPORT_SIZE (6)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- X Axis ----
-    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
-    0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0x5F, 0x0E,                   // LOGICAL_MAXIMUM (3679)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- Y Axis ----
-    0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xD5, 0x08,                   // LOGICAL_MAXIMUM (2261)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0xC0,                               // END_COLLECTION
-
-    // -------- Finger 3 --------
-    0x09, 0x22,                         // USAGE (Finger)
-    0xA1, 0x02,                         // COLLECTION (Logical)
-
-    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
-    0x09, 0x47,                         // USAGE (Confidence)
-    0x09, 0x42,                         // USAGE (Tip Switch)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x25, 0x01,                         // LOGICAL_MAXIMUM (1)
-    0x75, 0x01,                         // REPORT_SIZE (1)
-    0x95, 0x02,                         // REPORT_COUNT (2)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0x09, 0x51,                         // USAGE (Contact Identifier)
-    0x25, 0x3F,                         // LOGICAL_MAXIMUM (63)
-    0x75, 0x06,                         // REPORT_SIZE (6)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- X Axis ----
-    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
-    0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0x5F, 0x0E,                   // LOGICAL_MAXIMUM (3679)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- Y Axis ----
-    0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xD5, 0x08,                   // LOGICAL_MAXIMUM (2261)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0xC0,                               // END_COLLECTION
-
-    // -------- Finger 4 --------
-    0x09, 0x22,                         // USAGE (Finger)
-    0xA1, 0x02,                         // COLLECTION (Logical)
-
-    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
-    0x09, 0x47,                         // USAGE (Confidence)
-    0x09, 0x42,                         // USAGE (Tip Switch)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x25, 0x01,                         // LOGICAL_MAXIMUM (1)
-    0x75, 0x01,                         // REPORT_SIZE (1)
-    0x95, 0x02,                         // REPORT_COUNT (2)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0x09, 0x51,                         // USAGE (Contact Identifier)
-    0x25, 0x3F,                         // LOGICAL_MAXIMUM (63)
-    0x75, 0x06,                         // REPORT_SIZE (6)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- X Axis ----
-    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
-    0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0x5F, 0x0E,                   // LOGICAL_MAXIMUM (3679)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- Y Axis ----
-    0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xD5, 0x08,                   // LOGICAL_MAXIMUM (2261)
-    0x75, 0x10,                         // REPORT_SIZE (16)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0xC0,                               // END_COLLECTION
-
-    #else
-
-    // -------- Finger 0 --------
-    0x09, 0x22,                         // USAGE (Finger)
-    0xA1, 0x02,                         // COLLECTION (Logical)
-
-    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
-    0x09, 0x47,                         // USAGE (Confidence)
-    0x09, 0x42,                         // USAGE (Tip Switch)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x25, 0x01,                         // LOGICAL_MAXIMUM (1)
-    0x75, 0x01,                         // REPORT_SIZE (1)
-    0x95, 0x02,                         // REPORT_COUNT (2)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    0x09, 0x51,                         // USAGE (Contact Identifier)
-    0x25, 0x3F,                         // LOGICAL_MAXIMUM (63)
-    0x75, 0x06,                         // REPORT_SIZE (6)
-    0x95, 0x01,                         // REPORT_COUNT (1)
-    0x81, 0x02,                         // INPUT (Data,Var,Abs)
-
-    // ---- X Axis ----
-    0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
-    0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_X,                          // LOGICAL_MAXIMUM
+    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
-    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT (-3)
-    PHYSICAL_UNIT,                      // UNIT (Centimeter)
+    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
+    0x55, 0x0E,             // UNIT_EXPONENT (-3)
+    0x65, 0x11,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -310,10 +134,10 @@ const uint8_t ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_Y,                          // LOGICAL_MAXIMUM
+    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
+    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -344,12 +168,12 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_X,                          // LOGICAL_MAXIMUM
+    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
-    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT (-3)
-    PHYSICAL_UNIT,                      // UNIT (Centimeter)
+    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
+    0x55, 0x0E,             // UNIT_EXPONENT (-3)
+    0x65, 0x11,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -358,10 +182,10 @@ const uint8_t ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_Y,                          // LOGICAL_MAXIMUM
+    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
+    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -392,12 +216,12 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_X,                          // LOGICAL_MAXIMUM
+    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
-    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT (-3)
-    PHYSICAL_UNIT,                      // UNIT (Centimeter)
+    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
+    0x55, 0x0E,             // UNIT_EXPONENT (-3)
+    0x65, 0x11,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -406,10 +230,10 @@ const uint8_t ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_Y,                          // LOGICAL_MAXIMUM
+    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
+    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -440,12 +264,12 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_X,                          // LOGICAL_MAXIMUM
+    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
-    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT (-3)
-    PHYSICAL_UNIT,                      // UNIT (Centimeter)
+    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
+    0x55, 0x0E,             // UNIT_EXPONENT (-3)
+    0x65, 0x11,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -454,10 +278,10 @@ const uint8_t ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_Y,                          // LOGICAL_MAXIMUM
+    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
+    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -488,12 +312,12 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_X,                          // LOGICAL_MAXIMUM
+    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
-    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT (-3)
-    PHYSICAL_UNIT,                      // UNIT (Centimeter)
+    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
+    0x55, 0x0E,             // UNIT_EXPONENT (-3)
+    0x65, 0x11,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -502,18 +326,16 @@ const uint8_t ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    LOGICAL_Y,                          // LOGICAL_MAXIMUM
+    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
+    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
     0x81, 0x02,                         // INPUT (Data,Var,Abs)
 
     0xC0,                               // END_COLLECTION
-    
-    #endif
 
     0x55, 0x0C,                         // UNIT_EXPONENT (-4)
     0x66, 0x01, 0x10,                   // UNIT (Seconds)
@@ -582,6 +404,7 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0xc0,                               // END_COLLECTION
     0xc0,                               // END_COLLECTION
 };
+
 // enum {
 //     ITF_NUM_HID,
 //     ITF_NUM_TOTAL
