@@ -247,29 +247,26 @@ void usbhid_task(void *arg) {
             }
         } else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &msg, portMAX_DELAY)) {
-
                 ptp_report_t report = {0};
-
                 report.scan_time = msg.scan_time;
                 
                 for (int i = 0; i < 5; i++) {
                     report.fingers[i].x = msg.fingers[i].x;
                     report.fingers[i].y = msg.fingers[i].y;
-                    
-                    uint8_t base_id;
-                    if (msg.fingers[i].tip_switch == 0x01) {
-                        base_id = 0x03;
-                    } else {
-                        base_id = 0x01;
+
+                    uint8_t contact_id = (uint8_t)i; 
+                    uint8_t status_byte = 0;
+
+                    status_byte |= 0x01; 
+
+                    if (msg.fingers[i].tip_switch) {
+                        status_byte |= 0x02;
                     }
 
-                    report.fingers[i].tip_conf_id = base_id;
-
-                    // ESP_DRAM_LOGW(TAG, "Tip Switch: %d, actual_count: %d", report.fingers[i].tip_conf_id, msg.actual_count);
+                    report.fingers[i].tip_conf_id = (contact_id << 2) | status_byte;
                 }
 
                 report.contact_count = msg.actual_count;
-
                 report.buttons = (msg.button_mask > 0) ? 0x01 : 0x00;
 
                 if (tud_hid_n_ready(1)) {
