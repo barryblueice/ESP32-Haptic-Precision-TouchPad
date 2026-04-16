@@ -31,7 +31,7 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
 
 <img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/70d6ea15-2a78-452b-8408-d5225be4694f" />
 
-<img width="2160" height="633" alt="image" src="https://github.com/user-attachments/assets/5886436b-85f2-4d94-8240-d4105563b9e8" />
+<img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/687e8a38-8139-482d-ae35-d18f7c7536c9" />
 
 ***
 
