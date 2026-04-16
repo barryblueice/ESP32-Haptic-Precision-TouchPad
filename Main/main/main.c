@@ -18,6 +18,8 @@
 
 #include "NVS/nvs_handle.h"
 
+#include "WIFI/wireless_wifi.h"
+
 #define TAG "SurfaceTouch"
 
 void app_main(void) {
@@ -52,8 +54,12 @@ void app_main(void) {
     switch (current_mode) {
 
         case 1:
-        
             ESP_LOGW(TAG, "Starting in 2.4G Mode...");
+
+            wireless_wifi_init();
+
+            xTaskCreate(wifi_send_task, "esp_now_task", 4096, NULL, 11, NULL);
+
             break;
 
         case 2:
@@ -73,11 +79,7 @@ void app_main(void) {
 
             usbhid_init();
 
-            // xTaskCreate(tp_i2c_task, "i2c_task", 4096, NULL, 10, NULL);
-
             xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
-
-            // xTaskCreatePinnedToCore(read_touch_task, "touch_task", 4096, NULL, 10, NULL, 1);
 
             while (1) {
                 tud_task(); 

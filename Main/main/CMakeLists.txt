@@ -16,6 +16,10 @@ set(srcs
     "GPIO/gpio_init.c"
     
     "NVS/nvs_handle.c"
+
+    "WIFI/wifi_handle.c"
+    "WIFI/broadcast.c"
+    "WIFI/heartbeat.c"
 )
 
 idf_component_register(

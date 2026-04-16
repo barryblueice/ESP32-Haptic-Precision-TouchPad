@@ -100,6 +100,4 @@ void touchpad_init(void) {
     tp_hw_reset();
     hid_init_sequence();
 
-    touchpad_mode_set(true);
-
 }
