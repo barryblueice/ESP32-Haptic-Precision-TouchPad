@@ -13,7 +13,7 @@
 
 #define BOOT_BUTTON_GPIO    0
 
-static const char *TAG = "IRQ_BUTTON";
+#define TAG "IRQ_BUTTON"
 TimerHandle_t reboot_timer;
 
 void reboot_timer_callback(TimerHandle_t xTimer) {
@@ -25,7 +25,6 @@ void reboot_timer_callback(TimerHandle_t xTimer) {
         nvs_write_int("current_mode", current_mode += 1);
         ESP_LOGW(TAG, "Button held for %d ms! Switching to Mode %d...", CONFIG_FUNC_TIMEOUT_MS, current_mode);
     }
-    // ESP_LOGW(TAG, "Button held for 3s! Restarting to Download Mode...");
     esp_restart();
 }
 
@@ -57,6 +56,4 @@ void irq_func_btn_init(void) {
 
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BOOT_BUTTON_GPIO, gpio_isr_handler, (void*) BOOT_BUTTON_GPIO);
-
-    ESP_LOGI(TAG, "Interrupt system initialized.");
 }

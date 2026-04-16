@@ -28,7 +28,7 @@
 
 #define TPD_REPORT_SIZE   6
 
-static const char *TAG = "USB_HID_TP";
+#define TAG "USB_HID_TP"
 
 #define REPORTID_TOUCHPAD         0x01
 #define REPORTID_MOUSE            0x02

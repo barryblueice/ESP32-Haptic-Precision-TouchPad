@@ -22,13 +22,7 @@
 
 void app_main(void) {
 
-    gpio_set_direction(GPIO_NUM_5, GPIO_MODE_OUTPUT_OD);
-    gpio_set_direction(GPIO_NUM_6, GPIO_MODE_OUTPUT_OD);
-    gpio_set_direction(GPIO_NUM_7, GPIO_MODE_OUTPUT_OD);
-
-    gpio_set_level(GPIO_NUM_5, 0);
-    gpio_set_level(GPIO_NUM_6, 0);
-    gpio_set_level(GPIO_NUM_7, 0);
+    gpio_init();
 
     irq_func_btn_init();
 
@@ -51,6 +45,8 @@ void app_main(void) {
     main_queue_set = xQueueCreateSet(1 + 1);
     xQueueAddToSet(mouse_queue, main_queue_set);
     xQueueAddToSet(tp_queue, main_queue_set);
+
+    irq_int_init();
 
     switch (current_mode) {
 
@@ -89,4 +85,5 @@ void app_main(void) {
             break;
             
     }
+
 }
