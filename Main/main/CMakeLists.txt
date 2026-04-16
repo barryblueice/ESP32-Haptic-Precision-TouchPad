@@ -11,7 +11,9 @@ set(srcs
     "SYS/rtos_queue.c"
 
     "GPIO/irq_func_btn.c"
-
+    "GPIO/irq_tp_int.c"
+    "GPIO/gpio_init.c"
+    
     "NVS/nvs_handle.c"
 )
 

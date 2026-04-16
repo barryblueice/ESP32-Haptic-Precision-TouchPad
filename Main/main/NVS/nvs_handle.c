@@ -4,7 +4,7 @@
 #include "nvs.h"
 #include "esp_log.h"
 
-static const char *TAG = "NVS";
+#define TAG "NVS"
 
 nvs_handle_t handle;
 
