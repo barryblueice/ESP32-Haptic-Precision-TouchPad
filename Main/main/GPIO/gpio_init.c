@@ -3,6 +3,8 @@
 #include "esp_log.h"
 #include "esp_system.h"
 
+#include "GPIO/GPIO_handle.h"
+
 #define TAG "GPIO_INIT"
 
 void gpio_init(void) {
@@ -19,5 +21,13 @@ void gpio_init(void) {
     gpio_set_level(GPIO_NUM_5, 0);
     gpio_set_level(GPIO_NUM_6, 0);
     gpio_set_level(GPIO_NUM_7, 0);
+
+    gpio_config_t vbus_det_conf = {
+        .intr_type = GPIO_INTR_DISABLE,
+        .pin_bit_mask = (1ULL << VBUS_DET_GPIO),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = 1,
+    };
+    gpio_config(&vbus_det_conf);
 
 }
