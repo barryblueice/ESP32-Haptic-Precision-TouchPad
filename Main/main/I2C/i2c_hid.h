@@ -25,5 +25,7 @@ extern i2c_master_dev_handle_t dev_handle;
 
 void touchpad_init(void);
 void read_touch_task(void *pvParameters);
+esp_err_t touchpad_mode_set(bool is_ptp_mode);
+void i2c_queue_task(void *arg);
 
 #endif

@@ -95,5 +95,6 @@ typedef enum {
 } device_mode_t;
 
 extern int32_t current_mode;
+extern uint8_t current_tp_mode;
 
 #endif

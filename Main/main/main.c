@@ -41,6 +41,7 @@ void app_main(void) {
 
     tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
     mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
+    tp_data_queue = xQueueCreate(1, 64);
 
     main_queue_set = xQueueCreateSet(1 + 1);
     xQueueAddToSet(mouse_queue, main_queue_set);

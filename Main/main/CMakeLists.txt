@@ -2,7 +2,7 @@ set(srcs
     "main.c"
 
     "I2C/i2c_cmd.c"
-    "I2C/i2c_quene.c"
+    "I2C/i2c_queue.c"
 
     "USB/usb_descriptor.c"
     "USB/usbhid.c"
