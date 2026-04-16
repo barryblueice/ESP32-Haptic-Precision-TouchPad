@@ -68,16 +68,14 @@ void tp_hw_reset(void) {
 esp_err_t touchpad_mode_set(bool is_ptp_mode) {
 
     uint8_t magic_cmd[] = {
-        0x00, 0x3f, // Register Address
-        0x03,       // Report Type (Feature)
-        0x0f,       // Report ID
-        0x23, 0x00, // Length/Control
-        0x04, 0x00, // Reserved/Padding
-        0x0f,       // Target Report ID
-        0x01        // 0x00: Standard, 0x01: Full RMI/PTP
+        0x00, 0x3f,                     // Register Address
+        0x03,                           // Report Type (Feature)
+        0x0f,                           // Report ID
+        0x23, 0x00,                     // Length/Control
+        0x04, 0x00,                     // Reserved/Padding
+        0x0f,                           // Target Report ID
+        is_ptp_mode ? 0x01 : 0x00       // 0x00: Standard, 0x01: Full RMI/PTP
     };
-
-    magic_cmd[10] = is_ptp_mode ? 0x01 : 0x00;
 
     uint8_t final_buf[11];
     final_buf[0] = 0x22;

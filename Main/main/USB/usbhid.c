@@ -41,7 +41,7 @@
 #define TPD_REPORT_ID 0x01
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
 
-const float SENSITIVITY = 3.0f;
+const float SENSITIVITY = 1.0f;
 
 #define REPORTID_DFU_CMD  0xFF
 
@@ -158,20 +158,19 @@ void usb_mount_task(void *arg) {
 
                 switch (ptp_input_mode) {
 
-                case 0x03:
-                    ESP_LOGI(TAG, "Mode 0x03 detected: Activating PTP");
-                    // current_mode = PTP_MODE;
-                    // activate_ptp();
-                    break;
+                    case 0x03:
+                        ESP_LOGI(TAG, "Mode 0x03 detected: Activating PTP");
+                        current_tp_mode = PTP_MODE;
+                        touchpad_mode_set(true);
+                        // activate_ptp();
+                        break;
 
-                default:
-                    // if (wireless_mode == 1) {
+                    default:
                         ESP_LOGW(TAG, "Mode 0x%02X detected: Activating Default Mouse Mode", ptp_input_mode);
-                        // current_mode = MOUSE_MODE;
-                        // activate_mouse();
-                    // }
-                    break;
-                }
+                        current_tp_mode = MOUSE_MODE;
+                        touchpad_mode_set(false);
+                        break;
+                    }
 
                 last_ptp_input_mode = ptp_input_mode;
             }
