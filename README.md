@@ -79,5 +79,5 @@ Wiki still under construction.
 
 # Related derivative projects:
 
- - ESP32 Precision TouchPad - Previous project about hacking ELAN & Goodix TouchPad [Link](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad)
+ - ESP32 Precision TouchPad - Previous project about hacking ELAN & Goodix TouchPad. [Link](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad)
  - R-SODIUM Precision TouchPad Configurator - GUI Manager for R-SODIUM Precision TouchPad Product series. [Link](https://github.com/barryblueice/R-SODIUM-Precision-TouchPad-Configurator)
