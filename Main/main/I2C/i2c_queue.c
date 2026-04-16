@@ -20,6 +20,10 @@
 
 #define SENSITIVITY 1.0f
 
+#define PALM_MAJOR_LIMIT  0x20
+#define PALM_MINOR_LIMIT  0x15
+#define PALM_RATIO_LIMIT  2.0f
+
 #define SCAN_INTERVAL_PER_FINGER 80
 
 typedef enum {
@@ -55,6 +59,7 @@ static int32_t slot_filter_x[5] = {0};
 static int32_t slot_filter_y[5] = {0};
 static uint16_t history_x[5] = {0};
 static uint16_t history_y[5] = {0};
+static uint16_t last_confidence[5] = {0};
 
 static uint8_t consecutive_errors[5] = {0};
 
@@ -101,10 +106,27 @@ void i2c_queue_task(void *arg) {
                     uint16_t rx = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
                     uint16_t ry_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
                     uint16_t ry = 1533 - (ry_raw > 1533 ? 1533 : ry_raw);
+                    uint8_t major = tp_packet[offset + 6]; 
+                    uint8_t minor = tp_packet[offset + 7];
 
                     tp_msg.fingers[id].contact_id = id;
 
                     if (finger_status & 0x01) {
+
+                        bool is_confident = true;
+
+                        if (major > PALM_MAJOR_LIMIT || minor > PALM_MINOR_LIMIT) {
+                            is_confident = false;
+                        }
+
+                        float ratio = (minor > 0) ? (float)major / minor : 0;
+                        if (ratio > PALM_RATIO_LIMIT) {
+                            is_confident = false;
+                        }
+
+                        tp_msg.fingers[id].confidence = is_confident ? 0x01 : 0x00;
+                        last_confidence[id] = tp_msg.fingers[id].confidence;
+
                         for (int h = 0; h < HISTORY_LEN - 1; h++) {
                             raw_x_history[id][h] = raw_x_history[id][h+1];
                             raw_y_history[id][h] = raw_y_history[id][h+1];
@@ -181,14 +203,13 @@ void i2c_queue_task(void *arg) {
                         last_raw_y[id] = ry;
                         
                         tp_msg.fingers[id].tip_switch = 1;
-                        tp_msg.fingers[id].confidence = 1;
                         active_finger_count++;
 
                     } else {
                         tp_msg.fingers[id].x = history_x[id];
                         tp_msg.fingers[id].y = history_y[id];
                         tp_msg.fingers[id].tip_switch = 0;
-                        tp_msg.fingers[id].confidence = 0;
+                        tp_msg.fingers[id].confidence = last_confidence[id];
 
                         slot_active[id] = false;
                         last_raw_x[id] = 0; last_raw_y[id] = 0;
@@ -239,13 +260,11 @@ void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report) {
         report->fingers[i].x = msg->fingers[i].x;
         report->fingers[i].y = msg->fingers[i].y;
 
-        uint8_t contact_id = (uint8_t)i; 
-        uint8_t status_byte = 0x01;
+        uint8_t base_id = (msg->fingers[i].tip_switch << 1) | (msg->fingers[i].confidence & 0x01);
 
-        if (msg->fingers[i].tip_switch) {
-            status_byte |= 0x02;
-        }
-
-        report->fingers[i].tip_conf_id = (contact_id << 2) | status_byte;
+        report->fingers[i].tip_conf_id = (i << 2) | base_id;
     }
+
+    // ESP_DRAM_LOGI(TAG, "Finger 0: x=%d, y=%d, tip=%d, confidence=%d", report->fingers[0].x, report->fingers[0].y, msg->fingers[0].tip_switch, msg->fingers[0].confidence);
+
 }
