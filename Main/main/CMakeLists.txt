@@ -3,6 +3,7 @@ set(srcs
 
     "I2C/i2c_cmd.c"
     "I2C/i2c_queue.c"
+    "I2C/i2c_watchdog.c"
 
     "USB/usb_descriptor.c"
     "USB/usbhid.c"
