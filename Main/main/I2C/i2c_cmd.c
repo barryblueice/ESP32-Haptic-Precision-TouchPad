@@ -12,6 +12,8 @@
 i2c_master_bus_handle_t bus_handle;
 i2c_master_dev_handle_t dev_handle;
 
+bool global_watchdog_start = false;
+
 esp_err_t tp_read(uint16_t reg, uint8_t *data, size_t len) {
     uint8_t reg_buf[2] = { reg & 0xFF, reg >> 8 };
     return i2c_master_transmit_receive(dev_handle, reg_buf, 2, data, len, 100);

@@ -250,7 +250,6 @@ void usbhid_task(void *arg) {
 
                 ptp_report_t report = {0};
 
-
                 report.scan_time = msg.scan_time;
                 
                 for (int i = 0; i < 5; i++) {
@@ -258,13 +257,15 @@ void usbhid_task(void *arg) {
                     report.fingers[i].y = msg.fingers[i].y;
                     
                     uint8_t base_id;
-                    if (msg.fingers[i].confidence == 1) {
-                        base_id = msg.fingers[i].tip_switch ? 0x03 : 0x01;
+                    if (msg.fingers[i].tip_switch == 0x01) {
+                        base_id = 0x03;
                     } else {
-                        base_id = 0x02;
+                        base_id = 0x01;
                     }
 
-                    report.fingers[i].tip_conf_id = (i << 2) | base_id;
+                    report.fingers[i].tip_conf_id = base_id;
+
+                    // ESP_DRAM_LOGW(TAG, "Tip Switch: %d, actual_count: %d", report.fingers[i].tip_conf_id, msg.actual_count);
                 }
 
                 report.contact_count = msg.actual_count;

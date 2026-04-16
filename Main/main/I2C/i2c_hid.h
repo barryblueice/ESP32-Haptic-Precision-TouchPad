@@ -23,6 +23,12 @@
 extern i2c_master_bus_handle_t bus_handle;
 extern i2c_master_dev_handle_t dev_handle;
 
+extern bool global_watchdog_start;
+extern uint16_t global_scan_time;
+
+extern uint16_t watchdog_x;
+extern uint16_t watchdog_y;
+
 void touchpad_init(void);
 void read_touch_task(void *pvParameters);
 esp_err_t touchpad_mode_set(bool is_ptp_mode);
