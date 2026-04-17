@@ -39,6 +39,12 @@ menu "TouchPad Configuration"
             help
                 Enter the timeout value for mode switching in milliseconds. When FUNC key is pressed for the certain target duration of time, the device will switch modes after this duration.
 
+        config FUNC_RESET_MS
+            int "Press FUNC key to reset mode timeout (ms)"
+            default 5000
+            help
+                Enter the timeout value for mode resetting in milliseconds. When FUNC key is pressed for the certain target duration of time, the device will switch modes into wired mode default. IF FUNC_RESET_MS is bigger than FUNC_TIMEOUT_MS, FUNC_RESET_MS will be FUNC_TIMEOUT_MS + 2000ms by default.
+
     endmenu
 
 endmenu
