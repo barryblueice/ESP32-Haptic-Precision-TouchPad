@@ -63,39 +63,3 @@ void ble_hid_task(void *arg) {
 
     }
 }
-
-
-// void ble_mouse_task(uint16_t conn_id, uint8_t mouse_button, int8_t mickeys_x, int8_t mickeys_y)
-// {
-//     mouse_msg_t mouse_msg;
-
-//     buffer[0] = mouse_button;   // Buttons
-//     buffer[1] = mickeys_x;           // X
-//     buffer[2] = mickeys_y;           // Y
-//     buffer[3] = 0;           // Wheel
-//     buffer[4] = 0;           // AC Pan
-
-//     hid_dev_send_report(hidd_le_env.gatt_if, conn_id,
-//                         HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT, HID_MOUSE_IN_RPT_LEN, buffer);
-//     return;
-// }
-
-
-
-        // if (xActivatedMember == mouse_queue) {
-        //     if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-
-        //         mouse_hid_report_t report = {0};
-                
-        //         parse_mouse_report(&mouse_msg, &report);
-                
-        //         hid_dev_send_report(
-        //             hidd_le_env.gatt_if, 
-        //             conn_id, 
-        //             HID_RPT_ID_MOUSE_IN,
-        //             HID_REPORT_TYPE_INPUT, 
-        //             sizeof(mouse_hid_report_t), 
-        //             (uint8_t *)&report
-        //         );
-        //     }
-        // }  else 
