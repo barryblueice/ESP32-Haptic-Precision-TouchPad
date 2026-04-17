@@ -52,7 +52,9 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
   - [x] Add a new HID port to support Mouse Mode compatibility.<br>
         (available for some old systems/BIOS that doesn't support PTP, like Windows 7)
   - [x] 2.4G wireless mode support
-  - [ ] Bluetooth wireless mode support
+  - [x] Bluetooth wireless mode support
+    - [x] Mouse Mode
+    - [ ] PTP Mode
   - [ ] Hacking on Haptic Sensitivity Adjustment Principle
 
 # Current Issues:
