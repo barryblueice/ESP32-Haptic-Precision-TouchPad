@@ -10,30 +10,57 @@
 
 void ble_hid_task(void *arg) {
     tp_multi_msg_t tp_msg;
+    mouse_msg_t mouse_msg;
 
     while (1) {
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
         
         uint16_t conn_id = hid_conn_id;
 
-        if (xQueueReceive(tp_queue, &tp_msg, 0)) {
+        if (xActivatedMember == tp_queue) {
 
-            ptp_report_t report = {0};
-                
-            parse_ptp_report(&tp_msg, &report);
+            if (xQueueReceive(tp_queue, &tp_msg, 0)) {
 
-            hid_dev_send_report(
-                hidd_le_env.gatt_if, 
-                conn_id, 
-                HID_RPT_ID_PTP_IN,
-                HID_REPORT_TYPE_INPUT, 
-                sizeof(ptp_report_t), 
-                (uint8_t *)&report
-            );
+                ptp_report_t report = {0};
+                    
+                parse_ptp_report(&tp_msg, &report);
 
-            // ESP_LOGI("BLE_HID_TASK", "Received PTP Report");
+                hid_dev_send_report(
+                    hidd_le_env.gatt_if, 
+                    conn_id, 
+                    HID_RPT_ID_PTP_IN,
+                    HID_REPORT_TYPE_INPUT, 
+                    sizeof(ptp_report_t), 
+                    (uint8_t *)&report
+                );
+
+                // ESP_LOGI("BLE_HID_TASK", "Received PTP Report");
+            }
         
+        } else if (xActivatedMember == mouse_queue) {
+
+            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
+
+                mouse_hid_report_t report = {0};
+
+                parse_mouse_report(&mouse_msg, &report);
+                
+                hid_dev_send_report(
+                    hidd_le_env.gatt_if, 
+                    conn_id, 
+                    HID_RPT_ID_MOUSE_IN,
+                    HID_REPORT_TYPE_INPUT, 
+                    sizeof(mouse_hid_report_t), 
+                    (uint8_t *)&report
+
+                );
+
+            }
+
+            // ESP_LOGI("BLE_HID_TASK", "Received Mouse Report");
+
         }
+
     }
 }
 

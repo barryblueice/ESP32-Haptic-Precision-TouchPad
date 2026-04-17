@@ -2,7 +2,7 @@
 #define BLE_BLUEDROID_H
 
 void ble_bluedroid_init();
-void hidd_le_prepare_gatt_table(bool is_ptp_mode);
+void hidd_le_prepare_gatt_table();
 void ble_hid_task(void *arg);
 
 extern uint8_t hid_conn_id;

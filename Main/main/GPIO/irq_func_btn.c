@@ -43,7 +43,7 @@ void button_handler_task(void* arg) {
                 uint64_t final_duration = (esp_timer_get_time() / 1000) - start_time;
                 
                 if (final_duration >= CONFIG_FUNC_TIMEOUT_MS) {
-                    current_mode = (current_mode == BLE_MOUSE_MODE) ? 0 : current_mode + 1;
+                    current_mode = (current_mode == BLE_MODE) ? 0 : current_mode + 1;
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Switching mode %d", final_duration, current_mode);
                     nvs_write_int("current_mode", current_mode);
                     esp_restart();

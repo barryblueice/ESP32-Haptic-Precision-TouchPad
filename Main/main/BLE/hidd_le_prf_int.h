@@ -29,6 +29,7 @@
 
 // HID Report IDs for the service
 #define HID_RPT_ID_PTP_IN        1   //Vendor defined input report ID
+#define HID_RPT_ID_MOUSE_IN      1   //Mouse input report ID
 #define HID_RPT_ID_CC_IN         3   //Consumer Control input report ID
 #define HID_RPT_ID_VENDOR_OUT    4   // Vendor output report ID
 #define HID_RPT_ID_FEATURE       0   // Feature report ID
@@ -55,6 +56,8 @@
 #define HIDD_LE_BOOT_KB_IN_NTF_CFG_MASK       (0x40)
 /// Boot KB Input Report Notification Configuration Bit Mask
 #define HIDD_LE_BOOT_PTP_IN_NTF_CFG_MASK    (0x80)
+#define HIDD_LE_BOOT_MOUSE_IN_NTF_CFG_MASK    (0x80)
+
 /// Boot Report Notification Configuration Bit Mask
 #define HIDD_LE_REPORT_NTF_CFG_MASK           (0x20)
 
@@ -110,14 +113,26 @@ enum {
     HIDD_LE_IDX_PROTO_MODE_CHAR,
     HIDD_LE_IDX_PROTO_MODE_VAL,
 
-    HIDD_LE_IDX_REPORT_PTP_IN_CHAR,
-    HIDD_LE_IDX_REPORT_PTP_IN_VAL,
-    HIDD_LE_IDX_REPORT_PTP_IN_CCC,
-    HIDD_LE_IDX_REPORT_PTP_REP_REF,
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        HIDD_LE_IDX_REPORT_PTP_IN_CHAR,
+        HIDD_LE_IDX_REPORT_PTP_IN_VAL,
+        HIDD_LE_IDX_REPORT_PTP_IN_CCC,
+        HIDD_LE_IDX_REPORT_PTP_REP_REF,
 
-    HIDD_LE_IDX_BOOT_PTP_IN_REPORT_CHAR,
-    HIDD_LE_IDX_BOOT_PTP_IN_REPORT_VAL,
-    HIDD_LE_IDX_BOOT_PTP_IN_REPORT_NTF_CFG,
+        HIDD_LE_IDX_BOOT_PTP_IN_REPORT_CHAR,
+        HIDD_LE_IDX_BOOT_PTP_IN_REPORT_VAL,
+        HIDD_LE_IDX_BOOT_PTP_IN_REPORT_NTF_CFG,
+    #else
+        HIDD_LE_IDX_REPORT_MOUSE_IN_CHAR,
+        HIDD_LE_IDX_REPORT_MOUSE_IN_VAL,
+        HIDD_LE_IDX_REPORT_MOUSE_IN_CCC,
+        HIDD_LE_IDX_REPORT_MOUSE_REP_REF,
+
+        HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_CHAR,
+        HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_VAL,
+        HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_NTF_CFG,
+    #endif
+
 
     // Report
     HIDD_LE_IDX_REPORT_CHAR,
@@ -137,7 +152,11 @@ enum {
     HIDD_LE_PROTO_MODE_CHAR,
     HIDD_LE_BOOT_KB_IN_REPORT_CHAR,
     HIDD_LE_BOOT_KB_OUT_REPORT_CHAR,
-    HIDD_LE_BOOT_PTP_IN_REPORT_CHAR,
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        HIDD_LE_BOOT_PTP_IN_REPORT_CHAR,
+    #else
+        HIDD_LE_BOOT_MOUSE_IN_REPORT_CHAR,
+    #endif
     HIDD_LE_CHAR_MAX //= HIDD_LE_REPORT_CHAR + HIDD_LE_NB_REPORT_INST_MAX,
 };
 
@@ -150,8 +169,11 @@ enum {
     HIDD_LE_READ_PROTO_MODE_EVT,
     HIDD_LE_BOOT_KB_IN_REPORT_EVT,
     HIDD_LE_BOOT_KB_OUT_REPORT_EVT,
-    HIDD_LE_BOOT_PTP_IN_REPORT_EVT,
-
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        HIDD_LE_BOOT_PTP_IN_REPORT_EVT,
+    #else
+        HIDD_LE_BOOT_MOUSE_IN_REPORT_EVT,
+    #endif
     HID_LE_EVT_MAX
 };
 
@@ -160,18 +182,31 @@ enum {
     HIDD_LE_DESC_MASK = 0x10,
 
     HIDD_LE_BOOT_KB_IN_REPORT_CFG     = HIDD_LE_BOOT_KB_IN_REPORT_CHAR | HIDD_LE_DESC_MASK,
-    HIDD_LE_BOOT_PTP_IN_REPORT_CFG  = HIDD_LE_BOOT_PTP_IN_REPORT_CHAR | HIDD_LE_DESC_MASK,
+
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        HIDD_LE_BOOT_PTP_IN_REPORT_CFG  = HIDD_LE_BOOT_PTP_IN_REPORT_CHAR | HIDD_LE_DESC_MASK,
+    #else        
+        HIDD_LE_BOOT_MOUSE_IN_REPORT_CFG  = HIDD_LE_BOOT_MOUSE_IN_REPORT_CHAR | HIDD_LE_DESC_MASK,
+    #endif
+
     HIDD_LE_REPORT_CFG                = HIDD_LE_REPORT_CHAR | HIDD_LE_DESC_MASK,
 };
 
 /// Features Flag Values
 enum {
-    HIDD_LE_CFG_KEYBOARD      = 0x01,
-    HIDD_LE_CFG_PTP           = 0x02,
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        HIDD_LE_CFG_PTP         = 0x01,
+    #else        
+        HIDD_LE_CFG_MOUSE       = 0x01,
+    #endif
     HIDD_LE_CFG_PROTO_MODE    = 0x04,
     HIDD_LE_CFG_MAP_EXT_REF   = 0x08,
     HIDD_LE_CFG_BOOT_KB_WR    = 0x10,
-    HIDD_LE_CFG_BOOT_PTP_WR   = 0x20,
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        HIDD_LE_CFG_BOOT_PTP_WR   = 0x20,
+    #else
+        HIDD_LE_CFG_BOOT_MOUSE_WR   = 0x20,
+    #endif
 };
 
 /// Report Char. Configuration Flag Values
