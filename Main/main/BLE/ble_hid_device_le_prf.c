@@ -263,7 +263,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             #endif
             break;
         }
-        case ESP_GATTS_READ_EVT: {
+            case ESP_GATTS_READ_EVT: {
             #if CONFIG_BLE_ENABLE_PTP_MODE
                 if (!param->read.need_rsp) break;
 
