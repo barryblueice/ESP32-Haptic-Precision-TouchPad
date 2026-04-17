@@ -2,6 +2,8 @@
 #include <string.h>
 #include "esp_log.h"
 
+#include "BLE/BLE_bluedroid.h"
+
 #include "NVS/nvs_handle.h"
 
 #include "SYS/hid_msg.h"
@@ -55,12 +57,12 @@ static const uint8_t hidInfo[HID_INFORMATION_LEN] = {
 // static uint16_t hidExtReportRefDesc = ESP_GATT_UUID_BATTERY_LEVEL;
 
 #if CONFIG_BLE_ENABLE_PTP_MODE
-    static uint8_t hidReportRefPTPIn[HID_REPORT_REF_LEN] =
-                { HID_RPT_ID_PTP_IN, HID_REPORT_TYPE_INPUT };
+static uint8_t hidReportRefPTPIn[HID_REPORT_REF_LEN] =
+            { HID_RPT_ID_PTP_IN, HID_REPORT_TYPE_INPUT };
 #else
-    static uint8_t hidReportRefMouseIn[HID_REPORT_REF_LEN] =
-                { HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT };
-#endif                
+static uint8_t hidReportRefMouseIn[HID_REPORT_REF_LEN] =
+            { HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT };
+#endif            
 
 static uint8_t hidReportRefFeature[HID_REPORT_REF_LEN] =
              { HID_RPT_ID_FEATURE, HID_REPORT_TYPE_FEATURE };
@@ -79,8 +81,11 @@ static const uint16_t hid_control_point_uuid = ESP_GATT_UUID_HID_CONTROL_POINT;
 static const uint16_t hid_report_uuid = ESP_GATT_UUID_HID_REPORT;
 static const uint16_t hid_proto_mode_uuid = ESP_GATT_UUID_HID_PROTO_MODE;
 static const uint16_t hid_report_ref_descr_uuid = ESP_GATT_UUID_RPT_REF_DESCR;
+
+#if CONFIG_BLE_ENABLE_PTP_MODE
 static const uint16_t char_decl_uuid = ESP_GATT_UUID_CHAR_DECLARE;
-static const uint16_t report_reference_uuid = ESP_GATT_UUID_RPT_REF_DESCR; // 也就是 0x2908
+static const uint16_t report_reference_uuid = ESP_GATT_UUID_RPT_REF_DESCR;
+#endif
 
 // static const uint8_t char_prop_notify = ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 static const uint8_t char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
@@ -97,7 +102,13 @@ static const uint16_t bat_lev_uuid = ESP_GATT_UUID_BATTERY_LEVEL;
 static const uint8_t   bat_lev_ccc[2] = {0x00, 0x00};
 static const uint16_t char_format_uuid = ESP_GATT_UUID_CHAR_PRESENT_FORMAT;
 
-static uint8_t ptp_feature_report_ref[] = {0x03, 0x03};
+#if CONFIG_BLE_ENABLE_PTP_MODE
+// static uint8_t ptp_touchpad_report_ref[] = {REPORTID_TOUCHPAD, 0x01};
+static uint8_t ptp_max_count_ref[] = {REPORTID_MAX_COUNT, 0x03};
+static uint8_t ptphqa_report_ref[] = {REPORTID_PTPHQA, 0x03};
+static uint8_t ptp_feature_report_ref[] = {REPORTID_FEATURE, 0x03};
+static uint8_t ptp_function_switch_ref[] = {REPORTID_FUNCTION_SWITCH, 0x03};
+#endif
 
 static uint8_t battary_lev = 100;
 
@@ -139,14 +150,30 @@ static esp_gatts_attr_db_t hidd_le_gatt_db[HIDD_LE_IDX_NB] = {
         [HIDD_LE_IDX_REPORT_PTP_IN_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
         [HIDD_LE_IDX_REPORT_PTP_IN_CCC]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
         [HIDD_LE_IDX_REPORT_PTP_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_ref_descr_uuid, ESP_GATT_PERM_READ, sizeof(hidReportRefPTPIn), sizeof(hidReportRefPTPIn), (uint8_t *)&hidReportRefPTPIn}},
+
         [HIDD_LE_IDX_REPORT_PTP_FEATURE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&char_decl_uuid, ESP_GATT_PERM_READ, 1, 1, (uint8_t *)&char_prop_read_write}},
         [HIDD_LE_IDX_REPORT_PTP_FEATURE_VAL] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
         [HIDD_LE_IDX_REPORT_PTP_FEATURE_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&report_reference_uuid, ESP_GATT_PERM_READ, sizeof(ptp_feature_report_ref), sizeof(ptp_feature_report_ref), (uint8_t *)&ptp_feature_report_ref}},
+
+        [HIDD_LE_IDX_REPORT_PTPHQA_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&char_decl_uuid, ESP_GATT_PERM_READ, 1, 1, (uint8_t *)&char_prop_read}},
+        [HIDD_LE_IDX_REPORT_PTPHQA_VAL]  = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
+        [HIDD_LE_IDX_REPORT_PTPHQA_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&report_reference_uuid, ESP_GATT_PERM_READ, sizeof(ptphqa_report_ref), sizeof(ptphqa_report_ref), (uint8_t *)&ptphqa_report_ref}},
+
+        [HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&char_decl_uuid, ESP_GATT_PERM_READ, 1, 1, (uint8_t *)&char_prop_read_write}},
+        [HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_VAL]  = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
+        [HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&report_reference_uuid, ESP_GATT_PERM_READ, sizeof(ptp_function_switch_ref), sizeof(ptp_function_switch_ref), (uint8_t *)&ptp_function_switch_ref}},
+
+        [HIDD_LE_IDX_REPORT_MAX_COUNT_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&char_decl_uuid, ESP_GATT_PERM_READ, 1, 1, (uint8_t *)&char_prop_read}},
+        [HIDD_LE_IDX_REPORT_MAX_COUNT_VAL]  = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
+        [HIDD_LE_IDX_REPORT_MAX_COUNT_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&report_reference_uuid, ESP_GATT_PERM_READ, sizeof(ptp_max_count_ref), sizeof(ptp_max_count_ref), (uint8_t *)&ptp_max_count_ref}},
+    
     #else
+
         [HIDD_LE_IDX_REPORT_MOUSE_IN_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
         [HIDD_LE_IDX_REPORT_MOUSE_IN_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
         [HIDD_LE_IDX_REPORT_MOUSE_IN_CCC]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
         [HIDD_LE_IDX_REPORT_MOUSE_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_ref_descr_uuid, ESP_GATT_PERM_READ, sizeof(hidReportRefMouseIn), sizeof(hidReportRefMouseIn), (uint8_t *)&hidReportRefMouseIn}},
+
     #endif
 
     [HIDD_LE_IDX_REPORT_CHAR]    = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
@@ -169,6 +196,9 @@ static void hid_add_id_tbl(void);
 void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
 									esp_ble_gatts_cb_param_t *param) {
     switch(event) {
+        case ESP_GATTS_MTU_EVT:
+            ESP_LOGI(HID_LE_PRF_TAG, "MTU exchange, MTU %d", param->mtu.mtu);
+            break;
         case ESP_GATTS_REG_EVT: {
             esp_ble_gap_config_local_icon (ESP_BLE_APPEARANCE_GENERIC_HID);
             esp_hidd_cb_param_t hidd_param;
@@ -217,36 +247,57 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_CLOSE_EVT:
             break;
         case ESP_GATTS_WRITE_EVT: {
-            if (param->write.need_rsp) {
-                esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
-            }
-
-            if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_IN_CCC]) {
-                uint16_t value = param->write.value[0] | (param->write.value[1] << 8);
-                if (value == 0x0001) {
-                    ESP_LOGI("HID_DEV", "PTP Notification Enabled!");
-                } else if (value == 0x0000) {
-                    ESP_LOGI("HID_DEV", "PTP Notification Disabled!");
+            #if CONFIG_BLE_ENABLE_PTP_MODE
+                if (param->write.need_rsp) {
+                    esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
                 }
-            }
+
+                if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_IN_CCC]) {
+                    uint16_t value = param->write.value[0] | (param->write.value[1] << 8);
+                    if (value == 0x0001) {
+                        ESP_LOGI("HID_DEV", "PTP Notification Enabled!");
+                    } else if (value == 0x0000) {
+                        ESP_LOGI("HID_DEV", "PTP Notification Disabled!");
+                    }
+                }
+            #endif
             break;
         }
         case ESP_GATTS_READ_EVT: {
-            ESP_LOGI(HID_LE_PRF_TAG, "GATT read event , handle = %d", param->read.handle);
-            if (param->read.need_rsp) {
+            #if CONFIG_BLE_ENABLE_PTP_MODE
+                if (!param->read.need_rsp) break;
+
+                ESP_LOGI(HID_LE_PRF_TAG, "GATT read event, handle = %d", param->read.handle);
+
                 esp_gatt_rsp_t rsp;
                 memset(&rsp, 0, sizeof(esp_gatt_rsp_t));
                 rsp.attr_value.handle = param->read.handle;
+                uint16_t hdl = param->read.handle;
 
-                if (param->read.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_FEATURE_VAL]) {
-                    rsp.attr_value.len = 1;
-                    rsp.attr_value.value[0] = 0x03; 
-                } else {
-                    rsp.attr_value.len = 0;
+                if (hdl == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MAX_COUNT_VAL]) {
+                    rsp.attr_value.len = 2;
+                    rsp.attr_value.value[0] = REPORTID_MAX_COUNT;
+                    rsp.attr_value.value[1] = 0x04;
+                }
+                else if (hdl == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_FEATURE_VAL]) {
+                    rsp.attr_value.len = 2;
+                    rsp.attr_value.value[0] = REPORTID_FEATURE; // ID
+                    rsp.attr_value.value[1] = 0x03;
+                }
+                else if (hdl == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTPHQA_VAL]) {
+                    uint8_t hqa_temp[257] = {0};
+                    hqa_temp[0] = REPORTID_PTPHQA;
+                    rsp.attr_value.len = 257; 
+                    memcpy(rsp.attr_value.value, hqa_temp, 257);
+                }
+                else if (hdl == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_VAL]) {
+                    rsp.attr_value.len = 2;
+                    rsp.attr_value.value[0] = REPORTID_FUNCTION_SWITCH;
+                    rsp.attr_value.value[1] = 0x03;
                 }
 
                 esp_ble_gatts_send_response(gatts_if, param->read.conn_id, param->read.trans_id, ESP_GATT_OK, &rsp);
-            }
+            #endif
             break;
         }
         case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
