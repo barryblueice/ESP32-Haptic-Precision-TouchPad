@@ -20,6 +20,13 @@ set(srcs
     "WIFI/wifi_handle.c"
     "WIFI/broadcast.c"
     "WIFI/heartbeat.c"
+
+    "BLE/ble_bluedroid_init.c"
+    "BLE/esp_hidd_prf_api.c"
+    "BLE/ble_hid_dev.c"
+    "BLE/ble_hid_device_le_prf.c"
+    "BLE/ble_hid_descriptor.c"
+
 )
 
 idf_component_register(
@@ -30,6 +37,7 @@ idf_component_register(
         esp_driver_i2c
         esp_tinyusb
         esp_timer
+        bt
         nvs_flash
         esp_event
         esp_wifi
