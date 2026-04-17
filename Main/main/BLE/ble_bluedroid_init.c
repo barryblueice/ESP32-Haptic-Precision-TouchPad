@@ -10,6 +10,7 @@
 #include "esp_log.h"
 #include "nvs_flash.h"
 #include "esp_bt.h"
+#include "esp_mac.h"
 
 #include "esp_hidd_prf_api.h"
 #include "esp_bt_defs.h"
@@ -24,10 +25,11 @@
 
 #include "SYS/hid_msg.h"
 
-#define HID_DEMO_TAG "BLE_INIT"
+#include "I2C/i2c_hid.h"
 
+#define TAG "BLE_INIT"
 
-static uint16_t hid_conn_id = 0;
+uint16_t hid_conn_id = 0;
 static bool sec_conn = false;
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 
@@ -72,8 +74,7 @@ static esp_ble_adv_params_t hidd_adv_params = {
 };
 
 
-static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param)
-{
+static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param) {
 
     switch(event) {
         case ESP_HIDD_EVENT_REG_FINISH: {
@@ -90,19 +91,19 @@ static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *
         case ESP_HIDD_EVENT_DEINIT_FINISH:
 	     break;
 		case ESP_HIDD_EVENT_BLE_CONNECT: {
-            ESP_LOGI(HID_DEMO_TAG, "ESP_HIDD_EVENT_BLE_CONNECT");
+            ESP_LOGI(TAG, "ESP_HIDD_EVENT_BLE_CONNECT");
             hid_conn_id = param->connect.conn_id;
             break;
         }
         case ESP_HIDD_EVENT_BLE_DISCONNECT: {
             sec_conn = false;
-            ESP_LOGI(HID_DEMO_TAG, "ESP_HIDD_EVENT_BLE_DISCONNECT");
+            ESP_LOGI(TAG, "ESP_HIDD_EVENT_BLE_DISCONNECT");
             esp_ble_gap_start_advertising(&hidd_adv_params);
             break;
         }
         case ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT: {
-            ESP_LOGI(HID_DEMO_TAG, "%s, ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT", __func__);
-            ESP_LOG_BUFFER_HEX(HID_DEMO_TAG, param->vendor_write.data, param->vendor_write.length);
+            ESP_LOGI(TAG, "%s, ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT", __func__);
+            ESP_LOG_BUFFER_HEX(TAG, param->vendor_write.data, param->vendor_write.length);
             break;
         }
         default:
@@ -111,31 +112,30 @@ static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *
     return;
 }
 
-static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
-{
+static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param) {
     switch (event) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT:
         esp_ble_gap_start_advertising(&hidd_adv_params);
         break;
      case ESP_GAP_BLE_SEC_REQ_EVT:
         for(int i = 0; i < ESP_BD_ADDR_LEN; i++) {
-             ESP_LOGD(HID_DEMO_TAG, "%x:",param->ble_security.ble_req.bd_addr[i]);
+             ESP_LOGD(TAG, "%x:",param->ble_security.ble_req.bd_addr[i]);
         }
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
 	 break;
      case ESP_GAP_BLE_AUTH_CMPL_EVT:
         esp_bd_addr_t bd_addr;
         memcpy(bd_addr, param->ble_security.auth_cmpl.bd_addr, sizeof(esp_bd_addr_t));
-        ESP_LOGI(HID_DEMO_TAG, "remote BD_ADDR: %08x%04x",\
+        ESP_LOGI(TAG, "remote BD_ADDR: %08x%04x",\
                 (bd_addr[0] << 24) + (bd_addr[1] << 16) + (bd_addr[2] << 8) + bd_addr[3],
                 (bd_addr[4] << 8) + bd_addr[5]);
-        ESP_LOGI(HID_DEMO_TAG, "address type = %d", param->ble_security.auth_cmpl.addr_type);
-        ESP_LOGI(HID_DEMO_TAG, "pair status = %s",param->ble_security.auth_cmpl.success ? "success" : "fail");
+        ESP_LOGI(TAG, "address type = %d", param->ble_security.auth_cmpl.addr_type);
+        ESP_LOGI(TAG, "pair status = %s",param->ble_security.auth_cmpl.success ? "success" : "fail");
         if (param->ble_security.auth_cmpl.success) {
             sec_conn = true;
-            ESP_LOGI(HID_DEMO_TAG, "secure connection established.");
+            ESP_LOGI(TAG, "secure connection established.");
         } else {
-            ESP_LOGE(HID_DEMO_TAG, "pairing failed, reason = 0x%x",
+            ESP_LOGE(TAG, "pairing failed, reason = 0x%x",
                      param->ble_security.auth_cmpl.fail_reason);
         }
         break;
@@ -144,8 +144,7 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
     }
 }
 
-void hid_demo_task(void *pvParameters)
-{
+void ble_hid_conn_task(void *pvParameters) {
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     while(1) {
         vTaskDelay(2000 / portTICK_PERIOD_MS);
@@ -156,16 +155,29 @@ void hid_demo_task(void *pvParameters)
 }
 
 
-void ble_bluedroid_init(void)
-{
+void ble_bluedroid_init(bool is_ptp_mode) {
+
+    esp_err_t ret;
+
+    uint8_t base_mac[6];
+    
+    ret = esp_read_mac(base_mac, ESP_MAC_BT);
 
     if (current_mode == BLE_PTP_MODE) {
         HIDD_DEVICE_NAME = "R-SODIUM PTP";
+        base_mac[5] |= 0x01;
     } else {
         HIDD_DEVICE_NAME = "R-SODIUM Mouse";
+        base_mac[5] |= 0x02;
     }
 
-    esp_err_t ret;
+    touchpad_mode_set(is_ptp_mode);
+
+    esp_iface_mac_addr_set(base_mac, ESP_MAC_BT);
+
+    ESP_LOGW(TAG, "Current Mode: %s", current_mode == BLE_PTP_MODE ? "PTP" : "Mouse");
+    ESP_LOGW(TAG, "Current BLE MAC:  %02X:%02X:%02X:%02X:%02X:%02X", 
+             base_mac[0], base_mac[1], base_mac[2], base_mac[3], base_mac[4], base_mac[5]);
 
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -179,31 +191,31 @@ void ble_bluedroid_init(void)
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_cfg);
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s initialize controller failed", __func__);
+        ESP_LOGE(TAG, "%s initialize controller failed", __func__);
         return;
     }
 
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s enable controller failed", __func__);
+        ESP_LOGE(TAG, "%s enable controller failed", __func__);
         return;
     }
 
     esp_bluedroid_config_t cfg = BT_BLUEDROID_INIT_CONFIG_DEFAULT();
     ret = esp_bluedroid_init_with_cfg(&cfg);
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed", __func__);
+        ESP_LOGE(TAG, "%s init bluedroid failed", __func__);
         return;
     }
 
     ret = esp_bluedroid_enable();
     if (ret) {
-        ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed", __func__);
+        ESP_LOGE(TAG, "%s init bluedroid failed", __func__);
         return;
     }
 
     if((ret = esp_hidd_profile_init()) != ESP_OK) {
-        ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed", __func__);
+        ESP_LOGE(TAG, "%s init bluedroid failed", __func__);
     }
 
     esp_ble_gap_register_callback(gap_event_handler);
@@ -220,5 +232,5 @@ void ble_bluedroid_init(void)
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
-    xTaskCreate(&hid_demo_task, "hid_task", 2048, NULL, 5, NULL);
+    xTaskCreate(&ble_hid_conn_task, "hid_task", 2048, NULL, 5, NULL);
 }

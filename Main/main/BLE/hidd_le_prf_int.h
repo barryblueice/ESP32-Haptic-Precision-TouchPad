@@ -28,6 +28,7 @@
 #define HID_NUM_REPORTS          9
 
 // HID Report IDs for the service
+#define HID_RPT_ID_MOUSE_IN      1
 #define HID_RPT_IT_PTP_IN        2   //Vendor defined input report ID
 #define HID_RPT_ID_CC_IN         3   //Consumer Control input report ID
 #define HID_RPT_ID_VENDOR_OUT    4   // Vendor output report ID
@@ -110,14 +111,14 @@ enum {
     HIDD_LE_IDX_PROTO_MODE_CHAR,
     HIDD_LE_IDX_PROTO_MODE_VAL,
 
-    HIDD_LE_IDX_REPORT_PTP_IN_CHAR,
-    HIDD_LE_IDX_REPORT_PTP_IN_VAL,
-    HIDD_LE_IDX_REPORT_PTP_IN_CCC,
-    HIDD_LE_IDX_REPORT_PTP_REP_REF,
+    HIDD_LE_IDX_REPORT_MOUSE_IN_CHAR,
+    HIDD_LE_IDX_REPORT_MOUSE_IN_VAL,
+    HIDD_LE_IDX_REPORT_MOUSE_IN_CCC,
+    HIDD_LE_IDX_REPORT_MOUSE_REP_REF,
 
-    HIDD_LE_IDX_BOOT_PTP_IN_REPORT_CHAR,
-    HIDD_LE_IDX_BOOT_PTP_IN_REPORT_VAL,
-    HIDD_LE_IDX_BOOT_PTP_IN_REPORT_NTF_CFG,
+    HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_CHAR,
+    HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_VAL,
+    HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_NTF_CFG,
 
     // Report
     HIDD_LE_IDX_REPORT_CHAR,
@@ -236,8 +237,7 @@ typedef struct {
 } hidd_inst_t;
 
 /// Report Reference structure
-typedef struct
-{
+typedef struct {
     ///Report ID
     uint8_t report_id;
     ///Report Type
@@ -245,8 +245,7 @@ typedef struct
 }hids_report_ref_t;
 
 /// HID Information structure
-typedef struct
-{
+typedef struct {
     /// bcdHID
     uint16_t bcdHID;
     /// bCountryCode

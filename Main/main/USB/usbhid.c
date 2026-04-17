@@ -43,8 +43,7 @@
 
 #define REPORTID_DFU_CMD  0xFF
 
-void enter_dfu_mode(void)
-{
+void enter_dfu_mode(void) {
 
     ESP_LOGW(TAG, "Preparing to enter ROM DFU mode...");
     REG_WRITE(RTC_CNTL_OPTION1_REG, RTC_CNTL_FORCE_DOWNLOAD_BOOT);
