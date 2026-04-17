@@ -66,16 +66,16 @@ void app_main(void) {
             ESP_LOGW(TAG, "Starting in BLE PTP Mode...");
             current_tp_mode = PTP_MODE;
             hidd_le_prepare_gatt_table(true);
-            ble_bluedroid_init(true);
+            ble_bluedroid_init();
             xTaskCreate(ble_hid_task, "ble_hid_task", 4096, NULL, 11, NULL);
             break;
 
         case BLE_MOUSE_MODE:
             ESP_LOGW(TAG, "Starting in BLE Mouse Mode...");
-            current_tp_mode = MOUSE_MODE;
-            hidd_le_prepare_gatt_table(false);
-            ble_bluedroid_init(false);
-            xTaskCreate(ble_hid_task, "ble_hid_task", 4096, NULL, 11, NULL);
+            // current_tp_mode = MOUSE_MODE;
+            // hidd_le_prepare_gatt_table(false);
+            // ble_bluedroid_init(false);
+            // xTaskCreate(ble_hid_task, "ble_hid_task", 4096, NULL, 11, NULL);
             break;
 
         default:

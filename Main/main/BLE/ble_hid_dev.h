@@ -27,9 +27,7 @@ void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
                                     uint8_t id, uint8_t type, uint8_t length, uint8_t *data);
 
 extern const uint8_t* ble_ptp_hid_report_descriptor[];
-extern const uint8_t* ble_mouse_hid_report_descriptor[];
 extern const uint16_t ble_ptp_hid_report_len;
-extern const uint16_t ble_mouse_hid_report_len;
 
 #ifdef __cplusplus
 } // extern "C"
