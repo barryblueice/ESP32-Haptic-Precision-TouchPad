@@ -1,4 +1,5 @@
 #include "BLE/hidd_le_prf_int.h"
+#include "esp_gatt_common_api.h"
 #include <string.h>
 #include "esp_log.h"
 
@@ -193,10 +194,13 @@ void hidd_le_prepare_gatt_table() {
 
 static void hid_add_id_tbl(void);
 
+static uint16_t current_mtu = 23;
+
 void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
 									esp_ble_gatts_cb_param_t *param) {
     switch(event) {
         case ESP_GATTS_MTU_EVT:
+            current_mtu = param->mtu.mtu;
             ESP_LOGI(HID_LE_PRF_TAG, "MTU exchange, MTU %d", param->mtu.mtu);
             break;
         case ESP_GATTS_REG_EVT: {
@@ -263,7 +267,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             #endif
             break;
         }
-            case ESP_GATTS_READ_EVT: {
+        case ESP_GATTS_READ_EVT: {
             #if CONFIG_BLE_ENABLE_PTP_MODE
                 if (!param->read.need_rsp) break;
 
@@ -284,11 +288,25 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
                     rsp.attr_value.value[0] = REPORTID_FEATURE; // ID
                     rsp.attr_value.value[1] = 0x03;
                 }
-                else if (hdl == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTPHQA_VAL]) {
-                    uint8_t hqa_temp[257] = {0};
-                    hqa_temp[0] = REPORTID_PTPHQA;
-                    rsp.attr_value.len = 257; 
-                    memcpy(rsp.attr_value.value, hqa_temp, 257);
+                else if (param->read.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTPHQA_VAL]) {
+                    uint16_t total_hqa_len = 257; 
+                    uint16_t offset = param->read.offset;
+                    
+                    uint16_t max_payload = current_mtu - 1; 
+
+                    uint16_t remaining = total_hqa_len - offset;
+                    uint16_t send_len = (remaining > max_payload) ? max_payload : remaining;
+
+                    rsp.attr_value.len = send_len;
+                    rsp.attr_value.offset = offset;
+                    
+                    if (offset == 0) {
+                        rsp.attr_value.value[0] = 0x04; // ID
+                        memset(&rsp.attr_value.value[1], 0, send_len - 1);
+                    } else {
+                        memset(rsp.attr_value.value, 0, send_len);
+                    }
+                    
                 }
                 else if (hdl == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_VAL]) {
                     rsp.attr_value.len = 2;
