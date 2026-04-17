@@ -33,7 +33,7 @@ uint16_t hid_conn_id = 0;
 static bool sec_conn = false;
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 
-static const char* HIDD_DEVICE_NAME;
+#define HIDD_DEVICE_NAME "R-SODIUM PTP"
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param);
 
@@ -67,8 +67,6 @@ static esp_ble_adv_params_t hidd_adv_params = {
     .adv_int_max        = ESP_BLE_GAP_ADV_ITVL_MS(30),
     .adv_type           = ADV_TYPE_IND,
     .own_addr_type      = BLE_ADDR_TYPE_PUBLIC,
-    //.peer_addr            =
-    //.peer_addr_type       =
     .channel_map        = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -155,29 +153,11 @@ void ble_hid_conn_task(void *pvParameters) {
 }
 
 
-void ble_bluedroid_init(bool is_ptp_mode) {
+void ble_bluedroid_init() {
 
     esp_err_t ret;
 
-    uint8_t base_mac[6];
-    
-    ret = esp_read_mac(base_mac, ESP_MAC_BT);
-
-    if (current_mode == BLE_PTP_MODE) {
-        HIDD_DEVICE_NAME = "R-SODIUM PTP";
-        base_mac[5] |= 0x01;
-    } else {
-        HIDD_DEVICE_NAME = "R-SODIUM Mouse";
-        base_mac[5] |= 0x02;
-    }
-
-    touchpad_mode_set(is_ptp_mode);
-
-    esp_iface_mac_addr_set(base_mac, ESP_MAC_BT);
-
-    ESP_LOGW(TAG, "Current Mode: %s", current_mode == BLE_PTP_MODE ? "PTP" : "Mouse");
-    ESP_LOGW(TAG, "Current BLE MAC:  %02X:%02X:%02X:%02X:%02X:%02X", 
-             base_mac[0], base_mac[1], base_mac[2], base_mac[3], base_mac[4], base_mac[5]);
+    touchpad_mode_set(true);
 
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
