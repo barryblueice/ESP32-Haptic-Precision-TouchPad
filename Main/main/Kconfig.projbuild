@@ -52,10 +52,10 @@ menu "TouchPad Configuration"
             Select TouchPad model what you used. Different model may use different solution to translate hid data.
 
         config BLE_ENABLE_MOUSE_MODE
-            bool "Mouse Mode"
+            bool "Mouse Mode (Recommended for Best Compatibility)"
         
         config BLE_ENABLE_PTP_MODE
-            bool "PTP Mode"
+            bool "PTP Mode (Still unavailable, under development)"
 
         endchoice
 
