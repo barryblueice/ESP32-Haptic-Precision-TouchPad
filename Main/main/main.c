@@ -20,6 +20,9 @@
 
 #include "WIFI/wireless_wifi.h"
 
+#include "BLE/ble_bluedroid.h"
+#include "BLE/ble_hid_dev.h"
+
 #define TAG "SurfaceTouch"
 
 void app_main(void) {
@@ -53,7 +56,7 @@ void app_main(void) {
 
     switch (current_mode) {
 
-        case 1:
+        case _2_4_MODE:
             ESP_LOGW(TAG, "Starting in 2.4G Mode...");
 
             wireless_wifi_init();
@@ -62,12 +65,16 @@ void app_main(void) {
 
             break;
 
-        case 2:
+        case BLE_PTP_MODE:
             ESP_LOGW(TAG, "Starting in BLE PTP Mode...");
+            hidd_le_prepare_gatt_table(true);
+            ble_bluedroid_init();
             break;
 
-        case 3:
+        case BLE_MOUSE_MODE:
             ESP_LOGW(TAG, "Starting in BLE Mouse Mode...");
+            hidd_le_prepare_gatt_table(false);
+            ble_bluedroid_init();
             break;
 
         default:
