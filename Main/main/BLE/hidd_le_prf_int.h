@@ -45,7 +45,7 @@
 #define HIDD_LE_NB_REPORT_INST_MAX            (5)
 
 /// Maximal length of Report Char. Value
-#define HIDD_LE_REPORT_MAX_LEN                (255)
+#define HIDD_LE_REPORT_MAX_LEN                (512)
 /// Maximal length of Report Map Char. Value
 #define HIDD_LE_REPORT_MAP_MAX_LEN            (512)
 
@@ -122,6 +122,14 @@ enum {
         HIDD_LE_IDX_REPORT_PTP_FEATURE_CHAR,
         HIDD_LE_IDX_REPORT_PTP_FEATURE_VAL,
         HIDD_LE_IDX_REPORT_PTP_FEATURE_REP_REF,
+
+        HIDD_LE_IDX_REPORT_PTPHQA_CHAR,
+        HIDD_LE_IDX_REPORT_PTPHQA_VAL,
+        HIDD_LE_IDX_REPORT_PTPHQA_REP_REF,
+
+        HIDD_LE_IDX_REPORT_PTP_INPUT_MODE_CHAR,
+        HIDD_LE_IDX_REPORT_PTP_INPUT_MODE_VAL,
+        HIDD_LE_IDX_REPORT_PTP_INPUT_MODE_REP_REF,
 
         HIDD_LE_IDX_BOOT_PTP_IN_REPORT_CHAR,
         HIDD_LE_IDX_BOOT_PTP_IN_REPORT_VAL,

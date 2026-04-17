@@ -1,12 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define REPORTID_TOUCHPAD         0x01
-#define REPORTID_MAX_COUNT        0x03
-#define REPORTID_PTPHQA           0x04
-#define REPORTID_FEATURE          0x05
-#define REPORTID_FUNCTION_SWITCH  0x06
-#define REPORTID_HAPTIC_FEATURE    0x0C
+#include "BLE/BLE_bluedroid.h"
 
 const uint8_t ble_mouse_hid_report_descriptor[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
@@ -73,7 +68,7 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
     0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
-    0x55, 0x0E,             // UNIT_EXPONENT (-3)
+    0x55, 0x0E,                         // UNIT_EXPONENT (-3)
     0x65, 0x11,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
