@@ -5,8 +5,7 @@
 #include <string.h>
 #include "esp_log.h"
 
-esp_err_t esp_hidd_register_callbacks(esp_hidd_event_cb_t callbacks)
-{
+esp_err_t esp_hidd_register_callbacks(esp_hidd_event_cb_t callbacks) {
     esp_err_t hidd_status;
 
     if(callbacks != NULL) {
@@ -28,8 +27,7 @@ esp_err_t esp_hidd_register_callbacks(esp_hidd_event_cb_t callbacks)
     return hidd_status;
 }
 
-esp_err_t esp_hidd_profile_init(void)
-{
+esp_err_t esp_hidd_profile_init(void) {
      if (hidd_le_env.enabled) {
         ESP_LOGE(HID_LE_PRF_TAG, "HID device profile already initialized");
         return ESP_FAIL;
@@ -40,8 +38,7 @@ esp_err_t esp_hidd_profile_init(void)
     return ESP_OK;
 }
 
-esp_err_t esp_hidd_profile_deinit(void)
-{
+esp_err_t esp_hidd_profile_deinit(void) {
     uint16_t hidd_svc_hdl = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_SVC];
     if (!hidd_le_env.enabled) {
         ESP_LOGE(HID_LE_PRF_TAG, "HID device profile already initialized");
@@ -60,13 +57,11 @@ esp_err_t esp_hidd_profile_deinit(void)
     return ESP_OK;
 }
 
-uint16_t esp_hidd_get_version(void)
-{
+uint16_t esp_hidd_get_version(void) {
 	return HIDD_VERSION;
 }
 
-void esp_hidd_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed)
-{
+void esp_hidd_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed) {
     // uint8_t buffer[HID_CC_IN_RPT_LEN] = {0, 0};
     // if (key_pressed) {
     //     ESP_LOGD(HID_LE_PRF_TAG, "hid_consumer_build_report");

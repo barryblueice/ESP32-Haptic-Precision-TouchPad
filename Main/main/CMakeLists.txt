@@ -26,6 +26,7 @@ set(srcs
     "BLE/ble_hid_dev.c"
     "BLE/ble_hid_device_le_prf.c"
     "BLE/ble_hid_descriptor.c"
+    "BLE/blehid.c"
 
 )
 

@@ -6,8 +6,7 @@
 
 #include "SYS/hid_msg.h"
 
-struct prf_char_pres_fmt
-{
+struct prf_char_pres_fmt {
     uint16_t unit;
     uint16_t description;
     uint8_t format;
@@ -17,8 +16,7 @@ struct prf_char_pres_fmt
 
 static hid_report_map_t hid_rpt_map[HID_NUM_REPORTS];
 
-enum
-{
+enum {
     BAS_IDX_SVC,
 
     BAS_IDX_BATT_LVL_CHAR,
@@ -54,8 +52,8 @@ static const uint8_t hidInfo[HID_INFORMATION_LEN] = {
 
 static uint16_t hidExtReportRefDesc = ESP_GATT_UUID_BATTERY_LEVEL;
 
-static uint8_t hidReportRefPTPIn[HID_REPORT_REF_LEN] =
-             { HID_RPT_IT_PTP_IN, HID_REPORT_TYPE_INPUT };
+static uint8_t hidReportRefMouseIn[HID_REPORT_REF_LEN] =
+             { HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT };
 
 static uint8_t hidReportRefFeature[HID_REPORT_REF_LEN] =
              { HID_RPT_ID_FEATURE, HID_REPORT_TYPE_FEATURE };
@@ -88,7 +86,7 @@ static const uint8_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ|ESP_GAT
 // static const uint8_t char_prop_read_write_notify = ESP_GATT_CHAR_PROP_BIT_READ|ESP_GATT_CHAR_PROP_BIT_WRITE|ESP_GATT_CHAR_PROP_BIT_NOTIFY;
 // static const uint8_t char_prop_read_write_write_nr = ESP_GATT_CHAR_PROP_BIT_READ|ESP_GATT_CHAR_PROP_BIT_WRITE|ESP_GATT_CHAR_PROP_BIT_WRITE_NR;
 
-uint8_t ptp_feature_report_data[] = {0x02, 0x05, 0x01};
+uint8_t mouse_feature_report_data[] = {0x02, 0x05, 0x01};
 
 /// battary Service
 static const uint16_t battary_svc = ESP_GATT_UUID_BATTERY_SERVICE_SVC;
@@ -98,8 +96,7 @@ static const uint8_t   bat_lev_ccc[2] ={ 0x00, 0x00};
 static const uint16_t char_format_uuid = ESP_GATT_UUID_CHAR_PRESENT_FORMAT;
 
 static uint8_t battary_lev = 50;
-static const esp_gatts_attr_db_t bas_att_db[BAS_IDX_NB] =
-{
+static const esp_gatts_attr_db_t bas_att_db[BAS_IDX_NB] = {
     [BAS_IDX_SVC]               =  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, ESP_GATT_PERM_READ,
                                             sizeof(uint16_t), sizeof(battary_svc), (uint8_t *)&battary_svc}},
 
@@ -127,22 +124,18 @@ static esp_gatts_attr_db_t hidd_le_gatt_db[HIDD_LE_IDX_NB] = {
     [HIDD_LE_IDX_HID_CTNL_PT_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_control_point_uuid, ESP_GATT_PERM_WRITE, sizeof(uint8_t), 0, NULL}},
 
     [HIDD_LE_IDX_REPORT_MAP_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read}},
-    [HIDD_LE_IDX_REPORT_MAP_VAL] = {
-        {ESP_GATT_AUTO_RSP}, 
-        {ESP_UUID_LEN_16, (uint8_t *)&hid_report_map_uuid, ESP_GATT_PERM_READ, 
-         HIDD_LE_REPORT_MAP_MAX_LEN, 0, NULL} // 先占位
-    },
+    [HIDD_LE_IDX_REPORT_MAP_VAL] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_map_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAP_MAX_LEN, 0, NULL}},
 
     [HIDD_LE_IDX_PROTO_MODE_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
     [HIDD_LE_IDX_PROTO_MODE_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_proto_mode_uuid, (ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE), sizeof(uint8_t), sizeof(hidProtocolMode), (uint8_t *)&hidProtocolMode}},
 
-    [HIDD_LE_IDX_REPORT_PTP_IN_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
-    [HIDD_LE_IDX_REPORT_PTP_IN_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
-    [HIDD_LE_IDX_REPORT_PTP_IN_CCC]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
-    [HIDD_LE_IDX_REPORT_PTP_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_ref_descr_uuid, ESP_GATT_PERM_READ, sizeof(hidReportRefPTPIn), sizeof(hidReportRefPTPIn), (uint8_t *)&hidReportRefPTPIn}},
+    [HIDD_LE_IDX_REPORT_MOUSE_IN_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
+    [HIDD_LE_IDX_REPORT_MOUSE_IN_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
+    [HIDD_LE_IDX_REPORT_MOUSE_IN_CCC]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
+    [HIDD_LE_IDX_REPORT_MOUSE_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_ref_descr_uuid, ESP_GATT_PERM_READ, sizeof(hidReportRefMouseIn), sizeof(hidReportRefMouseIn), (uint8_t *)&hidReportRefMouseIn}},
 
     [HIDD_LE_IDX_REPORT_CHAR]    = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_write}},
-    [HIDD_LE_IDX_REPORT_VAL]     = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, sizeof(ptp_feature_report_data), (uint8_t *)&ptp_feature_report_data}},
+    [HIDD_LE_IDX_REPORT_VAL]     = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, sizeof(mouse_feature_report_data), (uint8_t *)&mouse_feature_report_data}},
     [HIDD_LE_IDX_REPORT_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_ref_descr_uuid, ESP_GATT_PERM_READ, sizeof(hidReportRefFeature), sizeof(hidReportRefFeature), (uint8_t *)&hidReportRefFeature}},
 };
 
@@ -159,8 +152,7 @@ void hidd_le_prepare_gatt_table(bool is_ptp_mode) {
 static void hid_add_id_tbl(void);
 
 void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
-									esp_ble_gatts_cb_param_t *param)
-{
+									esp_ble_gatts_cb_param_t *param) {
     switch(event) {
         case ESP_GATTS_REG_EVT: {
             esp_ble_gap_config_local_icon (ESP_BLE_APPEARANCE_GENERIC_HID);
@@ -210,6 +202,10 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_CLOSE_EVT:
             break;
         case ESP_GATTS_WRITE_EVT: {
+            if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MOUSE_IN_CCC]) {
+                    uint16_t value = param->write.value[0] | (param->write.value[1] << 8);
+                    ESP_LOGI("HID_DEBUG", "CCCD Updated: 0x%04x", value);
+                }
             break;
         }
         case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
@@ -240,20 +236,17 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
     }
 }
 
-void hidd_le_create_service(esp_gatt_if_t gatts_if)
-{
+void hidd_le_create_service(esp_gatt_if_t gatts_if) {
     esp_ble_gatts_create_attr_tab(bas_att_db, gatts_if, BAS_IDX_NB, 0);
 
 }
 
-void hidd_le_init(void)
-{
+void hidd_le_init(void) {
 
     memset(&hidd_le_env, 0, sizeof(hidd_le_env_t));
 }
 
-void hidd_clcb_alloc (uint16_t conn_id, esp_bd_addr_t bda)
-{
+void hidd_clcb_alloc (uint16_t conn_id, esp_bd_addr_t bda) {
     uint8_t                   i_clcb = 0;
     hidd_clcb_t      *p_clcb = NULL;
 
@@ -269,8 +262,7 @@ void hidd_clcb_alloc (uint16_t conn_id, esp_bd_addr_t bda)
     return;
 }
 
-bool hidd_clcb_dealloc (uint16_t conn_id)
-{
+bool hidd_clcb_dealloc (uint16_t conn_id) {
     uint8_t              i_clcb = 0;
     hidd_clcb_t      *p_clcb = NULL;
 
@@ -291,8 +283,7 @@ static struct gatts_profile_inst heart_rate_profile_tab[PROFILE_NUM] = {
 };
 
 static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
-                                esp_ble_gatts_cb_param_t *param)
-{
+                                esp_ble_gatts_cb_param_t *param) {
     if (event == ESP_GATTS_REG_EVT) {
         if (param->reg.status == ESP_GATT_OK) {
             heart_rate_profile_tab[PROFILE_APP_IDX].gatts_if = gatts_if;
@@ -318,15 +309,13 @@ static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_
 }
 
 
-esp_err_t hidd_register_cb(void)
-{
+esp_err_t hidd_register_cb(void) {
 	esp_err_t status;
 	status = esp_ble_gatts_register_callback(gatts_event_handler);
 	return status;
 }
 
-void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t *value)
-{
+void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t *value) {
     hidd_inst_t *hidd_inst = &hidd_le_env.hidd_inst;
     if(hidd_inst->att_tbl[HIDD_LE_IDX_HID_INFO_VAL] <= handle &&
         hidd_inst->att_tbl[HIDD_LE_IDX_REPORT_REP_REF] >= handle) {
@@ -337,8 +326,7 @@ void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t *value
     return;
 }
 
-void hidd_get_attr_value(uint16_t handle, uint16_t *length, uint8_t **value)
-{
+void hidd_get_attr_value(uint16_t handle, uint16_t *length, uint8_t **value) {
     hidd_inst_t *hidd_inst = &hidd_le_env.hidd_inst;
     if(hidd_inst->att_tbl[HIDD_LE_IDX_HID_INFO_VAL] <= handle &&
         hidd_inst->att_tbl[HIDD_LE_IDX_REPORT_REP_REF] >= handle){
@@ -350,14 +338,13 @@ void hidd_get_attr_value(uint16_t handle, uint16_t *length, uint8_t **value)
     return;
 }
 
-static void hid_add_id_tbl(void)
-{
+static void hid_add_id_tbl(void) {
     memset(hid_rpt_map, 0, sizeof(hid_rpt_map));
 
     hid_rpt_map[0].id = 0x01; 
     hid_rpt_map[0].type = HID_REPORT_TYPE_INPUT;
-    hid_rpt_map[0].handle = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_IN_VAL];
-    hid_rpt_map[0].cccdHandle = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_IN_CCC];
+    hid_rpt_map[0].handle = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MOUSE_IN_VAL];
+    hid_rpt_map[0].cccdHandle = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MOUSE_IN_CCC];
     hid_rpt_map[0].mode = HID_PROTOCOL_MODE_REPORT;
 
     hid_rpt_map[1].id = 0x02; 

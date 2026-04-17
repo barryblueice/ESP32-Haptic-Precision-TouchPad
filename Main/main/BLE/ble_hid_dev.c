@@ -8,8 +8,7 @@
 static hid_report_map_t *hid_dev_rpt_tbl;
 static uint8_t hid_dev_rpt_tbl_Len;
 
-static hid_report_map_t *hid_dev_rpt_by_id(uint8_t id, uint8_t type)
-{
+static hid_report_map_t *hid_dev_rpt_by_id(uint8_t id, uint8_t type) {
     hid_report_map_t *rpt = hid_dev_rpt_tbl;
 
     for (uint8_t i = hid_dev_rpt_tbl_Len; i > 0; i--, rpt++) {
@@ -21,21 +20,19 @@ static hid_report_map_t *hid_dev_rpt_by_id(uint8_t id, uint8_t type)
     return NULL;
 }
 
-void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t *p_report)
-{
+void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t *p_report) {
     hid_dev_rpt_tbl = p_report;
     hid_dev_rpt_tbl_Len = num_reports;
     return;
 }
 
 void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
-                                    uint8_t id, uint8_t type, uint8_t length, uint8_t *data)
-{
+                                    uint8_t id, uint8_t type, uint8_t length, uint8_t *data) {
     hid_report_map_t *p_rpt;
 
-    // get att handle for report
     if ((p_rpt = hid_dev_rpt_by_id(id, type)) != NULL) {
-        ESP_LOGD(HID_LE_PRF_TAG, "%s(), send the report, handle = %d", __func__, p_rpt->handle);
+        // ESP_LOGI("HID_DEV", "Sending report ID: %d, Type: %d, Length: %d", id, type, length);
+        // ESP_LOGI("HID_DEV", "Actual Handle being used: %d", p_rpt->handle);
         esp_ble_gatts_send_indicate(gatts_if, conn_id, p_rpt->handle, length, data, false);
     }
 
