@@ -45,6 +45,20 @@ menu "TouchPad Configuration"
             help
                 Enter the timeout value for mode resetting in milliseconds. When FUNC key is pressed for the certain target duration of time, the device will switch modes into wired mode default. IF FUNC_RESET_MS is bigger than FUNC_TIMEOUT_MS, FUNC_RESET_MS will be FUNC_TIMEOUT_MS + 2000ms by default.
 
+        choice
+            prompt "BLE HID Mode Select"
+            default BLE_ENABLE_MOUSE_MODE
+            help
+            Select TouchPad model what you used. Different model may use different solution to translate hid data.
+
+        config BLE_ENABLE_MOUSE_MODE
+            bool "Mouse Mode"
+        
+        config BLE_ENABLE_PTP_MODE
+            bool "PTP Mode"
+
+        endchoice
+
     endmenu
 
 endmenu

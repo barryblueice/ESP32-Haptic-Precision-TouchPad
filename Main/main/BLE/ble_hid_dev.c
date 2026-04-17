@@ -31,6 +31,7 @@ void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
     hid_report_map_t *p_rpt;
 
     if ((p_rpt = hid_dev_rpt_by_id(id, type)) != NULL) {
+
         esp_ble_gatts_send_indicate(gatts_if, conn_id, p_rpt->handle, length, data, false);
     }
 

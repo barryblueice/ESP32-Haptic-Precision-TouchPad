@@ -91,8 +91,7 @@ typedef struct __attribute__((packed)) {
 typedef enum {
     WIRED_MODE = 0,
     _2_4_MODE = 1,
-    BLE_PTP_MODE = 2,
-    BLE_MOUSE_MODE = 3
+    BLE_MODE = 2
 } device_mode_t;
 
 extern int32_t current_mode;

@@ -21,6 +21,8 @@
 #include "esp_bt_device.h"
 #include "driver/gpio.h"
 
+#include "sdkconfig.h"
+
 #include "BLE/ble_hid_dev.h"
 
 #include "SYS/hid_msg.h"
@@ -33,7 +35,7 @@ uint16_t hid_conn_id = 0;
 static bool sec_conn = false;
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 
-#define HIDD_DEVICE_NAME "R-SODIUM PTP"
+#define HIDD_DEVICE_NAME "R-SODIUM BLE"
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param);
 
@@ -157,7 +159,13 @@ void ble_bluedroid_init() {
 
     esp_err_t ret;
 
-    touchpad_mode_set(true);
+    #if CONFIG_BLE_ENABLE_PTP_MODE
+        current_tp_mode = PTP_MODE;
+        touchpad_mode_set(true);
+    #else
+        current_tp_mode = MOUSE_MODE;
+        touchpad_mode_set(false);
+    #endif
 
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
