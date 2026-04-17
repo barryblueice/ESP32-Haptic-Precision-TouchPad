@@ -59,7 +59,8 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
 
 # Current Issues:
  - Feedback adjustment may not support by Windows 11 original setting. It may need third-party setting software to config.
- - Windows 11 original setting may unavailable under BLE mode.
+ - Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
+ Also, Windows Setting for PTP is unavailable under BLE mode.
 
 # Current Support System (already tested):
 
@@ -74,7 +75,7 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
 
 # About Solution Implementation
 
-~~Please go to [wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/wiki) for further detail.~~
+~~Please go to [wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/wiki) for further detail.~~<br>
 Wiki still under construction.
 
 ***
