@@ -29,6 +29,8 @@
 
 #include "I2C/i2c_hid.h"
 
+#include "GPIO/gpio_handle.h"
+
 #define TAG "BLE_INIT"
 
 uint16_t hid_conn_id = 0;
@@ -158,6 +160,8 @@ void ble_hid_conn_task(void *pvParameters) {
 void ble_bluedroid_init() {
 
     esp_err_t ret;
+
+    led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 
     #if CONFIG_BLE_ENABLE_PTP_MODE
         current_tp_mode = PTP_MODE;

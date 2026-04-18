@@ -35,6 +35,10 @@ void app_main(void) {
 
     nvs_init();
 
+    led_queue = xQueueCreate(10, sizeof(led_msg_t));
+
+    xTaskCreate(led_manager_task, "led_mgr", 2048, NULL, 5, NULL);
+
     esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
     if (nvs_err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize NVS, storing default mode.");
@@ -57,12 +61,16 @@ void app_main(void) {
     switch (current_mode) {
 
         case _2_4_MODE:
+
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 2, false);
+
             ESP_LOGW(TAG, "Starting in 2.4G Mode...");
             wireless_wifi_init();
             xTaskCreate(wifi_send_task, "esp_now_task", 4096, NULL, 11, NULL);
             break;
 
         case BLE_MODE:
+
             ESP_LOGW(TAG, "Starting in BLE Mode...");
             hidd_le_prepare_gatt_table();
             ble_bluedroid_init();
@@ -78,6 +86,9 @@ void app_main(void) {
         //     break;
 
         default:
+
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 2000, 2000, 1, false);
+
             ESP_LOGW(TAG, "Starting in USB Wired Mode...");
             usb_event_group = xEventGroupCreate();
             xTaskCreate(usb_mount_task, "mode_sel", 4096, NULL, 11, NULL);

@@ -9,6 +9,8 @@
 
 #include "SYS/hid_msg.h"
 
+#include "GPIO/gpio_handle.h"
+
 #include "sdkconfig.h"
 
 struct prf_char_pres_fmt {
@@ -230,6 +232,11 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_CREATE_EVT:
             break;
         case ESP_GATTS_CONNECT_EVT: {
+
+            led_send_command(GPIO_LED_3, LED_CMD_STOP, 100, 1000, 0, false);
+
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 3, false);
+
             esp_hidd_cb_param_t cb_param = {0};
 			ESP_LOGI(HID_LE_PRF_TAG, "HID connection establish, conn_id = %x",param->connect.conn_id);
 			memcpy(cb_param.connect.remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
@@ -242,6 +249,9 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         }
         case ESP_GATTS_DISCONNECT_EVT: {
+
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
+
 			 if(hidd_le_env.hidd_cb != NULL) {
                     (hidd_le_env.hidd_cb)(ESP_HIDD_EVENT_BLE_DISCONNECT, NULL);
              }
