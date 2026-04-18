@@ -15,7 +15,7 @@ void ble_hid_task(void *arg) {
     while (1) {
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
         
-        uint16_t conn_id = hid_conn_id;
+        uint16_t conn_id = ble_conn_id;
 
         if (xActivatedMember == tp_queue) {
 

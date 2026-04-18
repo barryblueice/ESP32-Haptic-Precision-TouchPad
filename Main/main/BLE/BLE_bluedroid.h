@@ -11,7 +11,8 @@
 void ble_bluedroid_init();
 void hidd_le_prepare_gatt_table();
 void ble_hid_task(void *arg);
+void battery_task(void *pvParameters);
 
-extern uint8_t hid_conn_id;
+extern uint16_t ble_conn_id;
 
 #endif /* BLE_BLUEDROID_H */
