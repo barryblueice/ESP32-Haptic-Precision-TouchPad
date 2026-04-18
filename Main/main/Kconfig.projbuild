@@ -44,6 +44,12 @@ menu "TouchPad Configuration"
             default 5000
             help
                 Enter the timeout value for mode resetting in milliseconds. When FUNC key is pressed for the certain target duration of time, the device will switch modes into wired mode default. IF FUNC_RESET_MS is bigger than FUNC_TIMEOUT_MS, FUNC_RESET_MS will be FUNC_TIMEOUT_MS + 2000ms by default.
+        
+        config LED_FLASH_FUNC_TIMEOUT
+            default y
+            bool "Led blink when FUNC key is pressed if reaching FUNC_TIMEOUT_MS"
+            help
+                Enable this option to make the LED blink when FUNC key is pressed and reaches the FUNC_TIMEOUT_MS duration. This can provide a visual indication that the mode switching is about to occur.
 
         choice
             prompt "BLE HID Mode Select"

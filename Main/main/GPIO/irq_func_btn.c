@@ -36,6 +36,9 @@ void button_handler_task(void* arg) {
                     esp_restart(); 
                 } else if (duration == CONFIG_FUNC_TIMEOUT_MS) {
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Reaching FUNC_TIMEOUT_MS", duration);
+                    if (CONFIG_LED_FLASH_FUNC_TIMEOUT) {
+                        led_send_command(GPIO_LED_3, LED_CMD_BLINK, 1000, 500, 1, false);
+                    }
                 }
 
                 vTaskDelay(pdMS_TO_TICKS(10));
@@ -48,7 +51,13 @@ void button_handler_task(void* arg) {
                     current_mode = (current_mode == BLE_MODE) ? 0 : current_mode + 1;
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Switching mode %d", final_duration, current_mode);
                     nvs_write_int("current_mode", current_mode);
+                    
                     led_all_handle(LED_OFF);
+
+                    if (CONFIG_LED_FLASH_FUNC_TIMEOUT) {
+                        led_send_command(GPIO_LED_3, LED_CMD_BLINK, 1000, 500, 1, false);
+                    }
+                    
                     esp_restart();
                 }
             }
