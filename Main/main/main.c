@@ -49,8 +49,6 @@ void app_main(void) {
 
     nvs_init();
 
-    xTaskCreate(led_manager_task, "led_mgr", 2048, NULL, 5, NULL);
-
     esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
     if (nvs_err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize NVS, storing default mode.");

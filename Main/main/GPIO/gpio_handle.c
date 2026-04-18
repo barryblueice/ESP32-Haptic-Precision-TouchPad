@@ -12,49 +12,28 @@ void led_all_handle(uint8_t _state) {
 
 QueueHandle_t led_queue = NULL;
 
-void led_manager_task(void *param) {
-    led_msg_t msg;
-    while (1) {
-        if (xQueueReceive(led_queue, &msg, portMAX_DELAY)) {
-            
-            if (msg.mode == LED_CMD_STOP) {
-                gpio_set_level(msg.gpio, LED_OFF);
-                continue;
-            }
+static led_msg_t led_ctxs[MAX_LED_SUPPORT];
 
-            bool force_stopped = false;
-            do {
-                uint32_t total_flips = (msg.max_counts == 0) ? UINT32_MAX : (msg.max_counts * 2);
+static void vLedTimerCallback(TimerHandle_t xTimer) {
+    led_msg_t *ctx = (led_msg_t *)pvTimerGetTimerID(xTimer);
+    
+    ctx->is_on = !ctx->is_on;
+    gpio_set_level(ctx->gpio, ctx->is_on ? LED_ON : LED_OFF);
+    ctx->current_flips++;
 
-                for (uint32_t i = 0; i < total_flips; i++) {
-                    gpio_set_level(msg.gpio, (i % 2 == 0) ? LED_ON : LED_OFF);
+    uint32_t total_flips_target = (ctx->max_counts == 0) ? UINT32_MAX : (ctx->max_counts * 2);
 
-                    led_msg_t next_msg;
-                    if (xQueuePeek(led_queue, &next_msg, 0) == pdPASS) {
-                        if (next_msg.gpio == msg.gpio) {
-                            force_stopped = true;
-                            break;
-                        }
-                    }
-
-                    vTaskDelay(pdMS_TO_TICKS(msg.interval_ms));
-                }
-
-                gpio_set_level(msg.gpio, LED_OFF);
-
-                if (force_stopped) break;
-
-                if (msg.repeat) {
-                    led_msg_t next_msg;
-                    if (xQueuePeek(led_queue, &next_msg, 0) == pdPASS && next_msg.gpio == msg.gpio) {
-                        break; 
-                    }
-                    vTaskDelay(pdMS_TO_TICKS(msg.interval_ms_loop));
-                }
-
-            } while (msg.repeat);
-
-            gpio_set_level(msg.gpio, LED_OFF); 
+    if (ctx->current_flips >= total_flips_target) {
+        if (ctx->repeat) {
+            ctx->current_flips = 0;
+            xTimerChangePeriod(xTimer, pdMS_TO_TICKS(ctx->interval_ms_loop), 0);
+        } else {
+            gpio_set_level(ctx->gpio, LED_OFF);
+            xTimerStop(xTimer, 0);
+        }
+    } else {
+        if (xTimerGetPeriod(xTimer) != pdMS_TO_TICKS(ctx->interval_ms)) {
+            xTimerChangePeriod(xTimer, pdMS_TO_TICKS(ctx->interval_ms), 0);
         }
     }
 }
@@ -74,14 +53,37 @@ void led_manager_task(void *param) {
  * - pdFAIL:    Queue is full, command sending failed.
  */
 BaseType_t led_send_command(gpio_num_t pin, led_mode_t mode, uint32_t interval_ms, uint32_t interval_ms_loop, uint32_t counts, bool loop) {
-    led_msg_t msg = {
-        .gpio = pin,
-        .mode = mode,
-        .interval_ms = interval_ms,
-        .interval_ms_loop = interval_ms_loop,
-        .max_counts = counts,
-        .repeat = loop
-    };
+    led_msg_t *ctx = NULL;
+
+    for(int i=0; i<3; i++) {
+        if(led_ctxs[i].gpio == pin || led_ctxs[i].timer == NULL) {
+            ctx = &led_ctxs[i];
+            break;
+        }
+    }
     
-    return xQueueSend(led_queue, &msg, 0);
+    if (!ctx) return pdFAIL;
+
+    if (mode == LED_CMD_STOP) {
+        if (ctx->timer) xTimerStop(ctx->timer, 0);
+        gpio_set_level(pin, LED_OFF);
+        return pdPASS;
+    }
+
+    ctx->gpio = pin;
+    ctx->mode = mode;
+    ctx->interval_ms = interval_ms;
+    ctx->interval_ms_loop = interval_ms_loop;
+    ctx->max_counts = counts;
+    ctx->repeat = loop;
+    ctx->current_flips = 0;
+    ctx->is_on = false;
+
+    if (ctx->timer == NULL) {
+        ctx->timer = xTimerCreate("LED_TMR", pdMS_TO_TICKS(interval_ms), pdTRUE, (void *)ctx, vLedTimerCallback);
+    } else {
+        xTimerChangePeriod(ctx->timer, pdMS_TO_TICKS(interval_ms), 0);
+    }
+
+    return xTimerStart(ctx->timer, 0);
 }
