@@ -1,4 +1,4 @@
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -10,6 +10,8 @@
 
 #include "SYS/rtos_queue.h"
 #include "SYS/hid_msg.h"
+
+#include "I2C/I2C_handle.h"
 
 #define TAG "I2C_QUEUE"
     

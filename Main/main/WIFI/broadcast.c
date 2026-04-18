@@ -5,7 +5,7 @@
 
 #include "SYS/hid_msg.h"
 #include "WIFI/wireless_wifi.h"
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
 
 static const char *TAG = "BROADCAST";
 

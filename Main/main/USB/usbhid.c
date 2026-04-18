@@ -16,7 +16,7 @@
 
 #include "math.h"
 
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
 
 #include "SYS/hid_msg.h"
 

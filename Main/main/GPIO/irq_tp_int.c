@@ -9,9 +9,9 @@
 
 #include "SYS/rtos_queue.h"
 
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
 
-#include "I2C/i2c_hid.h"
+#include "I2C/I2C_handle.h"
 
 #define TAG "IRQ_TP_INT"
 
