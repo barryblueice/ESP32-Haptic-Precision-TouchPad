@@ -8,7 +8,8 @@
 #include "NVS/nvs_handle.h"
 #include "SYS/hid_msg.h"
 
-#define BOOT_BUTTON_GPIO    0
+#include "GPIO/gpio_handle.h"
+
 #define TAG "BUTTON_PROC"
 
 static TaskHandle_t button_task_handle = NULL;
@@ -31,6 +32,7 @@ void button_handler_task(void* arg) {
                     ESP_LOGW(TAG, "BTN time out! Reset to default mode..", duration);
                     nvs_write_int("current_mode", WIRED_MODE);
                     reset_triggered = true;
+                    led_all_handle(LED_OFF);
                     esp_restart(); 
                 } else if (duration == CONFIG_FUNC_TIMEOUT_MS) {
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Reaching FUNC_TIMEOUT_MS", duration);
@@ -46,6 +48,7 @@ void button_handler_task(void* arg) {
                     current_mode = (current_mode == BLE_MODE) ? 0 : current_mode + 1;
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Switching mode %d", final_duration, current_mode);
                     nvs_write_int("current_mode", current_mode);
+                    led_all_handle(LED_OFF);
                     esp_restart();
                 }
             }

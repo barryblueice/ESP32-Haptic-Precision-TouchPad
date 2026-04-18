@@ -14,6 +14,7 @@ set(srcs
     "GPIO/irq_func_btn.c"
     "GPIO/irq_tp_int.c"
     "GPIO/gpio_init.c"
+    "GPIO/gpio_handle.c"
     
     "NVS/nvs_handle.c"
 
