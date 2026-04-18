@@ -29,6 +29,16 @@
 
 void app_main(void) {
 
+    tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
+    mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
+    tp_data_queue = xQueueCreate(1, 64);
+
+    led_queue = xQueueCreate(10, sizeof(led_msg_t));
+
+    main_queue_set = xQueueCreateSet(1 + 1);
+    xQueueAddToSet(mouse_queue, main_queue_set);
+    xQueueAddToSet(tp_queue, main_queue_set);
+
     gpio_init();
 
     irq_func_btn_init();
@@ -38,8 +48,6 @@ void app_main(void) {
     sub_dev_init();
 
     nvs_init();
-
-    led_queue = xQueueCreate(10, sizeof(led_msg_t));
 
     xTaskCreate(led_manager_task, "led_mgr", 2048, NULL, 5, NULL);
 
@@ -51,14 +59,6 @@ void app_main(void) {
     } else {
         ESP_LOGI(TAG, "Current mode loaded from NVS: %d", current_mode);
     }
-
-    tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
-    mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
-    tp_data_queue = xQueueCreate(1, 64);
-
-    main_queue_set = xQueueCreateSet(1 + 1);
-    xQueueAddToSet(mouse_queue, main_queue_set);
-    xQueueAddToSet(tp_queue, main_queue_set);
 
     irq_int_init();
 

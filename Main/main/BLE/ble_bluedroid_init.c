@@ -172,7 +172,7 @@ void ble_bluedroid_init() {
         touchpad_mode_set(false);
     #endif
 
-    xTaskCreate(battery_task, "battery_task", 2048, NULL, 5, NULL);
+    xTaskCreate(battery_ble_notify_task, "battery_ble_notify_task", 2048, NULL, 5, NULL);
 
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {

@@ -504,7 +504,7 @@ void update_battery_level(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t leve
                                 sizeof(uint8_t), &level, false);
 }
 
-void battery_task(void *pvParameters) {
+void battery_ble_notify_task(void *pvParameters) {
     while (1) {
         int raw_battery = get_battery_percentage();
 
