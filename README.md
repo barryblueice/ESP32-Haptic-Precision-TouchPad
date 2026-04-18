@@ -77,8 +77,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 
 # About Solution Implementation
 
-~~Please go to [wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/wiki) for further detail.~~<br>
-Wiki still under construction.
+Please go to [wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/wiki) for further detail.
 
 ***
 
