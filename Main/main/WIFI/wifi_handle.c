@@ -11,7 +11,7 @@
 #include "freertos/semphr.h"
 
 #include "SYS/hid_msg.h"
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
 #include "WIFI/wireless_wifi.h"
 
 #include "sdkconfig.h"

@@ -6,7 +6,7 @@
 
 #include "BLE/BLE_bluedroid.h"
 
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
 
 void ble_hid_task(void *arg) {
     tp_multi_msg_t tp_msg;

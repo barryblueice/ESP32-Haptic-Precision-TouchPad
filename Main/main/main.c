@@ -7,7 +7,9 @@
 #include "freertos/task.h"
 #include "tinyusb.h"
 
-#include "I2C/i2c_hid.h"
+#include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/sub_dev.h"
+#include "I2C/I2C_handle.h"
 
 #include "SYS/rtos_queue.h"
 #include "SYS/hid_msg.h"
@@ -32,6 +34,8 @@ void app_main(void) {
     irq_func_btn_init();
 
     touchpad_init();
+
+    sub_dev_init();
 
     nvs_init();
 
