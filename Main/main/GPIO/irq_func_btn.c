@@ -54,10 +54,6 @@ void button_handler_task(void* arg) {
                     
                     led_all_handle(LED_OFF);
 
-                    if (CONFIG_LED_FLASH_FUNC_TIMEOUT) {
-                        led_send_command(GPIO_LED_3, LED_CMD_BLINK, 1000, 500, 1, false);
-                    }
-                    
                     esp_restart();
                 }
             }
