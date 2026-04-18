@@ -2,7 +2,7 @@
 
 # **What's This?**
 
-Another touchpad hacking project, based on ESP32-S3 +Surface Laptop Studio 1964 Synaptics TouchPad.
+Another touchpad hacking project, based on ESP32-S3 + Surface Laptop Studio 1964 Synaptics TouchPad.
 
  - Compatible with Microsoft Precision TouchPad (PTP) standard. 
  - Supported Windows Touch Gesture. 
@@ -10,7 +10,7 @@ Another touchpad hacking project, based on ESP32-S3 +Surface Laptop Studio 1964 
  - Supported feedback adjustment.
  - Supported USB/BLE/2.4G connection.
 
-Also include a HP fingerprint module, in order to support fingerprint for Windows Hello.
+Also include a Dell Goodix fingerprint module, in order to support fingerprint for Windows Hello.
 
 > [!IMPORTANT]
 > This project is basically an expanded and strengthened version of an existing project [ESP32 Precision TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad).<br>
@@ -60,8 +60,9 @@ Also include a HP fingerprint module, in order to support fingerprint for Window
 
 # Current Issues:
  - Feedback adjustment may not support by Windows 11 original setting. It may need third-party setting software to config.
- - Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
+ -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
  Also, Windows Setting for PTP is unavailable under BLE mode.
+ - PTP/Mouse Mode switching is unavailable, so BLE Mouse Mode will be default currently.
 
 # Current Support System (already tested):
 
