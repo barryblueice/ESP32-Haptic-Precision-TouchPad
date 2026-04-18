@@ -3,6 +3,8 @@
 #include <string.h>
 #include "esp_log.h"
 
+#include "I2C/SUB_DEV/sub_dev.h"
+
 #include "BLE/BLE_bluedroid.h"
 
 #include "NVS/nvs_handle.h"
@@ -12,6 +14,8 @@
 #include "GPIO/gpio_handle.h"
 
 #include "sdkconfig.h"
+
+#define TAG "BLE_HID_DEVICE_LE_PRF"
 
 struct prf_char_pres_fmt {
     uint16_t unit;
@@ -57,6 +61,8 @@ static const uint8_t hidInfo[HID_INFORMATION_LEN] = {
     HID_KBD_FLAGS
 };
 
+static bool is_connected = false;
+
 // static uint16_t hidExtReportRefDesc = ESP_GATT_UUID_BATTERY_LEVEL;
 
 #if CONFIG_BLE_ENABLE_PTP_MODE
@@ -73,6 +79,8 @@ static uint8_t hidReportRefFeature[HID_REPORT_REF_LEN] =
 static uint16_t hid_le_svc = ATT_SVC_HID;
 uint16_t            hid_count = 0;
 esp_gatts_incl_svc_desc_t incl_svc = {0};
+
+static uint16_t bas_handle_table[BAS_IDX_NB];
 
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
@@ -98,8 +106,8 @@ static const uint8_t char_prop_read_notify = ESP_GATT_CHAR_PROP_BIT_READ|ESP_GAT
 
 uint8_t feature_report_data[] = {0x02, 0x05, 0x01};
 
-/// battary Service
-static const uint16_t battary_svc = ESP_GATT_UUID_BATTERY_SERVICE_SVC;
+/// battery Service
+static const uint16_t battery_svc = ESP_GATT_UUID_BATTERY_SERVICE_SVC;
 
 static const uint16_t bat_lev_uuid = ESP_GATT_UUID_BATTERY_LEVEL;
 static const uint8_t   bat_lev_ccc[2] = {0x00, 0x00};
@@ -113,17 +121,17 @@ static uint8_t ptp_feature_report_ref[] = {REPORTID_FEATURE, 0x03};
 static uint8_t ptp_function_switch_ref[] = {REPORTID_FUNCTION_SWITCH, 0x03};
 #endif
 
-static uint8_t battary_lev = 100;
+static uint8_t battery_level = 100;
 
-static const esp_gatts_attr_db_t bas_att_db[BAS_IDX_NB] = {
+static esp_gatts_attr_db_t bas_att_db[BAS_IDX_NB] = {
     [BAS_IDX_SVC]               =  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&primary_service_uuid, ESP_GATT_PERM_READ,
-                                            sizeof(uint16_t), sizeof(battary_svc), (uint8_t *)&battary_svc}},
+                                            sizeof(uint16_t), sizeof(battery_svc), (uint8_t *)&battery_svc}},
 
     [BAS_IDX_BATT_LVL_CHAR]    = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ,
                                                    CHAR_DECLARATION_SIZE,CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
 
     [BAS_IDX_BATT_LVL_VAL]             	= {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&bat_lev_uuid, ESP_GATT_PERM_READ,
-                                                                sizeof(uint8_t),sizeof(uint8_t), &battary_lev}},
+                                                                sizeof(uint8_t),sizeof(uint8_t), &battery_level}},
 
     [BAS_IDX_BATT_LVL_NTF_CFG]     	=  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
                                                           sizeof(uint16_t),sizeof(bat_lev_ccc), (uint8_t *)bat_lev_ccc}},
@@ -233,6 +241,8 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         case ESP_GATTS_CONNECT_EVT: {
 
+            is_connected = true;
+
             led_send_command(GPIO_LED_3, LED_CMD_STOP, 100, 1000, 0, false);
 
             led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 3, false);
@@ -249,6 +259,8 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         }
         case ESP_GATTS_DISCONNECT_EVT: {
+
+            is_connected = false;
 
             led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 
@@ -329,6 +341,10 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         }
         case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
+            if (param->add_attr_tab.status == ESP_GATT_OK && 
+                param->add_attr_tab.num_handle == BAS_IDX_NB) {
+                memcpy(bas_handle_table, param->add_attr_tab.handles, sizeof(bas_handle_table));
+            }
             if (param->add_attr_tab.num_handle == BAS_IDX_NB &&
                 param->add_attr_tab.svc_uuid.uuid.uuid16 == ESP_GATT_UUID_BATTERY_SERVICE_SVC &&
                 param->add_attr_tab.status == ESP_GATT_OK) {
@@ -479,4 +495,26 @@ static void hid_add_id_tbl(void) {
     hid_rpt_map[1].mode = HID_PROTOCOL_MODE_REPORT;
 
     hid_dev_register_reports(2, hid_rpt_map);
+}
+
+void update_battery_level(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t level) {
+    esp_ble_gatts_set_attr_value(bas_handle_table[BAS_IDX_BATT_LVL_VAL], sizeof(uint8_t), &level);
+    esp_ble_gatts_send_indicate(gatts_if, conn_id, 
+                                bas_handle_table[BAS_IDX_BATT_LVL_VAL],
+                                sizeof(uint8_t), &level, false);
+}
+
+void battery_task(void *pvParameters) {
+    while (1) {
+        int raw_battery = get_battery_percentage();
+
+        uint8_t current_battery_level = raw_battery;
+        
+        if (is_connected) {
+
+            update_battery_level(hidd_le_env.gatt_if, ble_conn_id, current_battery_level);
+        }
+        
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
 }

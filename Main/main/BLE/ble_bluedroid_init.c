@@ -24,6 +24,7 @@
 #include "sdkconfig.h"
 
 #include "BLE/ble_hid_dev.h"
+#include "BLE/BLE_bluedroid.h"
 
 #include "SYS/hid_msg.h"
 
@@ -33,7 +34,7 @@
 
 #define TAG "BLE_INIT"
 
-uint16_t hid_conn_id = 0;
+uint16_t ble_conn_id = 0;
 static bool sec_conn = false;
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 
@@ -94,7 +95,7 @@ static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *
 	     break;
 		case ESP_HIDD_EVENT_BLE_CONNECT: {
             ESP_LOGI(TAG, "ESP_HIDD_EVENT_BLE_CONNECT");
-            hid_conn_id = param->connect.conn_id;
+            ble_conn_id = param->connect.conn_id;
             break;
         }
         case ESP_HIDD_EVENT_BLE_DISCONNECT: {
@@ -170,6 +171,8 @@ void ble_bluedroid_init() {
         current_tp_mode = MOUSE_MODE;
         touchpad_mode_set(false);
     #endif
+
+    xTaskCreate(battery_task, "battery_task", 2048, NULL, 5, NULL);
 
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
