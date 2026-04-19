@@ -73,7 +73,7 @@ void wireless_wifi_init(void) {
     
     esp_now_send(receiver_mac, (uint8_t *)&pkt, sizeof(pkt));
 
-    xTaskCreate(alive_heartbeat_task, "heartbeat", 2048, NULL, 2, NULL);
+    xTaskCreatePinnedToCore(alive_heartbeat_task, "alive_heartbeat_task", 2048, NULL, 5, NULL, 0);
     stop_heartbeat = false;
 
     wireless_espnow_init();

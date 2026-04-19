@@ -100,4 +100,6 @@ void touchpad_init(void) {
     tp_hw_reset();
     hid_init_sequence();
 
+    xTaskCreatePinnedToCore(i2c_queue_task, "i2c_queue_task", 4096, NULL, 15, NULL, 1);
+
 }

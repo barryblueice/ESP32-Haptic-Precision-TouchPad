@@ -172,7 +172,7 @@ void ble_bluedroid_init() {
         touchpad_mode_set(false);
     #endif
 
-    xTaskCreate(battery_ble_notify_task, "battery_ble_notify_task", 2048, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(battery_ble_notify_task, "battery_ble_notify_task", 2048, NULL, 5, NULL, 0);
 
     ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -227,5 +227,5 @@ void ble_bluedroid_init() {
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
-    xTaskCreate(&ble_hid_conn_task, "hid_task", 2048, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(ble_hid_conn_task, "ble_conn", 2048, NULL, 5, NULL, 0);
 }

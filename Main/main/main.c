@@ -68,7 +68,7 @@ void app_main(void) {
 
             ESP_LOGW(TAG, "Starting in 2.4G Mode...");
             wireless_wifi_init();
-            xTaskCreate(wifi_send_task, "esp_now_task", 4096, NULL, 11, NULL);
+            xTaskCreatePinnedToCore(wifi_send_task, "wifi_send_task", 4096, NULL, 12, NULL, 0);
             break;
 
         case BLE_MODE:
@@ -76,16 +76,8 @@ void app_main(void) {
             ESP_LOGW(TAG, "Starting in BLE Mode...");
             hidd_le_prepare_gatt_table();
             ble_bluedroid_init();
-            xTaskCreate(ble_hid_task, "ble_hid_task", 4096, NULL, 11, NULL);
+            xTaskCreatePinnedToCore(ble_hid_task, "ble_hid_task", 4096, NULL, 12, NULL, 0);
             break;
-
-        // case BLE_MOUSE_MODE:
-        //     ESP_LOGW(TAG, "Starting in BLE Mouse Mode...");
-        //     // current_tp_mode = MOUSE_MODE;
-        //     // hidd_le_prepare_gatt_table(false);
-        //     // ble_bluedroid_init(false);
-        //     // xTaskCreate(ble_hid_task, "ble_hid_task", 4096, NULL, 11, NULL);
-        //     break;
 
         default:
 
@@ -93,9 +85,9 @@ void app_main(void) {
 
             ESP_LOGW(TAG, "Starting in USB Wired Mode...");
             usb_event_group = xEventGroupCreate();
-            xTaskCreate(usb_mount_task, "mode_sel", 4096, NULL, 11, NULL);
+            xTaskCreatePinnedToCore(usb_mount_task, "usb_mount_task", 4096, NULL, 11, NULL, 0);
             usbhid_init();
-            xTaskCreate(usbhid_task, "hid", 4096, NULL, 12, NULL);
+            xTaskCreatePinnedToCore(usbhid_task, "usbhid_task", 4096, NULL, 13, NULL, 0);
 
             while (1) {
                 tud_task(); 
