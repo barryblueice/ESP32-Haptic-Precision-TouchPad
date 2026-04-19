@@ -6,6 +6,7 @@
 
 extern i2c_master_bus_handle_t bus_handle;
 extern i2c_master_dev_handle_t dev_handle;
+extern i2c_master_dev_handle_t dev_haptic_motor_handle;
 
 extern bool global_watchdog_start;
 extern uint16_t global_scan_time;

@@ -78,6 +78,12 @@ void app_main(void) {
 
     irq_int_init();
 
+    uint8_t packet[4];
+
+    i2c_master_receive(dev_haptic_motor_handle, packet, 4, 100);
+
+    ESP_LOG_BUFFER_HEX(TAG, packet, sizeof(packet));
+
     switch (current_mode) {
 
         case _2_4_MODE:

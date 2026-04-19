@@ -13,6 +13,7 @@
 
 i2c_master_bus_handle_t bus_handle;
 i2c_master_dev_handle_t dev_handle;
+i2c_master_dev_handle_t dev_haptic_motor_handle;
 
 bool global_watchdog_start = false;
 
@@ -58,6 +59,13 @@ void tp_i2c_init(void) {
         .scl_speed_hz = I2C_FREQ_HZ,
     };
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
+
+    i2c_device_config_t dev_haptic_motor_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = HAPTIC_MOTOR_ADDR,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_haptic_motor_cfg, &dev_haptic_motor_handle));
 }
 
 void tp_hw_reset(void) {

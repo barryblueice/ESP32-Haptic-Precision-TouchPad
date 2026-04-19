@@ -36,7 +36,7 @@
 #define REPORTID_PTPHQA           0x04
 #define REPORTID_FEATURE          0x05
 #define REPORTID_FUNCTION_SWITCH  0x06
-#define REPORTID_HAPTIC_FEATURE    0x0C
+#define REPORTID_HAPTIC_FEATURE   0x0C
 
 #define TPD_REPORT_ID 0x01
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
@@ -61,7 +61,7 @@ tusb_desc_device_t const desc_device = {
     .bDeviceProtocol    = 0x00,
     .bMaxPacketSize0    = CFG_TUD_ENDPOINT0_SIZE,
     .idVendor           = 0x0D00,
-    .idProduct          = 0x072A,
+    .idProduct          = 0x072C,
     .bcdDevice          = 0x0100,
     .iManufacturer      = 0x01,
     .iProduct           = 0x02,
@@ -107,6 +107,30 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
         if (report_id == REPORTID_PTPHQA) {
             memset(buffer, 0, 256);
             return 256; 
+        }
+        if (report_id == 0x40) {
+            buffer[0] = 150; 
+            return 1;
+        }
+        if (report_id == 0x41) {
+            buffer[0] = 0x02;
+            return 1;
+        }
+        if (report_id == 0x42) {
+            uint16_t *waveforms = (uint16_t *)&buffer[0];
+            waveforms[0] = 4097; // Instance 3
+            waveforms[1] = 4098; // Instance 4
+            waveforms[2] = 4099; // Instance 5
+            waveforms[3] = 4100; // Instance 6
+            waveforms[4] = 4101; // Instance 7
+            
+            buffer[10] = 20; // Instance 3 duration
+            buffer[11] = 20;
+            buffer[12] = 20;
+            buffer[13] = 20;
+            buffer[14] = 20;
+            
+            return 15; 
         }
     }
     return 0;
