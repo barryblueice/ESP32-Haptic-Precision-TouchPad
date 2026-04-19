@@ -231,7 +231,7 @@ void i2c_queue_task(void *arg) {
             } else {
                 mouse_msg.x = (int8_t)tp_packet[4];
                 mouse_msg.y = (int8_t)tp_packet[5];
-                mouse_msg.buttons = tp_packet[3];
+                // mouse_msg.buttons = tp_packet[3];
 
                 xQueueOverwrite(mouse_queue, &mouse_msg);
             }
