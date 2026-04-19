@@ -2,6 +2,8 @@
 #include "BLE/hidd_le_prf_int.h"
 #include "esp_log.h"
 
+#include "sdkconfig.h"
+
 #include "SYS/hid_msg.h"
 
 #include "BLE/BLE_bluedroid.h"
@@ -39,23 +41,27 @@ void ble_hid_task(void *arg) {
         
         } else if (xActivatedMember == mouse_queue) {
 
-            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
+            #if CONFIG_ORI_MOUSE_MODE
 
-                mouse_hid_report_t report = {0};
+                if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
 
-                parse_mouse_report(&mouse_msg, &report);
+                    mouse_hid_report_t report = {0};
+
+                    parse_mouse_report(&mouse_msg, &report);
+                    
+                    hid_dev_send_report(
+                        hidd_le_env.gatt_if, 
+                        conn_id, 
+                        HID_RPT_ID_MOUSE_IN,
+                        HID_REPORT_TYPE_INPUT, 
+                        sizeof(mouse_hid_report_t), 
+                        (uint8_t *)&report
+
+                    );
+
+                }
                 
-                hid_dev_send_report(
-                    hidd_le_env.gatt_if, 
-                    conn_id, 
-                    HID_RPT_ID_MOUSE_IN,
-                    HID_REPORT_TYPE_INPUT, 
-                    sizeof(mouse_hid_report_t), 
-                    (uint8_t *)&report
-
-                );
-
-            }
+            #endif
 
             // ESP_LOGI("BLE_HID_TASK", "Received Mouse Report");
 

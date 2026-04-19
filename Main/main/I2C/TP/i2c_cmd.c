@@ -5,6 +5,8 @@
 #include "freertos/task.h"
 #include "I2C/TP/i2c_hid.h"
 
+#include "sdkconfig.h"
+
 #include "I2C/I2C_handle.h"
 
 #define TAG "I2C_CMD"
@@ -68,6 +70,10 @@ void tp_hw_reset(void) {
 }
 
 esp_err_t touchpad_mode_set(bool is_ptp_mode) {
+
+    #if CONFIG_PTP_SIMULATED_MOUSE_MODE
+        is_ptp_mode = true;
+    #endif
 
     uint8_t magic_cmd[] = {
         0x00, 0x3f,                     // Register Address

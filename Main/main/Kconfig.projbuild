@@ -65,6 +65,20 @@ menu "TouchPad Configuration"
 
         endchoice
 
+        choice
+            prompt "Mouse Mode Select"
+            default ORI_MOUSE_MODE
+            help
+            Select Mouse Mode what you used.
+
+        config ORI_MOUSE_MODE
+            bool "Original Mouse Mode (Best Compatibility but with basic move only)"
+        
+        config PTP_SIMULATED_MOUSE_MODE
+            bool "PTP Simulated Mouse Mode (More function but may unstable, experimental function)"
+
+        endchoice
+
     endmenu
 
 endmenu
