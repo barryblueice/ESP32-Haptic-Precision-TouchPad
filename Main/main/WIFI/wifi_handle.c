@@ -88,16 +88,18 @@ void wifi_send_task(void *arg) {
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
 
         if (xActivatedMember == mouse_queue) {
-            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-                mouse_hid_report_t report = {0};
-                
-                parse_mouse_report(&mouse_msg, &report);
+            #if CONFIG_ORI_MOUSE_MODE
+                if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
+                    mouse_hid_report_t report = {0};
+                    
+                    parse_mouse_report(&mouse_msg, &report);
 
-                pkt.type = MOUSE_MODE;
-                pkt.payload.mouse = report;
-                esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
-                
-            }
+                    pkt.type = MOUSE_MODE;
+                    pkt.payload.mouse = report;
+                    esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                    
+                }
+            #endif
         } 
         else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &tp_msg, 0)) {
