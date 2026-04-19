@@ -1,9 +1,12 @@
 #include "SYS/hid_msg.h"
 #include "I2C/TP/i2c_hid.h"
+#include "esp_log.h"
 
 #include <math.h>
 
 #include "sdkconfig.h"
+
+#define TAG "TP_REPORT"
 
 #define SENSITIVITY 1.0f
 #define CONSTRAIN(amt, low, high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
@@ -25,6 +28,13 @@ void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report) {
 }
 
 void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report) {
+
+    // uint8_t packet[4];
+
+    // i2c_master_receive(dev_haptic_motor_handle, packet, 4, 100);
+
+    // ESP_LOG_BUFFER_HEX(TAG, packet, sizeof(packet));
+
     report->scan_time = msg->scan_time;
     report->contact_count = msg->actual_count;
     report->buttons = (msg->button_mask > 0) ? 0x01 : 0x00;

@@ -354,6 +354,75 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x96, 0x00, 0x01,                   // REPORT_COUNT (0x100 (256))
     0xb1, 0x02,                         // FEATURE (Data,Var,Abs)
     0xc0,                               // END_COLLECTION
+
+    
+
+    // Haptic Engine TLC
+    0x05, 0x0E,                         // UsagePage(Haptics)
+    0x09, 0x01,                         // UsageId(Simple Haptic Controller)
+    0xA1, 0x01,                         // Collection(Application)
+
+    0x85, 0x41,                         // ReportId(65)
+    0xA1, 0x02,                         // Collection(Logical)
+    0x09, 0x23,                         // UsageId(Intensity)
+    0x15, 0x00,                         // LogicalMinimum(0)
+    0x25, 0x04,                         // LogicalMaximum(4)
+    0x75, 0x08,                         // ReportSize(8)
+    0x95, 0x01,                         // ReportCount(1)
+    0xB1, 0x02,                         // Feature(Data, Var, Abs)
+    0xC0,                               // EndCollection
+    0x85, 0x42,                         // ReportId(66)
+    0xA1, 0x02,                         // Collection(Logical)
+    0x09, 0x10,                         // UsageId(Waveform List)
+    0xA1, 0x02,                         // Collection(Logical)
+    0x05, 0x0A,                         // UsagePage(Ordinal)
+    0x19, 0x03,                         // UsageIdMin(Instance 3)
+    0x29, 0x07,                         // UsageIdMax(Instance 7)
+    0x16, 0x01, 0x10,                   // LogicalMinimum(4097)
+    0x26, 0xFF, 0x2F,                   // LogicalMaximum(12287)
+    0x75, 0x10,                         // ReportSize(16)
+    0x95, 0x05,                         // ReportCount(5)
+    0xB1, 0x02,                         // Feature(Data, Var, Abs)
+    0xC0,                               // EndCollection
+    0x05, 0x0E,                         // UsagePage(Haptics)
+    0x09, 0x11,                         // UsageId(Duration List)
+    0xA1, 0x02,                         // Collection(Logical)
+    0x05, 0x0A,                         // UsagePage(Ordinal)
+    0x19, 0x03,                         // UsageIdMin(Instance 3)
+    0x29, 0x07,                         // UsageIdMax(Instance 7)
+    0x66, 0x01, 0x10,                   // Unit(ms)
+    0x55, 0x0D,                         // Exponent(-3)
+    0x15, 0x00,                         // LogicalMinimum(0)
+    0x25, 0x32,                         // LogicalMaximum(50)
+    0x75, 0x08,                         // ReportSize(8)
+    0x95, 0x05,                         // ReportCount(5)
+    0xB1, 0x02,                         // Feature(Data, Var, Abs)
+    0xC0,                               // EndCollection
+    0xC0,                               // EndCollection
+
+    0x85, 0x43,                         // ReportId(67)
+    0xA1, 0x02,                         // Collection(Logical)
+    0x05, 0x0E,                         // UsagePage(Haptics)
+    0x09, 0x21,                         // UsageId(Manual Trigger)
+    0x25, 0x07,                         // LogicalMaximum(7)
+    0x91, 0x02,                         // Output(Data, Var, Abs)
+    
+    0x09, 0x23,                         // UsageId(Intensity)
+    0x91, 0x02,                         // Output
+    
+    0x09, 0x24,                         // UsageId(Repeat Count)
+    0x91, 0x02,                         // Output
+    
+    0x09, 0x25,                         // UsageId(Retrigger Period)
+    0x75, 0x10,                         // ReportSize(16)
+    0x91, 0x02,                         // Output
+    
+    0x09, 0x28,                         // UsageId(Waveform Cutoff Time)
+    0x91, 0x02,                         // Output
+    0xC0,                               // EndCollection
+
+    0xC0,                               // EndCollection(Application)
+
     //CONFIG TLC
     0x05, 0x0d,                         // USAGE_PAGE (Digitizer)
     0x09, 0x0E,                         // USAGE (Configuration)
@@ -380,7 +449,7 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x95, 0x06,                         // REPORT_COUNT (6)
     0xb1, 0x03,                         // FEATURE (Cnst,Var,Abs)
     0xc0,                               // END_COLLECTION
-    0xc0,                               // END_COLLECTION
+    0xC0
 };
 
 
