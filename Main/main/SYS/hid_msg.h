@@ -23,11 +23,20 @@ typedef struct {
     uint16_t scan_time;
 } tp_multi_msg_t;
 
+#if CONFIG_ORI_MOUSE_MODE:
 typedef struct __attribute__((packed)) {
     uint8_t buttons;
     int8_t  x;
     int8_t  y;
 } mouse_msg_t;
+#else
+typedef struct __attribute__((packed)) {
+    uint8_t buttons;
+    int8_t  x;
+    int8_t  y;
+    int8_t  wheel;
+} mouse_msg_t;
+#endif
 
 typedef struct __attribute__((packed)) {
     uint8_t vbus_level;

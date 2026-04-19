@@ -3,6 +3,7 @@
 
 #include "BLE/BLE_bluedroid.h"
 
+#if CONFIG_ORI_MOUSE_MODE:
 const uint8_t ble_mouse_hid_report_descriptor[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x02,        // Usage (Mouse)
@@ -32,6 +33,7 @@ const uint8_t ble_mouse_hid_report_descriptor[] = {
     0xC0,              //   End Collection
     0xC0               // End Collection
 };
+#endif
 
 const uint8_t ble_ptp_hid_report_descriptor[] = {
     
