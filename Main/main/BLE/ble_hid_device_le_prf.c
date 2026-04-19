@@ -61,7 +61,7 @@ static const uint8_t hidInfo[HID_INFORMATION_LEN] = {
     HID_KBD_FLAGS
 };
 
-static bool is_connected = false;
+bool ble_hid_is_connected = false;
 
 // static uint16_t hidExtReportRefDesc = ESP_GATT_UUID_BATTERY_LEVEL;
 
@@ -241,7 +241,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         case ESP_GATTS_CONNECT_EVT: {
 
-            is_connected = true;
+            ble_hid_is_connected = true;
 
             led_send_command(GPIO_LED_3, LED_CMD_STOP, 100, 1000, 0, false);
 
@@ -260,7 +260,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         }
         case ESP_GATTS_DISCONNECT_EVT: {
 
-            is_connected = false;
+            ble_hid_is_connected = false;
 
             led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 
@@ -510,7 +510,7 @@ void battery_ble_notify_task(void *pvParameters) {
 
         uint8_t current_battery_level = raw_battery;
         
-        if (is_connected) {
+        if (ble_hid_is_connected) {
 
             update_battery_level(hidd_le_env.gatt_if, ble_conn_id, current_battery_level);
         }

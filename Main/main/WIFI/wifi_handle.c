@@ -88,29 +88,30 @@ void wifi_send_task(void *arg) {
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
 
         if (xActivatedMember == mouse_queue) {
-            #if CONFIG_ORI_MOUSE_MODE
-                if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-                    mouse_hid_report_t report = {0};
-                    
-                    parse_mouse_report(&mouse_msg, &report);
+            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
+                mouse_hid_report_t report = {0};
+                
+                parse_mouse_report(&mouse_msg, &report);
 
-                    pkt.type = MOUSE_MODE;
-                    pkt.payload.mouse = report;
-                    esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
-                    
-                }
-            #endif
+                pkt.type = MOUSE_MODE;
+                pkt.payload.mouse = report;
+                esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                
+            }
         } 
         else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &tp_msg, 0)) {
-                ptp_report_t report = {0};
-                
-                parse_ptp_report(&tp_msg, &report);
+                if (current_tp_mode == MOUSE_MODE) {
+                        
+                } else {
+                    ptp_report_t report = {0};
+                    
+                    parse_ptp_report(&tp_msg, &report);
 
-                pkt.type = PTP_MODE;
-                pkt.payload.ptp = report;
-                esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
-                
+                    pkt.type = PTP_MODE;
+                    pkt.payload.ptp = report;
+                    esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                }
             }
         }
     }

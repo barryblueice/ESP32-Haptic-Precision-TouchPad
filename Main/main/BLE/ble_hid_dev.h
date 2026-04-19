@@ -31,6 +31,8 @@ extern const uint16_t ble_ptp_hid_report_len;
 extern const uint8_t* ble_mouse_hid_report_descriptor[];
 extern const uint16_t ble_mouse_hid_report_len;
 
+extern bool ble_hid_is_connected;
+
 #ifdef __cplusplus
 } // extern "C"
 #endif
