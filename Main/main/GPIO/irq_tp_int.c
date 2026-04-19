@@ -38,7 +38,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 }
 
 void irq_int_init(void) {
-    xTaskCreate(tp_i2c_int_task, "tp_task", 4096, NULL, 10, &tp_task_handle);
+    xTaskCreatePinnedToCore(tp_i2c_int_task, "tp_i2c_int_task", 2048, NULL, 11, &tp_task_handle, 1);
 
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_NEGEDGE,
@@ -48,6 +48,4 @@ void irq_int_init(void) {
     };
     gpio_config(&io_conf);
     gpio_isr_handler_add(TP_INT_GPIO, gpio_isr_handler, NULL);
-
-    xTaskCreate(i2c_queue_task, "i2c_receive", 4096, NULL, 14, NULL);
 }

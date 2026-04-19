@@ -72,7 +72,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 }
 
 void irq_func_btn_init(void) {
-    xTaskCreate(button_handler_task, "btn_task", 4096, NULL, 10, &button_task_handle);
+    xTaskCreatePinnedToCore(button_handler_task, "button_handler_task", 4096, NULL, 10, &button_task_handle, 1);
 
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_NEGEDGE, 

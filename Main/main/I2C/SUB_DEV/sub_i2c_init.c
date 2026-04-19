@@ -53,6 +53,6 @@ void sub_dev_init(void) {
     float current_vref = mp28167_get_vref_mv(dev_handle);
     ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
 
-    xTaskCreate(charging_state_monitor_task, "charging_state_monitor_task", 2048, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(charging_state_monitor_task, "charging_state_monitor_task", 4096, NULL, 5, NULL, 1);
 
 }
