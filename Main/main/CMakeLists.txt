@@ -4,6 +4,7 @@ set(srcs
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
     "I2C/TP/i2c_watchdog.c"
+    "I2C/TP/tp_report_handle.c"
     
     "I2C/SUB_DEV/sub_i2c_init.c"
     "I2C/SUB_DEV/IP5X09_handle.c"

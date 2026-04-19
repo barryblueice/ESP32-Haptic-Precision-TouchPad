@@ -17,7 +17,9 @@ void touchpad_init(void);
 void read_touch_task(void *pvParameters);
 esp_err_t touchpad_mode_set(bool is_ptp_mode);
 void i2c_queue_task(void *arg);
+
 void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report);
 void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report);
+void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_msg_t *out_report);
 
 #endif

@@ -19,29 +19,48 @@ void ble_hid_task(void *arg) {
         
         uint16_t conn_id = ble_conn_id;
 
-        if (xActivatedMember == tp_queue) {
+        if (ble_hid_is_connected) {
 
-            if (xQueueReceive(tp_queue, &tp_msg, 0)) {
+            if (xActivatedMember == tp_queue) {
 
-                ptp_report_t report = {0};
-                    
-                parse_ptp_report(&tp_msg, &report);
+                if (xQueueReceive(tp_queue, &tp_msg, 0)) {
 
-                hid_dev_send_report(
-                    hidd_le_env.gatt_if, 
-                    conn_id, 
-                    HID_RPT_ID_PTP_IN,
-                    HID_REPORT_TYPE_INPUT, 
-                    sizeof(ptp_report_t), 
-                    (uint8_t *)&report
-                );
+                    if (current_tp_mode == MOUSE_MODE) {
+                        #if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                            mouse_msg_t report = {0};
 
-                // ESP_LOGI("BLE_HID_TASK", "Received PTP Report");
-            }
-        
-        } else if (xActivatedMember == mouse_queue) {
+                            parse_ptp_simulated_mouse_report(&tp_msg, &report);
 
-            #if CONFIG_ORI_MOUSE_MODE
+                            hid_dev_send_report(
+                                hidd_le_env.gatt_if, 
+                                conn_id, 
+                                HID_RPT_ID_MOUSE_IN,
+                                HID_REPORT_TYPE_INPUT, 
+                                sizeof(mouse_hid_report_t), 
+                                (uint8_t *)&report
+
+                            );
+                            
+                        #endif
+                    } else {
+                        ptp_report_t report = {0};
+                            
+                        parse_ptp_report(&tp_msg, &report);
+
+                        hid_dev_send_report(
+                            hidd_le_env.gatt_if, 
+                            conn_id, 
+                            HID_RPT_ID_PTP_IN,
+                            HID_REPORT_TYPE_INPUT, 
+                            sizeof(ptp_report_t), 
+                            (uint8_t *)&report
+                        );
+                    }
+
+                    // ESP_LOGI("BLE_HID_TASK", "Received PTP Report");
+                }
+            
+            } else if (xActivatedMember == mouse_queue) {
 
                 if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
 
@@ -60,11 +79,10 @@ void ble_hid_task(void *arg) {
                     );
 
                 }
-                
-            #endif
 
-            // ESP_LOGI("BLE_HID_TASK", "Received Mouse Report");
+                // ESP_LOGI("BLE_HID_TASK", "Received Mouse Report");
 
+            }
         }
 
     }

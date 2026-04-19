@@ -20,8 +20,6 @@
 #define TAP_DEADZONE 30
 #define FILTER_ALPHA 0.5f
 
-#define SENSITIVITY 1.0f
-
 #define PALM_MAJOR_LIMIT  0x10
 #define PALM_MINOR_LIMIT  0x10
 #define PALM_RATIO_LIMIT  2.0f
@@ -96,7 +94,7 @@ void i2c_queue_task(void *arg) {
             // for(int i=0; i<64; i++) printf("%02x ", tp_packet[i]);
             // printf("\n");
 
-            if (current_tp_mode == PTP_MODE) {
+            if (tp_packet[0] == 0x40) {
                 int active_finger_count = 0;
 
                 update_simulated_scan_time(&tp_msg);
@@ -237,36 +235,4 @@ void i2c_queue_task(void *arg) {
             }
         }
     }
-}
-
-void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report) {
-    int move_x = (int)(msg->x * SENSITIVITY);
-    int move_y = (int)(msg->y * SENSITIVITY);
-
-    if (move_x > 127)  move_x = 127;
-    if (move_x < -127) move_x = -127;
-    if (move_y > 127)  move_y = 127;
-    if (move_y < -127) move_y = -127;
-
-    report->x = (int8_t)move_x;
-    report->y = (int8_t)move_y;
-    report->buttons = msg->buttons & 0x07;
-}
-
-void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report) {
-    report->scan_time = msg->scan_time;
-    report->contact_count = msg->actual_count;
-    report->buttons = (msg->button_mask > 0) ? 0x01 : 0x00;
-
-    for (int i = 0; i < 5; i++) {
-        report->fingers[i].x = msg->fingers[i].x;
-        report->fingers[i].y = msg->fingers[i].y;
-
-        uint8_t base_id = (msg->fingers[i].tip_switch << 1) | (msg->fingers[i].confidence & 0x01);
-
-        report->fingers[i].tip_conf_id = (i << 2) | base_id;
-    }
-
-    // ESP_DRAM_LOGI(TAG, "Finger 0: x=%d, y=%d, tip=%d, confidence=%d", report->fingers[0].x, report->fingers[0].y, msg->fingers[0].tip_switch, msg->fingers[0].confidence);
-
 }

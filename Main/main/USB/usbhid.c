@@ -219,26 +219,28 @@ void usbhid_task(void *arg) {
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
 
         if (xActivatedMember == mouse_queue) {
-            #if CONFIG_ORI_MOUSE_MODE
-                if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-                    mouse_hid_report_t report = {0};
-                    
-                    parse_mouse_report(&mouse_msg, &report);
+            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
+                mouse_hid_report_t report = {0};
+                
+                parse_mouse_report(&mouse_msg, &report);
 
-                    if (tud_hid_n_ready(2)) {
-                        tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
-                    }
+                if (tud_hid_n_ready(2)) {
+                    tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
                 }
-            #endif
+            }
         } 
         else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &tp_msg, 0)) {
-                ptp_report_t report = {0};
-                
-                parse_ptp_report(&tp_msg, &report);
+                if (current_tp_mode == MOUSE_MODE) {
+                        
+                } else {
+                    ptp_report_t report = {0};
+                    
+                    parse_ptp_report(&tp_msg, &report);
 
-                if (tud_hid_n_ready(1)) {
-                    tud_hid_n_report(1, REPORTID_TOUCHPAD, &report, sizeof(report));
+                    if (tud_hid_n_ready(1)) {
+                        tud_hid_n_report(1, REPORTID_TOUCHPAD, &report, sizeof(report));
+                    }
                 }
             }
         }

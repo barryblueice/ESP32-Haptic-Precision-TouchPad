@@ -35,6 +35,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
     if (xHigherPriorityTaskWoken) {
         portYIELD_FROM_ISR();
     }
+
 }
 
 void irq_int_init(void) {

@@ -23,20 +23,29 @@ typedef struct {
     uint16_t scan_time;
 } tp_multi_msg_t;
 
-#if CONFIG_ORI_MOUSE_MODE:
+typedef struct {
+    uint16_t last_x[5];
+    uint16_t last_y[5];
+    float remainder_x;
+    float remainder_y;
+    uint32_t last_click_time;
+    bool is_scrolling;
+} ptp_simulated_mouse_msg_t;
+
+typedef enum {
+    GESTURE_NONE,
+    GESTURE_MOVE,
+    GESTURE_SCROLL,
+} gesture_state_t;
+
 typedef struct __attribute__((packed)) {
     uint8_t buttons;
     int8_t  x;
     int8_t  y;
-} mouse_msg_t;
-#else
-typedef struct __attribute__((packed)) {
-    uint8_t buttons;
-    int8_t  x;
-    int8_t  y;
+    #if CONFIG_PTP_SIMULATED_MOUSE_MODE
     int8_t  wheel;
+    #endif
 } mouse_msg_t;
-#endif
 
 typedef struct __attribute__((packed)) {
     uint8_t vbus_level;
