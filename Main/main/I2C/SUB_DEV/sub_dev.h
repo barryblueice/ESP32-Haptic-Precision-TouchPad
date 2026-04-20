@@ -51,5 +51,6 @@ float mp28167_get_vref_mv(i2c_master_dev_handle_t dev);
 extern i2c_master_dev_handle_t sub_dev_mp28167_handle;
 extern i2c_master_dev_handle_t sub_dev_ip5x09_handle;
 extern i2c_master_bus_handle_t sub_bus_handle;
+extern int battery_percentage;
 
 #endif

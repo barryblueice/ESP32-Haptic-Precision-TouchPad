@@ -52,21 +52,21 @@ float get_battery_current() {
 }
 
 int get_battery_percentage() {
-    uint8_t reg0x71 = ip5x09_read_reg(0x71);
-    if (((reg0x71 >> 5) & 0x07) == 0x05) return 100;
+    // uint8_t reg0x71 = ip5x09_read_reg(0x71);
+    // if (((reg0x71 >> 5) & 0x07) == 0x05) return 100;
 
-    float ocv = get_battery_ocv(); 
+    // float ocv = get_battery_ocv(); 
 
-    if (ocv >= discharge_table[0].voltage) return 100;
-    if (ocv <= discharge_table[10].voltage) return 0;
+    // if (ocv >= discharge_table[0].voltage) return 100;
+    // if (ocv <= discharge_table[10].voltage) return 0;
 
-    for (int i = 0; i < 10; i++) {
-        if (ocv <= discharge_table[i].voltage && ocv > discharge_table[i+1].voltage) {
-            float v_gap = discharge_table[i].voltage - discharge_table[i+1].voltage;
-            float p_gap = discharge_table[i].percentage - discharge_table[i+1].percentage;
-            return discharge_table[i+1].percentage + (int)((ocv - discharge_table[i+1].voltage) / v_gap * p_gap);
-        }
-    }
+    // for (int i = 0; i < 10; i++) {
+    //     if (ocv <= discharge_table[i].voltage && ocv > discharge_table[i+1].voltage) {
+    //         float v_gap = discharge_table[i].voltage - discharge_table[i+1].voltage;
+    //         float p_gap = discharge_table[i].percentage - discharge_table[i+1].percentage;
+    //         return discharge_table[i+1].percentage + (int)((ocv - discharge_table[i+1].voltage) / v_gap * p_gap);
+    //     }
+    // }
     return 0;
 }
 
@@ -95,6 +95,7 @@ void charging_state_monitor_task(void *pvParameters) {
                         gpio_set_level(GPIO_LED_2, LED_ON);
                         break;
                     default:
+                        led_send_command(GPIO_LED_1, LED_CMD_STOP, 100, 1000, 0, false);
                         led_send_command(GPIO_LED_2, LED_CMD_BLINK, 500, 500, 0, true);
                         break;
                 }
@@ -102,6 +103,16 @@ void charging_state_monitor_task(void *pvParameters) {
                 ip5x09_last_reg_state = status.reg.state;
 
             }
+        } else {
+            gpio_set_level(GPIO_LED_1, LED_ON);
+            // if ((battery_percentage) > 20) {
+            //     led_send_command(GPIO_LED_1, LED_CMD_STOP, 100, 1000, 0, false);
+            //     led_send_command(GPIO_LED_2, LED_CMD_STOP, 100, 1000, 0, false);
+            //     gpio_set_level(GPIO_LED_1, LED_ON);
+            // } else {
+            //     gpio_set_level(GPIO_LED_1, LED_OFF);
+            //     led_send_command(GPIO_LED_1, LED_CMD_BLINK, 500, 500, 0, true);
+            // }
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
 

@@ -8,7 +8,11 @@
 #include "I2C/SUB_DEV/sub_dev.h"
 #include "I2C/I2C_handle.h"
 
+#include "GPIO/GPIO_handle.h"
+
 #define TAG "SUB_I2C_INIT"
+
+int battery_percentage = 100;
 
 i2c_master_bus_handle_t sub_bus_handle;
 i2c_master_dev_handle_t sub_dev_mp28167_handle;
@@ -43,8 +47,6 @@ void sub_dev_i2c_init(void) {
 void sub_dev_init(void) {
 
     sub_dev_i2c_init();
-
-    int battery_percentage = 0;
 
     battery_percentage = get_battery_percentage();
 
