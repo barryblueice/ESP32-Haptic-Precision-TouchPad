@@ -17,8 +17,8 @@ void gpio_init(void) {
     };
     gpio_config(&io_conf);
 
-    led_all_handle(LED_OFF);
-    gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_OFF);
+    // led_all_handle(LED_OFF);
+    gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_ON);
 
     gpio_config_t vbus_det_conf = {
         .intr_type = GPIO_INTR_DISABLE,

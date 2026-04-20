@@ -103,9 +103,15 @@ void i2c_queue_task(void *arg) {
                     int offset = 4 + (id * 8); 
                     uint8_t finger_status = tp_packet[offset];
                     
+                    #if CONFIG_REVERT_X_Y
+                    uint16_t ry = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
+                    uint16_t rx_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
+                    uint16_t rx = 2302 - (rx_raw > 2303 ? 2303 : rx_raw);
+                    #else
                     uint16_t rx = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
                     uint16_t ry_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
-                    uint16_t ry = 1533 - (ry_raw > 1533 ? 1533 : ry_raw);
+                    uint16_t ry = 1532 - (ry_raw > 1533 ? 1533 : ry_raw);
+                    #endif
                     uint8_t major = tp_packet[offset + 6]; 
                     uint8_t minor = tp_packet[offset + 7];
 
