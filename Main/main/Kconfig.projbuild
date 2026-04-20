@@ -33,6 +33,12 @@ menu "TouchPad Configuration"
 
     menu  "Feature Options"
 
+        config REVERT_X_Y
+            default n
+            bool "Reverse the TouchPad's XY"
+            help
+                Reverted the coodinate for easy debug and install.
+
         config FUNC_TIMEOUT_MS
             int "Press FUNC key to switch mode timeout (ms)"
             default 3000

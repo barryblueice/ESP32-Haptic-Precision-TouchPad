@@ -88,7 +88,7 @@ void app_main(void) {
 
         case _2_4_MODE:
 
-            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 2, false);
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 2);
 
             ESP_LOGW(TAG, "Starting in 2.4G Mode...");
             wireless_wifi_init();
@@ -105,7 +105,7 @@ void app_main(void) {
 
         default:
 
-            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 2000, 2000, 1, false);
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 2000, 2000, 1);
 
             ESP_LOGW(TAG, "Starting in USB Wired Mode...");
             usb_event_group = xEventGroupCreate();
