@@ -60,3 +60,4 @@ main/sdkconfig.old
 2.4G/sdkconfig.old
 
 /.vscode
+esp32-haptic-precision-touchpad.code-workspace
