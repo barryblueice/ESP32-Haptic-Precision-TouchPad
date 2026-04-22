@@ -332,12 +332,6 @@ typedef struct
      * - BSP_STATUS_OK              otherwise
      *
      */
-    uint32_t (*spi_read)(uint32_t bsp_dev_id,
-                         uint8_t *addr_buffer,
-                         uint32_t addr_length,
-                         uint8_t *data_buffer,
-                         uint32_t data_length,
-                         uint32_t pad_len);
 
     /**
      * Perform a SPI write
@@ -395,7 +389,6 @@ typedef struct
      * - BSP_STATUS_OK              otherwise
      *
      */
-    uint32_t (*disable_irq)(void);
 
     /**
      * Temporarily change the clock speed of the SPI bus
@@ -408,7 +401,6 @@ typedef struct
      * - BSP_STATUS_OK              otherwise
      *
      */
-    uint32_t (*spi_throttle_speed)(uint32_t speed_hz);
 
     /**
      * Restore the clock speed of the SPI bus to the original configuration
@@ -419,7 +411,6 @@ typedef struct
      * @return                      BSP_STATUS_OK always
      *
      */
-    uint32_t (*spi_restore_speed)(void);
 } bsp_driver_if_t;
 
 /***********************************************************************************************************************
