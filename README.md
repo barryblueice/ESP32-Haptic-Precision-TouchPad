@@ -20,6 +20,9 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 > [!CAUTION]
 > Hardware & software only support the models of the touchpad mentioned above, untested touchpad models may be incompatible. <br>Use of such models can lead to driver failure or permanent hardware damage caused by short circuits!
 
+> [!TIP]
+> This project utilized AI-assisted development during its development process.
+
 #### **Application:**
 
  - **TouchPad Main PCB:**
