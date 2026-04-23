@@ -36,6 +36,7 @@
 #define REPORTID_PTPHQA           0x04
 #define REPORTID_FEATURE          0x05
 #define REPORTID_FUNCTION_SWITCH  0x06
+#define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
 #define REPORTID_HAPTIC_FEATURE   0x0C
 
 #define TPD_REPORT_ID 0x01
@@ -108,8 +109,8 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             memset(buffer, 0, 256);
             return 256; 
         }
-        if (report_id == 0x40) {
-            buffer[0] = 150; 
+        if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
+            buffer[0] = 0x02;
             return 1;
         }
         if (report_id == 0x41) {

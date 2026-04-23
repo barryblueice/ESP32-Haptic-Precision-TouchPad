@@ -1,0 +1,85 @@
+[[settings]]
+packingInBytes = 1
+optimize = false
+
+[[unit]]
+name = 'millisecond'
+second = [0.001, 1.0]
+
+[[applicationCollection]]
+usage = ['Digitizers', 'Touch Pad']
+
+ # Button press threshold feature report
+ [[applicationCollection.featureReport]]
+ id = 0x40
+
+  [[applicationCollection.featureReport.variableItem]]
+  usage = ['Digitizers', 'Button Press Threshold']
+  logicalValueRange = [1, 3]
+  physicalValueRange = [110, 190]
+  unit = 'gram'
+
+ # Feedback intensity feature report
+ [[applicationCollection.featureReport]]
+ id = 0x41
+
+  [[applicationCollection.featureReport.logicalCollection]]
+  usage = ['Haptics', 'Simple Haptic Controller']
+
+   [[applicationCollection.featureReport.logicalCollection.variableItem]]
+   usage = ['Haptics', 'Intensity']
+   logicalValueRange = [0, 4]
+
+ # Host-initiated waveform information feature report
+ [[applicationCollection.featureReport]]
+ id = 0x42
+
+  [[applicationCollection.featureReport.logicalCollection]]
+  usage = ['Haptics', 'Simple Haptic Controller']
+
+   [[applicationCollection.featureReport.logicalCollection.logicalCollection]]
+   usage = ['Haptics', 'Waveform List']
+
+    [[applicationCollection.featureReport.logicalCollection.logicalCollection.variableItem]]
+    usageRange = ['Ordinal', 'Instance 3', 'Instance 7']
+    logicalValueRange = [0x1001, 0x2FFF]
+
+   [[applicationCollection.featureReport.logicalCollection.logicalCollection]]
+   usage = ['Haptics', 'Duration List']
+
+    [[applicationCollection.featureReport.logicalCollection.logicalCollection.variableItem]]
+    usageRange = ['Ordinal', 'Instance 3', 'Instance 7']
+    logicalValueRange = [0, 50]
+    physicalValueRange = [0, 50]
+    unit = 'millisecond'
+
+ # Host-initiated waveform manual trigger output report
+ [[applicationCollection.outputReport]]
+ id = 0x43
+
+  [[applicationCollection.outputReport.logicalCollection]]
+  usage = ['Haptics', 'Simple Haptic Controller']
+
+   [[applicationCollection.outputReport.logicalCollection.variableItem]]
+   usage = ['Haptics', 'Manual Trigger']
+   logicalValueRange = [1, 7]
+
+   [[applicationCollection.outputReport.logicalCollection.variableItem]]
+   usage = ['Haptics', 'Intensity']
+   logicalValueRange = [0, 4]
+
+   [[applicationCollection.outputReport.logicalCollection.variableItem]]
+   usage = ['Haptics', 'Repeat Count']
+   logicalValueRange = [0, 5]
+
+   [[applicationCollection.outputReport.logicalCollection.variableItem]]
+   usage = ['Haptics', 'Retrigger Period']
+   logicalValueRange = [0, 1000]
+   physicalValueRange = [0, 1000]
+   unit = 'millisecond'
+
+   [[applicationCollection.outputReport.logicalCollection.variableItem]]
+   usage = ['Haptics', 'Waveform Cutoff Time']
+   logicalValueRange = [1000, 5000]
+   physicalValueRange = [1000, 5000]
+   unit = 'millisecond'
