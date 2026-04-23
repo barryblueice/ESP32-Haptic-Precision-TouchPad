@@ -122,6 +122,15 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x95, 0x01,                         // REPORT_COUNT (1)
     0x81, 0x02,                         // INPUT (Data,Var,Abs)
 
+    // ---- Pressure ----
+    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x30,                         // USAGE (Tip Pressure)
+    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
+    0x26, 0xFF, 0x00,                   // LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                         // REPORT_SIZE (8)
+    0x95, 0x01,                         // REPORT_COUNT (1)
+    0x81, 0x02,                         // INPUT (Data,Var,Abs)
+
     0xC0,                               // END_COLLECTION
 
     // -------- Finger 1 --------
@@ -167,6 +176,15 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
+    0x95, 0x01,                         // REPORT_COUNT (1)
+    0x81, 0x02,                         // INPUT (Data,Var,Abs)
+
+    // ---- Pressure ----
+    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x30,                         // USAGE (Tip Pressure)
+    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
+    0x26, 0xFF, 0x00,                   // LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                         // REPORT_SIZE (8)
     0x95, 0x01,                         // REPORT_COUNT (1)
     0x81, 0x02,                         // INPUT (Data,Var,Abs)
 
@@ -218,6 +236,15 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x95, 0x01,                         // REPORT_COUNT (1)
     0x81, 0x02,                         // INPUT (Data,Var,Abs)
 
+    // ---- Pressure ----
+    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x30,                         // USAGE (Tip Pressure)
+    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
+    0x26, 0xFF, 0x00,                   // LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                         // REPORT_SIZE (8)
+    0x95, 0x01,                         // REPORT_COUNT (1)
+    0x81, 0x02,                         // INPUT (Data,Var,Abs)
+
     0xC0,                               // END_COLLECTION
 
     // -------- Finger 3 --------
@@ -266,6 +293,15 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x95, 0x01,                         // REPORT_COUNT (1)
     0x81, 0x02,                         // INPUT (Data,Var,Abs)
 
+    // ---- Pressure ----
+    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x30,                         // USAGE (Tip Pressure)
+    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
+    0x26, 0xFF, 0x00,                   // LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                         // REPORT_SIZE (8)
+    0x95, 0x01,                         // REPORT_COUNT (1)
+    0x81, 0x02,                         // INPUT (Data,Var,Abs)
+
     0xC0,                               // END_COLLECTION
 
     // -------- Finger 4 --------
@@ -311,6 +347,15 @@ const uint8_t ptp_hid_report_descriptor[] = {
     0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
+    0x95, 0x01,                         // REPORT_COUNT (1)
+    0x81, 0x02,                         // INPUT (Data,Var,Abs)
+
+    // ---- Pressure ----
+    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
+    0x09, 0x30,                         // USAGE (Tip Pressure)
+    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
+    0x26, 0xFF, 0x00,                   // LOGICAL_MAXIMUM (255)
+    0x75, 0x08,                         // REPORT_SIZE (8)
     0x95, 0x01,                         // REPORT_COUNT (1)
     0x81, 0x02,                         // INPUT (Data,Var,Abs)
 

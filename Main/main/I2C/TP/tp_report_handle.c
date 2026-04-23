@@ -42,6 +42,7 @@ void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report) {
     for (int i = 0; i < 5; i++) {
         report->fingers[i].x = msg->fingers[i].x;
         report->fingers[i].y = msg->fingers[i].y;
+        report->fingers[i].pressure_z = msg->fingers[i].tip_switch ? msg->fingers[i].pressure_z : 0;
 
         uint8_t base_id = (msg->fingers[i].tip_switch << 1) | (msg->fingers[i].confidence & 0x01);
 
