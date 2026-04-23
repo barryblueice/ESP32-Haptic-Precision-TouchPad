@@ -20,7 +20,7 @@
  * limitations under the License.
  *
  * firmware_converter.py SDK version: 4.29.4 - d93ccd246a11f6feeeb7af99ddc7a1ec1e769338
- * Command:  firmware_converter.py fw_img_v2 cs40l25 prince_haptics_ctrl_ram_remap_ext_boost_0A0603.wmfw --wmdr dvl.bin
+ * Command:  D:\Documents\test\mcu-drivers\tools\firmware_converter\firmware_converter.py fw_img_v2 cs40l25 D:\Documents\test\mcu-drivers\cs40l25\fw\prince_haptics_ctrl_ram_remap_ext_boost_0A0603.wmfw --wmdr D:\Documents\test\mcu-drivers\cs40l25\fw\dvl.bin --output-directory D:\Documents\test\esp32-haptic-precision-touchpad\Main\_fw_screen\ext_boost_0A0603
  *
  *
  */

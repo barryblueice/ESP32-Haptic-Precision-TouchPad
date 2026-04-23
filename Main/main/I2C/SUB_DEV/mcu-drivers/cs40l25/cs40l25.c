@@ -729,6 +729,7 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
     uint32_t count = 0;
     uint32_t temp_reg_val = 0;
     uint32_t ret;
+    uint32_t halo_symbol;
     regmap_cp_config_t *cp = REGMAP_GET_CP(driver);
 
     // Write errata
@@ -755,27 +756,28 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
                       (XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_DSP1_CCM_CORE_EN_BITMASK | \
                        XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_DSP1_CCM_CORE_RESET_BITMASK));
 
-    if (driver->state == CS40L25_STATE_CAL_STANDBY)
-    {
-        ret = regmap_poll_fw_control(cp,
-                                     driver->fw_info,
-                                     CS40L25_CAL_SYM_FIRMWARE_HALO_STATE,
-                                     0xCB,
-                                     CS40L25_POLL_OTP_BOOT_DONE_MAX,
-                                     CS40L25_T_BST_PUP_MS);
-    }
-    else
-    {
-        ret = regmap_poll_fw_control(cp,
-                                     driver->fw_info,
-                                     CS40L25_SYM_FIRMWARE_HALO_STATE,
-                                     0xCB,
-                                     CS40L25_POLL_OTP_BOOT_DONE_MAX,
-                                     CS40L25_T_BST_PUP_MS);
-    }
+    halo_symbol = (driver->state == CS40L25_STATE_CAL_STANDBY) ?
+                  CS40L25_CAL_SYM_FIRMWARE_HALO_STATE :
+                  CS40L25_SYM_FIRMWARE_HALO_STATE;
+
+    ret = regmap_poll_fw_control(cp,
+                                 driver->fw_info,
+                                 halo_symbol,
+                                 0xCB,
+                                 CS40L25_POLL_OTP_BOOT_DONE_MAX,
+                                 CS40L25_T_BST_PUP_MS);
     if (ret)
     {
-        return CS40L25_STATUS_FAIL;
+        /*
+         * Some systems can miss the transition inside the poll window even
+         * though the DSP reaches ACTIVE immediately afterwards. Re-read once
+         * before reporting failure.
+         */
+        ret = regmap_read_fw_control(cp, driver->fw_info, halo_symbol, &temp_reg_val);
+        if ((ret != REGMAP_STATUS_OK) || (temp_reg_val != 0xCB))
+        {
+            return CS40L25_STATUS_FAIL;
+        }
     }
 
     regmap_read(cp, XM_UNPACKED24_DSP1_SCRATCH_REG, &temp_reg_val);

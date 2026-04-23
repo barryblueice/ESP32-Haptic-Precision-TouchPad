@@ -20,7 +20,6 @@
  * limitations under the License.
  *
  * firmware_converter.py SDK version: 4.29.4 - d93ccd246a11f6feeeb7af99ddc7a1ec1e769338
- * Command:  firmware_converter.py fw_img_v2 cs40l25 prince_haptics_ctrl_ram_remap_ext_boost_0A0603.wmfw --wmdr dvl.bin
  *
  *
  */

@@ -113,7 +113,7 @@ uint32_t regmap_read(regmap_cp_config_t *cp, uint32_t addr, uint32_t *val)
 
     *val = 0;
 
-    // Currently only I2C and SPI transactions are supported
+    // This ESP32 port is I2C-only for physical devices.
     switch (cp->bus_type)
     {
         case REGMAP_BUS_TYPE_I2C:
@@ -239,56 +239,8 @@ uint32_t regmap_write(regmap_cp_config_t *cp, uint32_t addr, uint32_t val)
             break;
 
         case REGMAP_BUS_TYPE_SPI:
-            write_buffer[0] = GET_BYTE_FROM_WORD(addr, 3);
-            write_buffer[1] = GET_BYTE_FROM_WORD(addr, 2);
-            write_buffer[2] = GET_BYTE_FROM_WORD(addr, 1);
-            write_buffer[3] = GET_BYTE_FROM_WORD(addr, 0);
-            write_buffer[4] = GET_BYTE_FROM_WORD(val, 3);
-            write_buffer[5] = GET_BYTE_FROM_WORD(val, 2);
-            write_buffer[6] = GET_BYTE_FROM_WORD(val, 1);
-            write_buffer[7] = GET_BYTE_FROM_WORD(val, 0);
-
-            ret = bsp_driver_if_g->spi_write(cp->dev_id,
-                                             write_buffer,
-                                             4,
-                                             (uint8_t *)&(write_buffer[4]),
-                                             4,
-                                             cp->spi_pad_len);
-            break;
-
         case REGMAP_BUS_TYPE_SPI_3000:
-            write_buffer[0] = GET_BYTE_FROM_WORD(addr, 3);
-            write_buffer[1] = GET_BYTE_FROM_WORD(addr, 2);
-            write_buffer[2] = GET_BYTE_FROM_WORD(addr, 1);
-            write_buffer[3] = GET_BYTE_FROM_WORD(addr, 0);
-
-            // Registers below 0x3000 are 16-bit, all others are 32-bit
-            if (addr < 0x3000)
-            {
-
-                write_buffer[4] = GET_BYTE_FROM_WORD(val, 1);
-                write_buffer[5] = GET_BYTE_FROM_WORD(val, 0);
-                ret = bsp_driver_if_g->spi_write(cp->dev_id,
-                                                 write_buffer,
-                                                 4,
-                                                 (uint8_t *)&(write_buffer[4]),
-                                                 2,
-                                                 cp->spi_pad_len);
-            }
-            else
-            {
-                write_buffer[4] = GET_BYTE_FROM_WORD(val, 3);
-                write_buffer[5] = GET_BYTE_FROM_WORD(val, 2);
-                write_buffer[6] = GET_BYTE_FROM_WORD(val, 1);
-                write_buffer[7] = GET_BYTE_FROM_WORD(val, 0);
-                ret = bsp_driver_if_g->spi_write(cp->dev_id,
-                                                 write_buffer,
-                                                 4,
-                                                 (uint8_t *)&(write_buffer[4]),
-                                                 4,
-                                                 cp->spi_pad_len);
-            }
-
+            // SPI is intentionally not implemented in this project port.
             break;
 
         case REGMAP_BUS_TYPE_VIRTUAL:
@@ -425,18 +377,18 @@ uint32_t regmap_read_block(regmap_cp_config_t *cp, uint32_t addr, uint8_t *bytes
             ret = bsp_driver_if_g->i2c_read_repeated_start(cp->dev_id, write_buffer, 4, bytes, length, NULL, NULL);
             break;
 
-        case REGMAP_BUS_TYPE_SPI:
-        case REGMAP_BUS_TYPE_SPI_3000:
-            write_buffer[0] = GET_BYTE_FROM_WORD(addr, 3);
-            write_buffer[1] = GET_BYTE_FROM_WORD(addr, 2);
-            write_buffer[2] = GET_BYTE_FROM_WORD(addr, 1);
-            write_buffer[3] = GET_BYTE_FROM_WORD(addr, 0);
+        // case REGMAP_BUS_TYPE_SPI:
+        // case REGMAP_BUS_TYPE_SPI_3000:
+        //     write_buffer[0] = GET_BYTE_FROM_WORD(addr, 3);
+        //     write_buffer[1] = GET_BYTE_FROM_WORD(addr, 2);
+        //     write_buffer[2] = GET_BYTE_FROM_WORD(addr, 1);
+        //     write_buffer[3] = GET_BYTE_FROM_WORD(addr, 0);
 
-            // Set the R/W bit
-            write_buffer[0] = 0x80 | write_buffer[0];
-            ret = bsp_driver_if_g->spi_read(cp->dev_id, write_buffer, 4, bytes, length, cp->spi_pad_len);
+        //     // Set the R/W bit
+        //     write_buffer[0] = 0x80 | write_buffer[0];
+        //     ret = bsp_driver_if_g->spi_read(cp->dev_id, write_buffer, 4, bytes, length, cp->spi_pad_len);
 
-            break;
+        //     break;
 
         case REGMAP_BUS_TYPE_VIRTUAL:
             // 'length' is in bytes, so /4 to get in terms of 32-bit words
@@ -491,12 +443,7 @@ uint32_t regmap_write_block(regmap_cp_config_t *cp, uint32_t addr, uint8_t *byte
 
         case REGMAP_BUS_TYPE_SPI:
         case REGMAP_BUS_TYPE_SPI_3000:
-            write_buffer[0] = GET_BYTE_FROM_WORD(addr, 3);
-            write_buffer[1] = GET_BYTE_FROM_WORD(addr, 2);
-            write_buffer[2] = GET_BYTE_FROM_WORD(addr, 1);
-            write_buffer[3] = GET_BYTE_FROM_WORD(addr, 0);
-
-            ret = bsp_driver_if_g->spi_write(cp->dev_id, write_buffer, 4, bytes, length, cp->spi_pad_len);
+            // SPI is intentionally not implemented in this project port.
             break;
 
         case REGMAP_BUS_TYPE_VIRTUAL:
