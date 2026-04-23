@@ -626,61 +626,61 @@ uint32_t bsp_dut_wake(void)
     }
 }
 
-uint32_t bsp_dut_start_i2s(void)
-{
-    uint32_t ret;
-    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+// uint32_t bsp_dut_start_i2s(void)
+// {
+//     uint32_t ret;
+//     regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
 
-#if CONFIG_8K_I2S
-    regmap_read(cp, 0x2C0C, &cache_global_fs);
-    regmap_read(cp, 0x4804, &cache_asp_control1);
-    regmap_write(cp, 0x2C0C, 0x0011);
-    regmap_write(cp, 0x4804, 0x0012);
-#endif
-    ret = cs40l25_start_i2s(&cs40l25_driver);
-    if (ret == CS40L25_STATUS_FAIL)
-    {
-        return BSP_STATUS_FAIL;
-    }
+// #if CONFIG_8K_I2S
+//     regmap_read(cp, 0x2C0C, &cache_global_fs);
+//     regmap_read(cp, 0x4804, &cache_asp_control1);
+//     regmap_write(cp, 0x2C0C, 0x0011);
+//     regmap_write(cp, 0x4804, 0x0012);
+// #endif
+//     ret = cs40l25_start_i2s(&cs40l25_driver);
+//     if (ret == CS40L25_STATUS_FAIL)
+//     {
+//         return BSP_STATUS_FAIL;
+//     }
 
-    // Older firmware variants can include DVL; only touch that control if the
-    // active symbol table exposes it.
-#ifdef CS40L25_SYM_DVL_EN
-    if (fw_img_find_algid(cs40l25_driver.fw_info, 0x113))
-    {
-        bsp_driver_if_g->set_timer(3000, NULL, NULL);
+//     // Older firmware variants can include DVL; only touch that control if the
+//     // active symbol table exposes it.
+// #ifdef CS40L25_SYM_DVL_EN
+//     if (fw_img_find_algid(cs40l25_driver.fw_info, 0x113))
+//     {
+//         bsp_driver_if_g->set_timer(3000, NULL, NULL);
 
-        ret = regmap_write_fw_control(cp, cs40l25_driver.fw_info, CS40L25_SYM_DVL_EN, 0);
+//         ret = regmap_write_fw_control(cp, cs40l25_driver.fw_info, CS40L25_SYM_DVL_EN, 0);
 
-        if (ret)
-        {
-            return BSP_STATUS_FAIL;
-        }
-    }
-#endif
+//         if (ret)
+//         {
+//             return BSP_STATUS_FAIL;
+//         }
+//     }
+// #endif
 
-    return BSP_STATUS_OK;
-}
+//     return BSP_STATUS_OK;
+// }
 
-uint32_t bsp_dut_stop_i2s(void)
-{
-    uint32_t ret;
+// uint32_t bsp_dut_stop_i2s(void)
+// {
+//     uint32_t ret;
 
-    ret = cs40l25_stop_i2s(&cs40l25_driver);
+//     ret = cs40l25_stop_i2s(&cs40l25_driver);
 
-    if (ret != CS40L25_STATUS_OK)
-    {
-        return BSP_STATUS_FAIL;
-    }
+//     if (ret != CS40L25_STATUS_OK)
+//     {
+//         return BSP_STATUS_FAIL;
+//     }
 
-#if CONFIG_8K_I2S
-    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
-    regmap_write(cp, 0x2C0C, cache_global_fs);
-    regmap_write(cp, 0x4804, cache_asp_control1);
-#endif
+// #if CONFIG_8K_I2S
+//     regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+//     regmap_write(cp, 0x2C0C, cache_global_fs);
+//     regmap_write(cp, 0x4804, cache_asp_control1);
+// #endif
 
-    return BSP_STATUS_OK;
-}
+//     return BSP_STATUS_OK;
+// }
 
 uint32_t bsp_dut_has_processed(bool *has_processed)
 {
