@@ -50,7 +50,7 @@ menu "TouchPad Configuration"
             default 5000
             help
                 Enter the timeout value for mode resetting in milliseconds. When FUNC key is pressed for the certain target duration of time, the device will switch modes into wired mode default. IF FUNC_RESET_MS is bigger than FUNC_TIMEOUT_MS, FUNC_RESET_MS will be FUNC_TIMEOUT_MS + 2000ms by default.
-        
+
         config LED_FLASH_FUNC_TIMEOUT
             default y
             bool "Led blink when FUNC key is pressed if reaching FUNC_TIMEOUT_MS"
@@ -65,7 +65,7 @@ menu "TouchPad Configuration"
 
         config BLE_ENABLE_MOUSE_MODE
             bool "Mouse Mode (Recommended for Best Compatibility)"
-        
+
         config BLE_ENABLE_PTP_MODE
             bool "PTP Mode (Still unavailable, under development)"
 
@@ -74,12 +74,13 @@ menu "TouchPad Configuration"
         choice
             prompt "Mouse Mode Select"
             default ORI_MOUSE_MODE
+            depends on BLE_ENABLE_MOUSE_MODE
             help
             Select Mouse Mode what you used.
 
         config ORI_MOUSE_MODE
             bool "Original Mouse Mode (Best Compatibility but with basic move only)"
-        
+
         config PTP_SIMULATED_MOUSE_MODE
             bool "PTP Simulated Mouse Mode (More function but may unstable, experimental function)"
 
