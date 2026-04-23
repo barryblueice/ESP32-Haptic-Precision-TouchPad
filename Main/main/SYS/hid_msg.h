@@ -14,6 +14,7 @@ typedef struct {
     uint8_t tip_switch;
     uint8_t contact_id;
     uint8_t confidence;
+    uint8_t pressure_z;
 } tp_finger_t;
 
 typedef struct {
@@ -79,12 +80,13 @@ typedef enum {
 
 typedef struct __attribute__((packed)) {
     uint8_t tip_conf_id;  // Bit0:None, Bit1:Confidence, Bit2:Tip, Bit3:Confidence Tip
-    uint16_t x;           
-    uint16_t y;           
+    uint16_t x;
+    uint16_t y;
+    uint8_t pressure_z;
 } finger_t;
 
 typedef struct __attribute__((packed)) {
-    finger_t fingers[5];   // 5 * 5 = 25 bytes
+    finger_t fingers[5];   // 5 * 6 = 30 bytes
     uint16_t scan_time;    // 2 bytes
     uint8_t contact_count; // 1 byte
     uint8_t buttons;       // 1 byte
