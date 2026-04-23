@@ -175,7 +175,9 @@ uint32_t bsp_set_gpio(uint32_t gpio_id, uint8_t gpio_state);
 bool     bsp_was_pb_pressed(uint8_t pb_id);
 void     bsp_sleep(void);
 uint32_t bsp_register_pb_cb(uint32_t pb_id, bsp_app_callback_t cb, void *cb_arg);
+uint32_t bsp_register_gpio_cb(uint32_t gpio_id, bsp_callback_t cb, void *cb_arg);
 void     bsp_notification_callback(uint32_t event_flags, void *arg);
+uint32_t bsp_i2c_reset(uint32_t bsp_dev_id, bool *was_i2c_busy);
 uint32_t bsp_i2c_read_repeated_start(uint32_t bsp_dev_id,
                                      uint8_t *write_buffer,
                                      uint32_t write_length,
@@ -188,6 +190,14 @@ uint32_t bsp_i2c_write(uint32_t bsp_dev_id,
                        uint32_t write_length,
                        bsp_callback_t cb,
                        void *cb_arg);
+uint32_t bsp_i2c_db_write(uint32_t bsp_dev_id,
+                          uint8_t *write_buffer_0,
+                          uint32_t write_length_0,
+                          uint8_t *write_buffer_1,
+                          uint32_t write_length_1,
+                          bsp_callback_t cb,
+                          void *cb_arg);
+uint32_t bsp_enable_irq(void);
 uint32_t bsp_set_ld2(uint8_t mode, uint32_t blink_100ms);
 uint32_t bsp_toggle_gpio(uint32_t gpio_id);
 uint32_t bsp_eeprom_control(uint8_t command);

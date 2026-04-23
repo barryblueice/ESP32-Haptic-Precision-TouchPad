@@ -209,12 +209,19 @@ uint32_t cs40l25_set_click_compensation_enable(cs40l25_t *driver, bool f0_enable
  */
 uint32_t cs40l25_set_clab_enable(cs40l25_t *driver, bool enable)
 {
+#ifdef CS40L25_ALGORITHM_CLAB
     uint32_t ret;
     regmap_cp_config_t *cp = REGMAP_GET_CP(driver);
 
     ret = regmap_write_fw_control(cp, driver->fw_info, CS40L25_SYM_CLAB_CLAB_ENABLED, (uint32_t) enable);
 
     return ret;
+#else
+    (void)driver;
+    (void)enable;
+
+    return CS40L25_STATUS_FAIL;
+#endif
 }
 
 /**
@@ -223,12 +230,19 @@ uint32_t cs40l25_set_clab_enable(cs40l25_t *driver, bool enable)
  */
 uint32_t cs40l25_set_clab_peak_amplitude(cs40l25_t *driver, uint32_t amplitude)
 {
+#ifdef CS40L25_ALGORITHM_CLAB
     uint32_t ret;
     regmap_cp_config_t *cp = REGMAP_GET_CP(driver);
 
     ret = regmap_write_fw_control(cp, driver->fw_info, CS40L25_SYM_CLAB_PEAK_AMPLITUDE_CONTROL, amplitude);
 
     return ret;
+#else
+    (void)driver;
+    (void)amplitude;
+
+    return CS40L25_STATUS_FAIL;
+#endif
 }
 
 /**

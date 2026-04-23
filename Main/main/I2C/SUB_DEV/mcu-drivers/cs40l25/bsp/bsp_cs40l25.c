@@ -22,8 +22,10 @@
 /***********************************************************************************************************************
  * INCLUDES
  **********************************************************************************************************************/
+#include <inttypes.h>
 #include <string.h>
 #include <stdlib.h>
+#include "esp_log.h"
 #include "I2C/SUB_DEV/mcu-drivers/common/platform_bsp/platform_bsp.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_ext.h"
@@ -42,6 +44,8 @@
 #define CS40L25_GPI_RELEASE_TO_VAMP_DISABLE_MS  (CS40L25_EVENT_TIMEOUT_DURATION_MS + \
                                                  CS40L25_RELEASE_MAX_DURATION_MS + \
                                                  CS40L25_EVENT_TIMEOUT_BUFFER_MS)
+
+static const char *TAG = "bsp_cs40l25";
 
 /***********************************************************************************************************************
  * LOCAL VARIABLES
@@ -109,7 +113,7 @@ static bridge_device_t device_list[] =
         .b.dev_id = BSP_DUT_DEV_ID,
         .b.bus_type = REGMAP_BUS_TYPE_I2C,
         .b.receive_max = BRIDGE_BLOCK_BUFFER_LENGTH_BYTES,
-        .b.spi_pad_len = 2
+        .b.spi_pad_len = 0
     }
 };
 #else
@@ -122,7 +126,7 @@ static bridge_device_t device_list[] =
         .b.dev_id = BSP_DUT_DEV_ID,
         .b.bus_type = REGMAP_BUS_TYPE_I2C,
         .b.receive_max = BRIDGE_BLOCK_BUFFER_LENGTH_BYTES,
-        .b.spi_pad_len = 2
+        .b.spi_pad_len = 0
     }
 };
 #endif
@@ -135,6 +139,128 @@ static bridge_device_t device_list[] =
 /***********************************************************************************************************************
  * LOCAL FUNCTIONS
  **********************************************************************************************************************/
+static void bsp_log_power_up_diagnostics(void)
+{
+    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    uint32_t halo_symbol = CS40L25_SYM_FIRMWARE_HALO_STATE;
+    uint32_t halo_state = 0;
+    uint32_t halo_heartbeat = 0;
+    uint32_t power_state = 0;
+    uint32_t scratch = 0;
+    uint32_t halo_addr = 0;
+
+    if (cs40l25_driver.state == CS40L25_STATE_CAL_STANDBY)
+    {
+        halo_symbol = CS40L25_CAL_SYM_FIRMWARE_HALO_STATE;
+    }
+
+    halo_addr = fw_img_find_symbol(cs40l25_driver.fw_info, halo_symbol);
+
+    ESP_LOGE(TAG,
+             "power_up diagnostics: driver_state=%" PRIu32 " halo_symbol=0x%08" PRIX32 " halo_addr=0x%08" PRIX32,
+             cs40l25_driver.state,
+             halo_symbol,
+             halo_addr);
+
+    if (halo_addr != 0)
+    {
+        if (regmap_read(cp, halo_addr, &halo_state) == REGMAP_STATUS_OK)
+        {
+            ESP_LOGE(TAG, "HALO_STATE=0x%08" PRIX32, halo_state);
+        }
+        else
+        {
+            ESP_LOGE(TAG, "HALO_STATE read failed");
+        }
+    }
+
+    if (cs40l25_driver.state != CS40L25_STATE_CAL_STANDBY)
+    {
+        if (regmap_read_fw_control(cp,
+                                   cs40l25_driver.fw_info,
+                                   CS40L25_SYM_FIRMWARE_HALO_HEARTBEAT,
+                                   &halo_heartbeat) == REGMAP_STATUS_OK)
+        {
+            ESP_LOGE(TAG, "HALO_HEARTBEAT=0x%08" PRIX32, halo_heartbeat);
+        }
+
+        if (regmap_read_fw_control(cp,
+                                   cs40l25_driver.fw_info,
+                                   CS40L25_SYM_FIRMWARE_POWERSTATE,
+                                   &power_state) == REGMAP_STATUS_OK)
+        {
+            ESP_LOGE(TAG, "FW POWERSTATE=0x%08" PRIX32, power_state);
+        }
+    }
+
+    if (regmap_read(cp, XM_UNPACKED24_DSP1_SCRATCH_REG, &scratch) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "DSP SCRATCH=0x%08" PRIX32, scratch);
+    }
+    else
+    {
+        ESP_LOGE(TAG, "DSP SCRATCH read failed");
+    }
+}
+
+static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
+{
+    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    uint32_t num_waves = 0;
+    uint32_t vibegen_status = 0;
+    uint32_t power_state = 0;
+    uint32_t heartbeat = 0;
+    uint32_t mbox1 = 0;
+    uint32_t mbox2 = 0;
+
+    ESP_LOGE(TAG,
+             "trigger diagnostics: waveform=%" PRIu8 " duration_ms=%" PRIu32 " driver_state=%" PRIu32,
+             waveform,
+             duration_ms,
+             cs40l25_driver.state);
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_VIBEGEN_NUMBEROFWAVES,
+                               &num_waves) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "VIBEGEN_NUMBEROFWAVES=0x%08" PRIX32 " (%" PRIu32 ")", num_waves, num_waves);
+    }
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_VIBEGEN_STATUS,
+                               &vibegen_status) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "VIBEGEN_STATUS=0x%08" PRIX32, vibegen_status);
+    }
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_FIRMWARE_POWERSTATE,
+                               &power_state) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "FW POWERSTATE=0x%08" PRIX32, power_state);
+    }
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_FIRMWARE_HALO_HEARTBEAT,
+                               &heartbeat) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "HALO_HEARTBEAT=0x%08" PRIX32, heartbeat);
+    }
+
+    if (regmap_read(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_1_REG, &mbox1) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "MBOX_1=0x%08" PRIX32, mbox1);
+    }
+
+    if (regmap_read(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_2_REG, &mbox2) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "MBOX_2=0x%08" PRIX32, mbox2);
+    }
+}
 
 /***********************************************************************************************************************
  * API FUNCTIONS
@@ -180,11 +306,11 @@ uint32_t bsp_dut_initialize(void)
         haptic_config.event_control.hardware = 1;
         haptic_config.event_control.playback_end_suspend = 1;
 
-#ifdef CONFIG_EXT_BOOST
+// #ifdef CONFIG_EXT_BOOST
         // Enable External Boost Mode with 3ms delay of GPI Trigger to VAMP ready
         haptic_config.ext_boost.gpi_playback_delay = 99;    // 3 ms * (1 s / 1000 ms) * 32768 units / s) = 99 units
         haptic_config.ext_boost.use_ext_boost = true;
-#endif
+// #endif
 
         haptic_config.gpio_button_detect.gpio1_enable = true;
 #ifdef CONFIG_L25B
@@ -447,6 +573,7 @@ uint32_t bsp_dut_power_up(void)
     }
     else
     {
+        bsp_log_power_up_diagnostics();
         return BSP_STATUS_FAIL;
     }
 }
@@ -516,7 +643,9 @@ uint32_t bsp_dut_start_i2s(void)
         return BSP_STATUS_FAIL;
     }
 
-    // If DVL Algorithm is present, then disable DVL after 3 seconds
+    // Older firmware variants can include DVL; only touch that control if the
+    // active symbol table exposes it.
+#ifdef CS40L25_SYM_DVL_EN
     if (fw_img_find_algid(cs40l25_driver.fw_info, 0x113))
     {
         bsp_driver_if_g->set_timer(3000, NULL, NULL);
@@ -528,6 +657,7 @@ uint32_t bsp_dut_start_i2s(void)
             return BSP_STATUS_FAIL;
         }
     }
+#endif
 
     return BSP_STATUS_OK;
 }
@@ -654,6 +784,10 @@ uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms)
     }
     else
     {
+        if (waveform != BSP_DUT_TRIGGER_HAPTIC_POWER_ON)
+        {
+            bsp_log_trigger_diagnostics(waveform, duration_ms);
+        }
         return BSP_STATUS_FAIL;
     }
 }

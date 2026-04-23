@@ -172,7 +172,6 @@ typedef struct
      * @see BSP_SUPPLY_ENABLE BSP_SUPPLY_DISABLE
      *
      */
-    uint32_t (*set_supply)(uint32_t supply_id, uint8_t supply_state);
 
     /**
      * Register GPIO Callback
