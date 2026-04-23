@@ -4,8 +4,8 @@
 
 Another touchpad hacking project, based on ESP32-S3 + Surface Laptop Studio 1964 Synaptics TouchPad.
 
- - Compatible with Microsoft Precision TouchPad (PTP) standard. 
- - Supported Windows Touch Gesture. 
+ - Compatible with Microsoft Precision TouchPad (PTP) standard.
+ - Supported Windows Touch Gesture.
  - Supported Taptic Engine.
  - Supported feedback adjustment.
  - Supported USB/BLE/2.4G connection.
@@ -56,13 +56,12 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
   - [x] Bluetooth wireless mode support
     - [x] Mouse Mode
     - [ ] PTP Mode
-  - [ ] Hacking on Haptic Sensitivity Adjustment Principle
+  - [x] Hacking on Haptic Sensitivity Adjustment Principle
 
 # Current Issues:
- - Feedback adjustment may not support by Windows 11 original setting. It may need third-party setting software to config.
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
  Also, Windows Setting for PTP is unavailable under BLE mode.
- - PTP/Mouse Mode switching is unavailable, so BLE Mouse Mode will be default currently.
+ - Under BLE mode, PTP/Mouse Mode switching is unavailable, so BLE Mouse Mode will be default currently.
 
 # Current Support System (already tested):
 
