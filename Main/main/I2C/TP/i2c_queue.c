@@ -14,7 +14,7 @@
 #include "I2C/I2C_handle.h"
 
 #define TAG "I2C_QUEUE"
-    
+
 #define HISTORY_LEN 3
 
 #define TAP_DEADZONE 30
@@ -70,12 +70,12 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 
     if (last_frame_time != 0) {
         uint32_t delta = (uint32_t)((now - last_frame_time) / 100);
-        
+
         simulated_scan_time += delta;
     }
-    
+
     msg->scan_time = (uint16_t)(simulated_scan_time & 0xFFFF);
-    
+
     last_frame_time = now;
 }
 
@@ -85,7 +85,7 @@ void i2c_queue_task(void *arg) {
 
     while (1) {
 
-        tp_multi_msg_t tp_msg = {0}; 
+        tp_multi_msg_t tp_msg = {0};
         mouse_msg_t mouse_msg = {0};
 
         if (xQueueReceive(tp_data_queue, tp_packet, portMAX_DELAY) == pdPASS) {
@@ -100,9 +100,9 @@ void i2c_queue_task(void *arg) {
                 update_simulated_scan_time(&tp_msg);
 
                 for (int id = 0; id < 5; id++) {
-                    int offset = 4 + (id * 8); 
+                    int offset = 4 + (id * 8);
                     uint8_t finger_status = tp_packet[offset];
-                    
+
                     #if CONFIG_REVERT_X_Y
                     uint16_t ry = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
                     uint16_t rx_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
@@ -112,7 +112,7 @@ void i2c_queue_task(void *arg) {
                     uint16_t ry_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
                     uint16_t ry = 1532 - (ry_raw > 1533 ? 1533 : ry_raw);
                     #endif
-                    uint8_t major = tp_packet[offset + 6]; 
+                    uint8_t major = tp_packet[offset + 6];
                     uint8_t minor = tp_packet[offset + 7];
 
                     tp_msg.fingers[id].contact_id = id;
@@ -145,7 +145,7 @@ void i2c_queue_task(void *arg) {
                             slot_filter_y[id] = ry << 8;
                             origin_x[id] = rx;
                             origin_y[id] = ry;
-                            tap_frozen[id] = true; 
+                            tap_frozen[id] = true;
                             touch_state[id] = TOUCH_TAP_CANDIDATE;
                             slot_active[id] = true;
                             consecutive_errors[id] = 0;
@@ -155,18 +155,18 @@ void i2c_queue_task(void *arg) {
                             }
                         }
 
-                        uint16_t mx = get_median(raw_x_history[id][HISTORY_LEN-3], 
-                                                raw_x_history[id][HISTORY_LEN-2], 
+                        uint16_t mx = get_median(raw_x_history[id][HISTORY_LEN-3],
+                                                raw_x_history[id][HISTORY_LEN-2],
                                                 raw_x_history[id][HISTORY_LEN-1]);
-                        uint16_t my = get_median(raw_y_history[id][HISTORY_LEN-3], 
-                                                raw_y_history[id][HISTORY_LEN-2], 
+                        uint16_t my = get_median(raw_y_history[id][HISTORY_LEN-3],
+                                                raw_y_history[id][HISTORY_LEN-2],
                                                 raw_y_history[id][HISTORY_LEN-1]);
 
                         int dx_jump = mx - (slot_filter_x[id] >> 8);
                         int dy_jump = my - (slot_filter_y[id] >> 8);
                         if ((dx_jump*dx_jump + dy_jump*dy_jump) > (300*300)) {
-                            if (consecutive_errors[id] < 2) { 
-                                mx = (uint16_t)(slot_filter_x[id] >> 8); 
+                            if (consecutive_errors[id] < 2) {
+                                mx = (uint16_t)(slot_filter_x[id] >> 8);
                                 my = (uint16_t)(slot_filter_y[id] >> 8);
                                 consecutive_errors[id]++;
                             } else {
@@ -178,7 +178,7 @@ void i2c_queue_task(void *arg) {
 
                         int alpha_speed = abs(rx - (int)last_raw_x[id]) + abs(ry - (int)last_raw_y[id]);
                         uint32_t dynamic_alpha = (alpha_speed < 3) ? 64 : (alpha_speed < 12 ? 115 : 218);
-                        
+
                         slot_filter_x[id] = (dynamic_alpha * (mx << 8) + (256 - dynamic_alpha) * slot_filter_x[id]) >> 8;
                         slot_filter_y[id] = (dynamic_alpha * (my << 8) + (256 - dynamic_alpha) * slot_filter_y[id]) >> 8;
 
@@ -207,7 +207,7 @@ void i2c_queue_task(void *arg) {
                         history_y[id] = tp_msg.fingers[id].y;
                         last_raw_x[id] = rx;
                         last_raw_y[id] = ry;
-                        
+
                         tp_msg.fingers[id].tip_switch = 1;
                         active_finger_count++;
 
@@ -233,8 +233,13 @@ void i2c_queue_task(void *arg) {
                 tp_msg.actual_count = (active_finger_count > 0) ? active_finger_count : 1;
                 xQueueOverwrite(tp_queue, &tp_msg);
             } else {
-                mouse_msg.x = (int8_t)tp_packet[4];
-                mouse_msg.y = (int8_t)tp_packet[5];
+                #if CONFIG_REVERT_X_Y
+                    mouse_msg.x = -(int8_t)tp_packet[4];
+                    mouse_msg.y = -(int8_t)tp_packet[5];
+                #else
+                    mouse_msg.x = (int8_t)tp_packet[4];
+                    mouse_msg.y = (int8_t)tp_packet[5];
+                #endif
                 mouse_msg.buttons = tp_packet[3];
 
                 xQueueOverwrite(mouse_queue, &mouse_msg);
