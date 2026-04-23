@@ -41,13 +41,13 @@
 
 #define ATT_SVC_HID          0x1812
 
-/// Maximal number of Report Char. that can be added in the DB for one HIDS - Up to 11
-#define HIDD_LE_NB_REPORT_INST_MAX            (5)
+/// Maximal number of Report Char. that can be added in the DB for one HIDS.
+#define HIDD_LE_NB_REPORT_INST_MAX            (9)
 
 /// Maximal length of Report Char. Value
 #define HIDD_LE_REPORT_MAX_LEN                (512)
 /// Maximal length of Report Map Char. Value
-#define HIDD_LE_REPORT_MAP_MAX_LEN            (512)
+#define HIDD_LE_REPORT_MAP_MAX_LEN            (1024)
 
 /// Length of Boot Report Char. Value Maximal Length
 #define HIDD_LE_BOOT_REPORT_MAX_LEN           (8)
@@ -134,6 +134,18 @@ enum {
         HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_CHAR,
         HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_VAL,
         HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_REP_REF,
+
+        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_CHAR,
+        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL,
+        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_REP_REF,
+
+        HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_CHAR,
+        HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_VAL,
+        HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_REP_REF,
+
+        HIDD_LE_IDX_REPORT_HAPTIC_MANUAL_TRIGGER_CHAR,
+        HIDD_LE_IDX_REPORT_HAPTIC_MANUAL_TRIGGER_VAL,
+        HIDD_LE_IDX_REPORT_HAPTIC_MANUAL_TRIGGER_REP_REF,
 
         HIDD_LE_IDX_BOOT_PTP_IN_REPORT_CHAR,
         HIDD_LE_IDX_BOOT_PTP_IN_REPORT_VAL,
