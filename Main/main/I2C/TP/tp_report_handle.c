@@ -71,6 +71,7 @@ static struct {
     bool has_scroll_anchor;
     bool tap_active;
     bool tap_moved;
+    bool suppress_tap_until_release;
     bool click_release_pending;
 } m_state = {0};
 
@@ -258,10 +259,23 @@ void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_repor
         active_count++;
     }
 
+    if (m_state.suppress_tap_until_release) {
+        reset_move_state();
+        reset_scroll_state();
+        if (active_count == 0) {
+            m_state.suppress_tap_until_release = false;
+        }
+        return;
+    }
+
     if (m_state.tap_active && active_count < m_state.tap_max_count) {
+        uint8_t released_tap_count = m_state.tap_max_count;
         reset_move_state();
         reset_scroll_state();
         handle_tap_release(msg, out_report);
+        if (active_count > 0 && released_tap_count > 1) {
+            m_state.suppress_tap_until_release = true;
+        }
         return;
     }
 
