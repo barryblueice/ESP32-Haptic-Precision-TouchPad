@@ -16,18 +16,20 @@
 void app_main(void) {
 
     ESP_ERROR_CHECK(nvs_mode_init());
-    
+
     current_mode = MOUSE_MODE;
-    
-    tp_queue = xQueueCreate(1, sizeof(ptp_report_t));
+
+    legacy_tp_queue = xQueueCreate(1, sizeof(legacy_ptp_report_t));
+    haptic_tp_queue = xQueueCreate(1, sizeof(haptic_ptp_report_t));
     mouse_queue = xQueueCreate(1, sizeof(mouse_hid_report_t));
 
-    main_queue_set = xQueueCreateSet(1 + 1);
+    main_queue_set = xQueueCreateSet(3);
     xQueueAddToSet(mouse_queue, main_queue_set);
-    xQueueAddToSet(tp_queue, main_queue_set);
+    xQueueAddToSet(legacy_tp_queue, main_queue_set);
+    xQueueAddToSet(haptic_tp_queue, main_queue_set);
 
     usb_event_group = xEventGroupCreate();
-    
+
     xTaskCreate(usb_mount_task, "mode_sel", 4096, NULL, 11, NULL);
 
     usbhid_init();
@@ -48,7 +50,7 @@ void app_main(void) {
              wifi_mac[3], wifi_mac[4], wifi_mac[5]);
 
     while (1) {
-        tud_task(); 
-        vTaskDelay(pdMS_TO_TICKS(1)); 
+        tud_task();
+        vTaskDelay(pdMS_TO_TICKS(1));
     }
 }

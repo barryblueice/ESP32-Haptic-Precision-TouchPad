@@ -26,12 +26,16 @@
 
 static const char *TAG = "USB_HID_TP";
 
-#define REPORTID_TOUCHPAD         0x01
-#define REPORTID_MOUSE            0x02
-#define REPORTID_MAX_COUNT        0x03
-#define REPORTID_PTPHQA           0x04
-#define REPORTID_FEATURE          0x05
-#define REPORTID_FUNCTION_SWITCH  0x06
+#define REPORTID_HAPTIC_TOUCHPAD        0x01
+#define REPORTID_LEGACY_TOUCHPAD        0x02
+#define REPORTID_MOUSE                  0x03  // 示例中通常是这样排列的
+#define REPORTID_MAX_COUNT              0x04  // Device Capabilities
+#define REPORTID_HAPTIC_PTPHQA          0x05  // 认证相关 (一般返回全0即可)
+#define REPORTID_LEGACY_PTPHQA          0x06  // 认证相关 (一般返回全0即可)
+#define REPORTID_HAPTIC_FEATURE         0x06  // Input Mode
+#define REPORTID_LEGACY_FEATURE         0x07  // Input Mode
+#define REPORTID_FUNCTION_SWITCH        0x08
+#define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
 
 #define TPD_REPORT_ID 0x01
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
@@ -83,8 +87,10 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
     case 0:
         return generic_hid_report_descriptor;
     case 1:
-        return ptp_hid_report_descriptor;
+        return haptic_ptp_hid_report_descriptor;
     case 2:
+        return legacy_ptp_hid_report_descriptor;
+    case 3:
         return mouse_hid_report_descriptor;
     default:
         return NULL;
@@ -94,17 +100,49 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
 
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
     if (report_type == HID_REPORT_TYPE_FEATURE) {
-        if (report_id == REPORTID_FEATURE) {
+        if (report_id == REPORTID_LEGACY_FEATURE) {
+            buffer[0] = 0x03;
+            return 1;
+        }
+        if (report_id == REPORTID_HAPTIC_FEATURE) {
             buffer[0] = 0x03;
             return 1;
         }
         if (report_id == REPORTID_MAX_COUNT) {
-            buffer[0] = 0x15; 
+            buffer[0] = 0x15;
             return 1;
         }
-        if (report_id == REPORTID_PTPHQA) {
+        if (report_id == REPORTID_HAPTIC_PTPHQA) {
             memset(buffer, 0, 256);
-            return 256; 
+            return 256;
+        }
+        if (report_id == REPORTID_LEGACY_PTPHQA) {
+            memset(buffer, 0, 256);
+            return 256;
+        }
+        if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
+            buffer[0] = 0x02;
+            return 1;
+        }
+        if (report_id == 0x41) {
+            buffer[0] = 0x02;
+            return 1;
+        }
+        if (report_id == 0x42) {
+            uint16_t *waveforms = (uint16_t *)&buffer[0];
+            waveforms[0] = 4097; // Instance 3
+            waveforms[1] = 4098; // Instance 4
+            waveforms[2] = 4099; // Instance 5
+            waveforms[3] = 4100; // Instance 6
+            waveforms[4] = 4101; // Instance 7
+
+            buffer[10] = 20; // Instance 3 duration
+            buffer[11] = 20;
+            buffer[12] = 20;
+            buffer[13] = 20;
+            buffer[14] = 20;
+
+            return 15;
         }
     }
     return 0;
@@ -117,7 +155,13 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
 
     uint8_t command = buffer[0];
 
-    if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORTID_FEATURE) {
+    if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORTID_LEGACY_FEATURE) {
+        if (bufsize >= 1) {
+            ptp_input_mode = buffer[0];
+        }
+    }
+
+    if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORTID_HAPTIC_FEATURE) {
         if (bufsize >= 1) {
             ptp_input_mode = buffer[0];
         }
@@ -151,8 +195,8 @@ void usb_mount_task(void *arg) {
             pdTRUE,
             portMAX_DELAY
         );
-        
-        ptp_input_mode = 0x00; 
+
+        ptp_input_mode = 0x00;
         last_ptp_input_mode = 0xFF;
 
         while (tud_mounted()) {
@@ -163,12 +207,12 @@ void usb_mount_task(void *arg) {
 
                 case 0x03:
                     ESP_LOGI(TAG, "Mode 0x03 detected: Activating PTP");
-                    current_mode = PTP_MODE;
+                    current_mode = TP_PTP_MODE;
                     break;
 
                 default:
                     ESP_LOGW(TAG, "Mode 0x%02X detected: Activating Default Mouse Mode", ptp_input_mode);
-                    current_mode = MOUSE_MODE;
+                    current_mode = TP_MOUSE_MODE;
                     break;
                 }
                 esp_now_send(broadcast_mac, (const uint8_t *)&current_mode, 1);
@@ -247,7 +291,8 @@ void usbhid_init(void) {
 }
 
 void usbhid_task(void *arg) {
-    ptp_report_t tp_report; 
+    legacy_ptp_report_t legacy_tp_report;
+    haptic_ptp_report_t haptic_tp_report;
     mouse_hid_report_t mouse_report;
 
     while (1) {
@@ -255,15 +300,20 @@ void usbhid_task(void *arg) {
 
         if (xActivatedMember == mouse_queue) {
             if (xQueueReceive(mouse_queue, &mouse_report, 0)) {
-                if (tud_hid_n_ready(2)) {
-                    tud_hid_n_report(2, REPORTID_MOUSE, &mouse_report, sizeof(mouse_report));
+                if (tud_hid_n_ready(3)) {
+                    tud_hid_n_report(3, REPORTID_MOUSE, &mouse_report, sizeof(mouse_report));
                 }
             }
-        } 
-        else if (xActivatedMember == tp_queue) {
-            if (xQueueReceive(tp_queue, &tp_report, 0)) {
+        } else if (xActivatedMember == haptic_tp_queue) {
+            if (xQueueReceive(haptic_tp_queue, &haptic_tp_report, 0)) {
                 if (tud_hid_n_ready(1)) {
-                    tud_hid_n_report(1, REPORTID_TOUCHPAD, &tp_report, sizeof(tp_report));
+                    tud_hid_n_report(1, REPORTID_HAPTIC_TOUCHPAD, &haptic_tp_report, sizeof(haptic_tp_report));
+                }
+            }
+        } else if (xActivatedMember == legacy_tp_queue) {
+            if (xQueueReceive(legacy_tp_queue, &legacy_tp_report, 0)) {
+                if (tud_hid_n_ready(2)) {
+                    tud_hid_n_report(2, REPORTID_LEGACY_TOUCHPAD, &legacy_tp_report, sizeof(legacy_tp_report));
                 }
             }
         }

@@ -10,14 +10,13 @@
 
 #include "class/hid/hid_device.h"
 
-#define REPORTID_TOUCHPAD         0x01
-#define REPORTID_MOUSE            0x02  // 示例中通常是这样排列的
-#define REPORTID_MAX_COUNT        0x03  // Device Capabilities
-#define REPORTID_PTPHQA           0x04  // 认证相关 (一般返回全0即可)
-#define REPORTID_FEATURE          0x05  // Input Mode
-#define REPORTID_FUNCTION_SWITCH  0x06
+#define REPORTID_TOUCHPAD               0x01
+#define REPORTID_MOUSE                  0x02  // 示例中通常是这样排列的
+#define REPORTID_MAX_COUNT              0x03  // Device Capabilities
+#define REPORTID_PTPHQA                 0x04  // 认证相关 (一般返回全0即可)
+#define REPORTID_FEATURE                0x05  // Input Mode
+#define REPORTID_FUNCTION_SWITCH        0x06
 #define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
-#define REPORTID_HAPTIC_FEATURE    0x0C
 
 #define EPNUM_GENERIC_IN 0x81
 #define EPNUM_TP_IN    0x82
@@ -35,7 +34,7 @@ const uint8_t mouse_hid_report_descriptor[] = {
     0xa1, 0x01,                         // COLLECTION (Application)
     0x85, REPORTID_MOUSE,               // REPORT_ID
     0x09, 0x01,                         // USAGE (Pointer)
-    0xa1, 0x00,  
+    0xa1, 0x00,
 
     0x05, 0x09,                         // USAGE_PAGE (Button)
     0x19, 0x01,                         // USAGE_MINIMUM (Button 1)
@@ -69,7 +68,7 @@ const uint8_t mouse_hid_report_descriptor[] = {
 };
 
 const uint8_t ptp_hid_report_descriptor[] = {
-    
+
     //TOUCH PAD input TLC
     0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
     0x09, 0x05,                         // USAGE (Touch Pad)

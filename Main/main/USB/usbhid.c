@@ -30,14 +30,14 @@
 
 #define TAG "USB_HID_TP"
 
-#define REPORTID_TOUCHPAD         0x01
-#define REPORTID_MOUSE            0x02
-#define REPORTID_MAX_COUNT        0x03
-#define REPORTID_PTPHQA           0x04
-#define REPORTID_FEATURE          0x05
-#define REPORTID_FUNCTION_SWITCH  0x06
+#define REPORTID_TOUCHPAD               0x01
+#define REPORTID_MOUSE                  0x02
+#define REPORTID_MAX_COUNT              0x03
+#define REPORTID_PTPHQA                 0x04
+#define REPORTID_FEATURE                0x05
+#define REPORTID_FUNCTION_SWITCH        0x06
 #define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
-#define REPORTID_HAPTIC_FEATURE   0x0C
+#define REPORTID_HAPTIC_FEATURE         0x0C
 
 #define TPD_REPORT_ID 0x01
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
@@ -102,12 +102,12 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             return 1;
         }
         if (report_id == REPORTID_MAX_COUNT) {
-            buffer[0] = 0x15; 
+            buffer[0] = 0x15;
             return 1;
         }
         if (report_id == REPORTID_PTPHQA) {
             memset(buffer, 0, 256);
-            return 256; 
+            return 256;
         }
         if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
             buffer[0] = 0x02;
@@ -124,14 +124,14 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             waveforms[2] = 4099; // Instance 5
             waveforms[3] = 4100; // Instance 6
             waveforms[4] = 4101; // Instance 7
-            
+
             buffer[10] = 20; // Instance 3 duration
             buffer[11] = 20;
             buffer[12] = 20;
             buffer[13] = 20;
             buffer[14] = 20;
-            
-            return 15; 
+
+            return 15;
         }
     }
     return 0;
@@ -170,8 +170,8 @@ void usb_mount_task(void *arg) {
             pdTRUE,
             portMAX_DELAY
         );
-        
-        ptp_input_mode = 0x00; 
+
+        ptp_input_mode = 0x00;
         last_ptp_input_mode = 0xFF;
 
         while (tud_mounted()) {
@@ -246,21 +246,21 @@ void usbhid_task(void *arg) {
         if (xActivatedMember == mouse_queue) {
             if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
                 mouse_hid_report_t report = {0};
-                
+
                 parse_mouse_report(&mouse_msg, &report);
 
                 if (tud_hid_n_ready(2)) {
                     tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
                 }
             }
-        } 
+        }
         else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &tp_msg, 0)) {
                 if (current_tp_mode == MOUSE_MODE) {
-                        
+
                 } else {
                     ptp_report_t report = {0};
-                    
+
                     parse_ptp_report(&tp_msg, &report);
 
                     if (tud_hid_n_ready(1)) {
