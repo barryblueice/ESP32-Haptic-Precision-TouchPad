@@ -10,6 +10,8 @@
 
 #include "GPIO/GPIO_handle.h"
 
+#include "esp_log.h"
+
 #define TAG "SUB_I2C_INIT"
 
 int battery_percentage = 100;
@@ -52,9 +54,14 @@ void sub_dev_init(void) {
 
     ESP_LOGI(TAG, "battery level: %d %%", battery_percentage);
 
-    float current_vref = mp28167_get_vref_mv(dev_handle);
+    float current_vref = mp28167_get_vref_mv();
     ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
 
     xTaskCreatePinnedToCore(charging_state_monitor_task, "charging_state_monitor_task", 4096, NULL, 5, NULL, 1);
 
+    uint8_t mp28167_vref = mp28167_get_vref_mv();
+    if (mp28167_vref != 840.0f) {
+        ESP_LOGW(TAG, "Over-Vref Detecting! setting Vref to 840mV");
+        mp28167_set_vref_mv(840);
+    }
 }
