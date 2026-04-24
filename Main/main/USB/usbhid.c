@@ -257,7 +257,24 @@ void usbhid_task(void *arg) {
         else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &tp_msg, 0)) {
                 if (current_tp_mode == MOUSE_MODE) {
+                    #if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                        mouse_hid_report_t report = {0};
 
+                        parse_ptp_simulated_mouse_report(&tp_msg, &report);
+
+                        if (tud_hid_n_ready(2)) {
+                            tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
+                        }
+
+                        if (ptp_simulated_mouse_click_needs_release()) {
+                            mouse_hid_report_t release_report = {0};
+
+                            if (tud_hid_n_ready(2)) {
+                                tud_hid_n_report(2, REPORTID_MOUSE, &release_report, sizeof(release_report));
+                            }
+                        }
+
+                    #endif
                 } else {
                     ptp_report_t report = {0};
 
