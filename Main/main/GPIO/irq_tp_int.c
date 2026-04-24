@@ -30,16 +30,11 @@ void tp_i2c_int_task(void *pvParameters) {
 }
 
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
-    int tp_int_level = gpio_get_level(TP_INT_GPIO);
-
-    if (tp_int_level == 1) {
-        return;
-    } else {
-        BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-        vTaskNotifyGiveFromISR(tp_task_handle, &xHigherPriorityTaskWoken);
-        if (xHigherPriorityTaskWoken) {
-            portYIELD_FROM_ISR();
-        }
+    esp_timer_stop(timeout_watchdog_timer);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    vTaskNotifyGiveFromISR(tp_task_handle, &xHigherPriorityTaskWoken);
+    if (xHigherPriorityTaskWoken) {
+        portYIELD_FROM_ISR();
     }
 }
 
@@ -54,7 +49,7 @@ void irq_int_init(void) {
     xTaskCreatePinnedToCore(tp_i2c_int_task, "tp_i2c_int_task", 2048, NULL, 11, &tp_task_handle, 1);
 
     gpio_config_t io_conf = {
-        .intr_type = GPIO_INTR_ANYEDGE,
+        .intr_type = GPIO_INTR_NEGEDGE,
         .pin_bit_mask = (1ULL << TP_INT_GPIO),
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = 1,

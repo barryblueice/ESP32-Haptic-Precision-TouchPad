@@ -16,28 +16,6 @@ uint16_t watchdog_y = 0;
 uint16_t watchdog_id = 0;
 uint16_t watchdog_tip_switch = 0;
 
-void watchdog_refresh(bool touch_active) {
-    global_watchdog_start = touch_active && (current_tp_mode == PTP_MODE);
-
-    if (timeout_watchdog_timer == NULL) {
-        return;
-    }
-
-    if (esp_timer_is_active(timeout_watchdog_timer)) {
-        esp_err_t err = esp_timer_stop(timeout_watchdog_timer);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to stop watchdog timer: %s", esp_err_to_name(err));
-        }
-    }
-
-    if (global_watchdog_start) {
-        esp_err_t err = esp_timer_start_once(timeout_watchdog_timer, TOUCH_TIMEOUT_US);
-        if (err != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to start watchdog timer: %s", esp_err_to_name(err));
-        }
-    }
-}
-
 void watchdog_timeout_callback(void* arg) {
 
     if (current_tp_mode == PTP_MODE && global_watchdog_start) {
