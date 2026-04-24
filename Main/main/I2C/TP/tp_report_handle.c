@@ -14,6 +14,9 @@
 #define JUMP_THRESHOLD 200.0f
 #define TAP_MAX_MOVE 60.0f
 #define TAP_MAX_TIME 3000
+#define DOUBLE_TAP_MAX_INTERVAL 2500
+#define DOUBLE_TAP_DRAG_MIN_MOVE 30.0f
+#define DOUBLE_TAP_DRAG_HOLD_TIME 500
 #define SCROLL_GAIN 0.12f
 
 void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report) {
@@ -66,11 +69,15 @@ static struct {
     float last_scroll_x, last_scroll_y;
     float tap_start_x, tap_start_y;
     uint16_t tap_start_time;
+    uint16_t last_single_tap_time;
     uint8_t tap_max_count;
     bool has_move_anchor;
     bool has_scroll_anchor;
     bool tap_active;
     bool tap_moved;
+    bool has_last_single_tap;
+    bool double_tap_drag_candidate;
+    bool drag_active;
     bool suppress_tap_until_release;
     bool click_release_pending;
 } m_state = {0};
@@ -125,6 +132,9 @@ static void update_tap_state(const tp_multi_msg_t *msg, int active_count, float 
         m_state.tap_start_time = msg->scan_time;
         m_state.tap_start_x = centroid_x;
         m_state.tap_start_y = centroid_y;
+        m_state.double_tap_drag_candidate = active_count == 1 &&
+                                            m_state.has_last_single_tap &&
+                                            scan_time_delta(msg->scan_time, m_state.last_single_tap_time) <= DOUBLE_TAP_MAX_INTERVAL;
         return;
     }
 
@@ -133,12 +143,21 @@ static void update_tap_state(const tp_multi_msg_t *msg, int active_count, float 
         m_state.tap_start_time = msg->scan_time;
         m_state.tap_start_x = centroid_x;
         m_state.tap_start_y = centroid_y;
+        m_state.double_tap_drag_candidate = false;
         return;
     }
 
     float dx = centroid_x - m_state.tap_start_x;
     float dy = centroid_y - m_state.tap_start_y;
-    if (sqrtf((dx * dx) + (dy * dy)) > TAP_MAX_MOVE) {
+    float distance = sqrtf((dx * dx) + (dy * dy));
+    uint16_t elapsed = scan_time_delta(msg->scan_time, m_state.tap_start_time);
+    if (m_state.double_tap_drag_candidate &&
+        active_count == 1 &&
+        (distance > DOUBLE_TAP_DRAG_MIN_MOVE || elapsed >= DOUBLE_TAP_DRAG_HOLD_TIME)) {
+        m_state.drag_active = true;
+        m_state.has_last_single_tap = false;
+    }
+    if (distance > TAP_MAX_MOVE) {
         m_state.tap_moved = true;
     }
 }
@@ -158,19 +177,37 @@ static uint8_t tap_button_mask(uint8_t finger_count) {
 
 static void handle_tap_release(const tp_multi_msg_t *msg, mouse_hid_report_t *out_report) {
     if (!m_state.tap_active) {
+        m_state.drag_active = false;
         return;
     }
 
     uint8_t buttons = tap_button_mask(m_state.tap_max_count);
     uint16_t elapsed = scan_time_delta(msg->scan_time, m_state.tap_start_time);
-    if (!m_state.tap_moved && elapsed <= TAP_MAX_TIME && buttons != 0) {
+    if (m_state.drag_active) {
+        m_state.drag_active = false;
+        m_state.has_last_single_tap = false;
+    } else if (!m_state.tap_moved && elapsed <= TAP_MAX_TIME && buttons != 0) {
         out_report->buttons = buttons;
         m_state.click_release_pending = true;
+
+        if (m_state.tap_max_count == 1) {
+            if (m_state.has_last_single_tap &&
+                scan_time_delta(msg->scan_time, m_state.last_single_tap_time) <= DOUBLE_TAP_MAX_INTERVAL) {
+                out_report->buttons = 0x01;
+            }
+            m_state.has_last_single_tap = true;
+            m_state.last_single_tap_time = msg->scan_time;
+        } else {
+            m_state.has_last_single_tap = false;
+        }
+    } else {
+        m_state.has_last_single_tap = false;
     }
 
     m_state.tap_active = false;
     m_state.tap_max_count = 0;
     m_state.tap_moved = false;
+    m_state.double_tap_drag_candidate = false;
 }
 
 bool ptp_simulated_mouse_click_needs_release(void) {
@@ -289,6 +326,9 @@ void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_repor
     if (active_count == 1) {
         reset_scroll_state();
         handle_single_finger_move(msg, first_active, out_report);
+        if (m_state.drag_active) {
+            out_report->buttons = 0x01;
+        }
     } else if (active_count >= 2) {
         reset_move_state();
         handle_dual_finger_scroll(msg, first_active, second_active, out_report);
