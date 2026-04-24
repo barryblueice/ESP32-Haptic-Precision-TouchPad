@@ -8,7 +8,7 @@
 
 #define TAG "TP_REPORT"
 
-#define SENSITIVITY 1.0f
+#define SENSITIVITY 2.0f
 #define CONSTRAIN(amt, low, high) ((amt)<(low)?(low):((amt)>(high)?(high):(amt)))
 #define DEADZONE 1.2f
 #define JUMP_THRESHOLD 200.0f
