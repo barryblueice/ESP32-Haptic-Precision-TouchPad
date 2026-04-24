@@ -33,13 +33,7 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
     int tp_int_level = gpio_get_level(TP_INT_GPIO);
 
     if (tp_int_level == 1) {
-
-        if (watchdog_tip_switch == 1) {
-            global_watchdog_start = true;
-        } else {
-            global_watchdog_start = false;
-        }
-
+        return;
     } else {
         BaseType_t xHigherPriorityTaskWoken = pdFALSE;
         vTaskNotifyGiveFromISR(tp_task_handle, &xHigherPriorityTaskWoken);
@@ -50,6 +44,13 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 }
 
 void irq_int_init(void) {
+
+    const esp_timer_create_args_t timer_args = {
+        .callback = &watchdog_timeout_callback,
+        .name = "touch_timeout_timer"
+    };
+    esp_timer_create(&timer_args, &timeout_watchdog_timer);
+
     xTaskCreatePinnedToCore(tp_i2c_int_task, "tp_i2c_int_task", 2048, NULL, 11, &tp_task_handle, 1);
 
     gpio_config_t io_conf = {
