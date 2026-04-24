@@ -12,6 +12,7 @@
 #include "SYS/hid_msg.h"
 
 #include "I2C/I2C_handle.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #define TAG "I2C_QUEUE"
 
@@ -25,6 +26,8 @@
 #define PALM_RATIO_LIMIT  2.0f
 
 #define SCAN_INTERVAL_PER_FINGER 80
+#define FORCE_CLICK_PRESS_STABLE_FRAMES 2
+#define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 
 typedef enum {
     TOUCH_NONE = 0,
@@ -64,6 +67,172 @@ static uint16_t last_confidence[5] = {0};
 static uint8_t consecutive_errors[5] = {0};
 
 static bool slot_active[5] = {false};
+
+typedef struct {
+    bool tracking_contact;
+    bool button_down;
+    uint8_t tracked_contact_id;
+    uint8_t filtered_z;
+    uint8_t press_stable_frames;
+    uint8_t release_stable_frames;
+} ptp_force_click_state_t;
+
+static ptp_force_click_state_t ptp_force_click_state = {0};
+
+static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
+    switch (threshold_level) {
+        case 1:
+            return CLICK_LIGHT_WEIGHT_THERHOLD;
+
+        case 3:
+            return CLICK_STRONG_WEIGHT_THERHOLD;
+
+        case 2:
+        default:
+            return CLICK_MIDIUM_WEIGHT_THERHOLD;
+    }
+}
+
+static void ptp_reset_force_click(tp_multi_msg_t *msg) {
+    ptp_force_click_state.tracking_contact = false;
+    ptp_force_click_state.button_down = false;
+    ptp_force_click_state.tracked_contact_id = 0;
+    ptp_force_click_state.filtered_z = 0;
+    ptp_force_click_state.press_stable_frames = 0;
+    ptp_force_click_state.release_stable_frames = 0;
+    msg->button_mask = 0;
+}
+
+static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger_count) {
+    int tracked_index = -1;
+    bool was_button_down = ptp_force_click_state.button_down;
+    uint8_t tracked_confidence = 0;
+    static uint32_t debug_counter = 0;
+    bool should_log_sample = false;
+
+    msg->button_mask = 0;
+    debug_counter++;
+    should_log_sample = (debug_counter % 64U) == 0U;
+
+    if ((current_tp_mode != PTP_MODE) || (active_finger_count != 1)) {
+        if (should_log_sample) {
+            // ESP_LOGI(TAG,
+            //          "PTP force click bypass: mode=%u active_fingers=%d threshold_level=%u",
+            //          current_tp_mode,
+            //          active_finger_count,
+            //          ptp_button_press_threshold);
+        }
+        ptp_reset_force_click(msg);
+        return;
+    }
+
+    for (int id = 0; id < 5; id++) {
+        if (msg->fingers[id].tip_switch != 0) {
+            tracked_index = id;
+            tracked_confidence = msg->fingers[id].confidence;
+            break;
+        }
+    }
+
+    if (tracked_index < 0) {
+        // if (should_log_sample) {
+        //     ESP_LOGI(TAG, "PTP force click bypass: no active tip slot");
+        // }
+        ptp_reset_force_click(msg);
+        return;
+    }
+
+    uint8_t raw_z = msg->fingers[tracked_index].pressure_z;
+    uint8_t press_threshold = ptp_map_button_press_threshold(ptp_button_press_threshold);
+    uint8_t release_threshold = (press_threshold > 12) ? (press_threshold - 12) : press_threshold;
+    uint8_t effective_z;
+
+    if (!ptp_force_click_state.tracking_contact ||
+        (ptp_force_click_state.tracked_contact_id != (uint8_t)tracked_index)) {
+        ptp_force_click_state.tracking_contact = true;
+        ptp_force_click_state.button_down = false;
+        ptp_force_click_state.tracked_contact_id = (uint8_t)tracked_index;
+        ptp_force_click_state.filtered_z = raw_z;
+        ptp_force_click_state.press_stable_frames = 0;
+        ptp_force_click_state.release_stable_frames = 0;
+        msg->button_mask = 0;
+        // ESP_LOGI(TAG,
+        //          "PTP force click tracking: id=%d raw_z=%u press=%u release=%u conf=%u level=%u",
+        //          tracked_index,
+        //          raw_z,
+        //          press_threshold,
+        //          release_threshold,
+        //          tracked_confidence,
+        //          ptp_button_press_threshold);
+        return;
+    }
+
+    ptp_force_click_state.filtered_z = (uint8_t)(((uint16_t)(ptp_force_click_state.filtered_z * 3U) + raw_z + 2U) / 4U);
+    effective_z = (raw_z > ptp_force_click_state.filtered_z) ? raw_z : ptp_force_click_state.filtered_z;
+
+    // if (should_log_sample) {
+    //     ESP_LOGI(TAG,
+    //              "PTP force click sample: id=%d raw_z=%u filtered_z=%u effective_z=%u press=%u release=%u conf=%u down=%u",
+    //              tracked_index,
+    //              raw_z,
+    //              ptp_force_click_state.filtered_z,
+    //              effective_z,
+    //              press_threshold,
+    //              release_threshold,
+    //              tracked_confidence,
+    //              ptp_force_click_state.button_down ? 1U : 0U);
+    // }
+
+    if (!ptp_force_click_state.button_down) {
+        if (effective_z >= press_threshold) {
+            if (ptp_force_click_state.press_stable_frames < FORCE_CLICK_PRESS_STABLE_FRAMES) {
+                ptp_force_click_state.press_stable_frames++;
+            }
+            if (ptp_force_click_state.press_stable_frames >= FORCE_CLICK_PRESS_STABLE_FRAMES) {
+                ptp_force_click_state.button_down = true;
+                ptp_force_click_state.release_stable_frames = 0;
+                // ESP_LOGI(TAG,
+                //          "PTP force click down: id=%d raw_z=%u filtered_z=%u press=%u release=%u conf=%u level=%u",
+                //          tracked_index,
+                //          raw_z,
+                //          ptp_force_click_state.filtered_z,
+                //          press_threshold,
+                //          release_threshold,
+                //          tracked_confidence,
+                //          ptp_button_press_threshold);
+            }
+        } else {
+            ptp_force_click_state.press_stable_frames = 0;
+        }
+    } else {
+        if (ptp_force_click_state.filtered_z <= release_threshold) {
+            if (ptp_force_click_state.release_stable_frames < FORCE_CLICK_RELEASE_STABLE_FRAMES) {
+                ptp_force_click_state.release_stable_frames++;
+            }
+            if (ptp_force_click_state.release_stable_frames >= FORCE_CLICK_RELEASE_STABLE_FRAMES) {
+                ptp_force_click_state.button_down = false;
+                ptp_force_click_state.press_stable_frames = 0;
+                // ESP_LOGI(TAG,
+                //          "PTP force click up: id=%d raw_z=%u filtered_z=%u press=%u release=%u conf=%u level=%u",
+                //          tracked_index,
+                //          raw_z,
+                //          ptp_force_click_state.filtered_z,
+                //          press_threshold,
+                //          release_threshold,
+                //          tracked_confidence,
+                //          ptp_button_press_threshold);
+            }
+        } else {
+            ptp_force_click_state.release_stable_frames = 0;
+        }
+    }
+
+    msg->button_mask = ptp_force_click_state.button_down ? 0x01 : 0x00;
+
+    if (!was_button_down && ptp_force_click_state.button_down) {
+        cs40l25_surface_trigger_click();
+    }
+}
 
 void update_simulated_scan_time(tp_multi_msg_t *msg) {
     int64_t now = esp_timer_get_time();
@@ -244,6 +413,7 @@ void i2c_queue_task(void *arg) {
                 //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
                 // }
 
+                ptp_update_force_click_button(&tp_msg, active_finger_count);
                 tp_msg.actual_count = (active_finger_count > 0) ? active_finger_count : 1;
                 xQueueOverwrite(tp_queue, &tp_msg);
                 // ESP_DRAM_LOGI(TAG, "%d %d %d %d",watchdog_x, watchdog_y, watchdog_tip_switch, global_scan_time);

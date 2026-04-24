@@ -8,6 +8,7 @@
 #include "tinyusb.h"
 
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "I2C/SUB_DEV/sub_dev.h"
 #include "I2C/I2C_handle.h"
 
@@ -28,7 +29,7 @@
 #define TAG "SurfaceTouch"
 
 void app_main(void) {
-    
+
     esp_reset_reason_t reason = esp_reset_reason();
 
     tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
@@ -62,6 +63,8 @@ void app_main(void) {
     irq_func_btn_init();
 
     touchpad_init();
+
+    cs40l25_surface_init();
 
     sub_dev_init();
 
@@ -114,12 +117,12 @@ void app_main(void) {
             xTaskCreatePinnedToCore(usbhid_task, "usbhid_task", 4096, NULL, 13, NULL, 0);
 
             while (1) {
-                tud_task(); 
-                vTaskDelay(1); 
+                tud_task();
+                vTaskDelay(1);
             }
 
             break;
-            
+
     }
 
 }

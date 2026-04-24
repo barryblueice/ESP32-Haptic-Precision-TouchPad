@@ -359,6 +359,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
                         threshold = 0x03;
                     }
                     ptp_button_press_threshold_data[0] = threshold;
+                    ptp_button_press_threshold = threshold;
                 }
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL] &&
@@ -368,6 +369,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
                         intensity = 0x04;
                     }
                     ptp_haptic_intensity_data[0] = intensity;
+                    ptp_haptic_click_intensity = intensity;
                 }
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_VAL] &&

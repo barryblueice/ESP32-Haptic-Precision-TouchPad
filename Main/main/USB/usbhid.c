@@ -17,6 +17,7 @@
 #include "math.h"
 
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "SYS/hid_msg.h"
 
@@ -99,8 +100,6 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
 }
 
 static uint8_t ptp_input_mode = 0x00;
-static uint8_t button_press_threshold = 0x02;
-static uint8_t haptic_click_intensity = 0x02;
 static portMUX_TYPE usb_ptp_tx_lock = portMUX_INITIALIZER_UNLOCKED;
 static ptp_report_t usb_pending_ptp_report = {0};
 static ptp_report_t usb_in_flight_ptp_report = {0};
@@ -211,11 +210,11 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             return 256;
         }
         if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-            buffer[0] = button_press_threshold;
+            buffer[0] = ptp_button_press_threshold;
             return 1;
         }
         if (report_id == REPORTID_HAPTIC_INTENSITY) {
-            buffer[0] = haptic_click_intensity;
+            buffer[0] = ptp_haptic_click_intensity;
             return 1;
         }
         if (report_id == REPORTID_HAPTIC_WAVEFORM_LIST) {
@@ -277,32 +276,32 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-        button_press_threshold = payload[0];
-        if (button_press_threshold < 0x01) {
-            button_press_threshold = 0x01;
-        } else if (button_press_threshold > 0x03) {
-            button_press_threshold = 0x03;
+        ptp_button_press_threshold = payload[0];
+        if (ptp_button_press_threshold < 0x01) {
+            ptp_button_press_threshold = 0x01;
+        } else if (ptp_button_press_threshold > 0x03) {
+            ptp_button_press_threshold = 0x03;
         }
 
         ESP_LOGI(TAG,
                  "Button press threshold SET_FEATURE: instance=%u raw=0x%02X threshold=%u",
                  instance,
                  payload[0],
-                 button_press_threshold);
+                 ptp_button_press_threshold);
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_INTENSITY) {
-        haptic_click_intensity = payload[0];
-        if (haptic_click_intensity > 0x04) {
-            haptic_click_intensity = 0x04;
+        ptp_haptic_click_intensity = payload[0];
+        if (ptp_haptic_click_intensity > 0x04) {
+            ptp_haptic_click_intensity = 0x04;
         }
 
         ESP_LOGI(TAG,
                  "Haptic click SET_FEATURE: instance=%u raw=0x%02X enabled=%s intensity=%u",
                  instance,
                  payload[0],
-                 haptic_click_intensity > 0 ? "true" : "false",
-                 haptic_click_intensity);
+                 ptp_haptic_click_intensity > 0 ? "true" : "false",
+                 ptp_haptic_click_intensity);
     }
 
     if (report_type == HID_REPORT_TYPE_OUTPUT && effective_report_id == REPORTID_HAPTIC_MANUAL_TRIGGER) {
@@ -321,6 +320,12 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
                  retrigger_period_ms,
                  cutoff_time_ms,
                  payload_size);
+
+        cs40l25_surface_trigger_manual(waveform,
+                                       intensity,
+                                       repeat_count,
+                                       retrigger_period_ms,
+                                       cutoff_time_ms);
     }
 
     if (buffer[0] == REPORTID_DFU_CMD) {
