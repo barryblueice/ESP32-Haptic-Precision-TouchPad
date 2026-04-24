@@ -219,6 +219,7 @@ void i2c_queue_task(void *arg) {
                         watchdog_x = tp_msg.fingers[id].x;
                         watchdog_y = tp_msg.fingers[id].y;
                         watchdog_tip_switch = tp_msg.fingers[id].tip_switch;
+                        global_scan_time = tp_msg.scan_time;
 
                     } else {
                         tp_msg.fingers[id].x = history_x[id];
