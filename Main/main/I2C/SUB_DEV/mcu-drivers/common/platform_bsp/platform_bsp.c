@@ -40,17 +40,17 @@ FILE *coverage_file = NULL;
 FILE *bridge_write_file = NULL;
 FILE *bridge_read_file = NULL;
 
-static esp_err_t bsp_ensure_isr_service(void)
-{
-    esp_err_t ret = gpio_install_isr_service(0);
+// static esp_err_t bsp_ensure_isr_service(void)
+// {
+//     esp_err_t ret = gpio_install_isr_service(0);
 
-    if ((ret == ESP_OK) || (ret == ESP_ERR_INVALID_STATE))
-    {
-        return ESP_OK;
-    }
+//     if ((ret == ESP_OK) || (ret == ESP_ERR_INVALID_STATE))
+//     {
+//         return ESP_OK;
+//     }
 
-    return ret;
-}
+//     return ret;
+// }
 
 static void IRAM_ATTR bsp_dut_alert_isr(void *arg)
 {
@@ -346,11 +346,11 @@ uint32_t bsp_register_gpio_cb(uint32_t gpio_id, bsp_callback_t cb, void *cb_arg)
         return BSP_STATUS_FAIL;
     }
 
-    if (bsp_ensure_isr_service() != ESP_OK)
-    {
-        ESP_LOGE(TAG, "failed to install GPIO ISR service");
-        return BSP_STATUS_FAIL;
-    }
+    // if (bsp_ensure_isr_service() != ESP_OK)
+    // {
+    //     ESP_LOGE(TAG, "failed to install GPIO ISR service");
+    //     return BSP_STATUS_FAIL;
+    // }
 
     gpio_config(&int_conf);
 
