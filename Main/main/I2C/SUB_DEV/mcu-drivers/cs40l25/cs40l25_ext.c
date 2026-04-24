@@ -64,11 +64,11 @@ uint32_t cs40l25_get_halo_heartbeat(cs40l25_t *driver, uint32_t *hb)
     }
     else if (driver->state == CS40L25_STATE_CAL_POWER_UP)
     {
-        ret = regmap_read_fw_control(cp, driver->fw_info, CS40L25_SYM_FIRMWARE_HALO_HEARTBEAT, hb);
+        ret = regmap_read_fw_control(cp, driver->fw_info, CS40L25_CAL_SYM_FIRMWARE_HALO_HEARTBEAT, hb);
     }
     else if (driver->state == CS40L25_STATE_DSP_POWER_UP)
     {
-        ret = regmap_read_fw_control(cp, driver->fw_info, CS40L25_CAL_SYM_FIRMWARE_HALO_HEARTBEAT, hb);
+        ret = regmap_read_fw_control(cp, driver->fw_info, CS40L25_SYM_FIRMWARE_HALO_HEARTBEAT, hb);
     }
 
     return ret;
