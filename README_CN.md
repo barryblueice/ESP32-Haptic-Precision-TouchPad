@@ -61,6 +61,7 @@
   - [ ] 物理按键支持（左键 & 右键）
   - [x] 添加新的HID端口以支持Mouse Mode兼容<br>
         （对于部分不支持PTP的老系统/BIOS可用，例如Windows 7/Windows XP）
+  - [x] PTP模拟Mouse Mode支持
   - [x] 2.4G无线模式支持
     - [x] 与上代项目[ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)兼容
   - [x] 蓝牙无线模式支持

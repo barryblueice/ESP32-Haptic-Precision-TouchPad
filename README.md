@@ -61,6 +61,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
   - [ ] Physical Buttons Support (left click & right click)
   - [x] Add a new HID port to support Mouse Mode compatibility.<br>
         (available for some old systems/BIOS that doesn't support PTP, like Windows 7)
+  - [x] PTP Simulated Mouse Mode Support
   - [x] 2.4G wireless mode support
       - [x] Compatible with product from project [ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)
   - [x] Bluetooth wireless mode support
