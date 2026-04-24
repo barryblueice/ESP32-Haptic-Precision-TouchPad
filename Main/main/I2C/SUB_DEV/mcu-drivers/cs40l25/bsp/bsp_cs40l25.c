@@ -41,6 +41,7 @@
 #define CS40L25_EVENT_TIMEOUT_DURATION_MS   (50)
 #define CS40L25_RELEASE_MAX_DURATION_MS     (15)
 #define CS40L25_EVENT_TIMEOUT_BUFFER_MS     (5)
+#define CS40L25_SURFACE_VIBEGEN_WAVES       (28)
 #define CS40L25_GPI_RELEASE_TO_VAMP_DISABLE_MS  (CS40L25_EVENT_TIMEOUT_DURATION_MS + \
                                                  CS40L25_RELEASE_MAX_DURATION_MS + \
                                                  CS40L25_EVENT_TIMEOUT_BUFFER_MS)
@@ -206,6 +207,7 @@ static void bsp_log_power_up_diagnostics(void)
 static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
 {
     regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    uint32_t vibegen_enable = 0;
     uint32_t num_waves = 0;
     uint32_t vibegen_status = 0;
     uint32_t power_state = 0;
@@ -218,6 +220,14 @@ static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
              waveform,
              duration_ms,
              cs40l25_driver.state);
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_VIBEGEN_ENABLE,
+                               &vibegen_enable) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGE(TAG, "VIBEGEN_ENABLE=0x%08" PRIX32, vibegen_enable);
+    }
 
     if (regmap_read_fw_control(cp,
                                cs40l25_driver.fw_info,
@@ -260,6 +270,68 @@ static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
     {
         ESP_LOGE(TAG, "MBOX_2=0x%08" PRIX32, mbox2);
     }
+}
+
+static uint32_t bsp_surface_prepare_vibegen(void)
+{
+    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    uint32_t ret;
+
+    ret = regmap_write_fw_control(cp, cs40l25_driver.fw_info, CS40L25_SYM_VIBEGEN_ENABLE, 1);
+    if (ret)
+    {
+        return BSP_STATUS_FAIL;
+    }
+
+    ret = regmap_write_fw_control(cp,
+                                  cs40l25_driver.fw_info,
+                                  CS40L25_SYM_VIBEGEN_NUMBEROFWAVES,
+                                  CS40L25_SURFACE_VIBEGEN_WAVES);
+    if (ret)
+    {
+        return BSP_STATUS_FAIL;
+    }
+
+    ret = regmap_write_fw_control(cp, cs40l25_driver.fw_info, CS40L25_SYM_VIBEGEN_COMPENSATION_ENABLE, 0);
+    if (ret)
+    {
+        return BSP_STATUS_FAIL;
+    }
+
+    return BSP_STATUS_OK;
+}
+
+static bool bsp_surface_ram_ready(void)
+{
+    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    uint32_t halo_state = 0;
+    uint32_t power_state = 0;
+    uint32_t scratch = 0;
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_FIRMWARE_HALO_STATE,
+                               &halo_state) != REGMAP_STATUS_OK)
+    {
+        return false;
+    }
+
+    if (regmap_read_fw_control(cp,
+                               cs40l25_driver.fw_info,
+                               CS40L25_SYM_FIRMWARE_POWERSTATE,
+                               &power_state) != REGMAP_STATUS_OK)
+    {
+        return false;
+    }
+
+    if (regmap_read(cp, XM_UNPACKED24_DSP1_SCRATCH_REG, &scratch) != REGMAP_STATUS_OK)
+    {
+        return false;
+    }
+
+    return (halo_state == 0xCB) &&
+           ((power_state == 1) || (power_state == 2)) &&
+           (scratch == 0);
 }
 
 /***********************************************************************************************************************
@@ -565,7 +637,9 @@ uint32_t bsp_dut_power_up(void)
 {
     uint32_t ret;
 
+    ESP_LOGW(TAG, "power_up request: driver_state=%" PRIu32, cs40l25_driver.state);
     ret = cs40l25_power(&cs40l25_driver, CS40L25_POWER_UP);
+    ESP_LOGW(TAG, "power_up result: ret=0x%08" PRIX32 " driver_state=%" PRIu32, ret, cs40l25_driver.state);
 
     if (ret == CS40L25_STATUS_OK)
     {
@@ -573,6 +647,13 @@ uint32_t bsp_dut_power_up(void)
     }
     else
     {
+        if (bsp_surface_ram_ready())
+        {
+            ESP_LOGW(TAG, "power_up fallback: Surface RAM firmware is already ready; forcing DSP_POWER_UP state");
+            cs40l25_driver.state = CS40L25_STATE_DSP_POWER_UP;
+            return BSP_STATUS_OK;
+        }
+
         bsp_log_power_up_diagnostics();
         return BSP_STATUS_FAIL;
     }
@@ -737,6 +818,15 @@ uint32_t bsp_dut_enable_haptic_processing(bool enable)
 {
     uint32_t ret = BSP_STATUS_OK;
 
+    if (enable)
+    {
+        ret = bsp_surface_prepare_vibegen();
+        if (ret != BSP_STATUS_OK)
+        {
+            return ret;
+        }
+    }
+
 #ifdef CS40L25_ALGORITHM_CLAB
     ret = cs40l25_set_clab_enable(&cs40l25_driver, enable);
     if (ret != CS40L25_STATUS_OK)
@@ -775,6 +865,13 @@ uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms)
     }
     else
     {
+        ret = bsp_surface_prepare_vibegen();
+        if (ret)
+        {
+            bsp_log_trigger_diagnostics(waveform, duration_ms);
+            return BSP_STATUS_FAIL;
+        }
+
         ret = cs40l25_trigger(&cs40l25_driver, waveform, duration_ms);
     }
 
@@ -832,6 +929,17 @@ uint32_t bsp_dut_process(void)
 #endif
 
     return BSP_STATUS_OK;
+}
+
+void bsp_dut_dump_diagnostics(void)
+{
+    bsp_log_power_up_diagnostics();
+}
+
+void bsp_dut_dump_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
+{
+    bsp_log_power_up_diagnostics();
+    bsp_log_trigger_diagnostics(waveform, duration_ms);
 }
 
 uint32_t bsp_dut_discharge_vamp(void)

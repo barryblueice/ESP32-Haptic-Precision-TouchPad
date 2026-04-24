@@ -774,7 +774,12 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
          * before reporting failure.
          */
         ret = regmap_read_fw_control(cp, driver->fw_info, halo_symbol, &temp_reg_val);
-        if ((ret != REGMAP_STATUS_OK) || (temp_reg_val != 0xCB))
+        /*
+         * SurfaceTouchpadHaptic_2.9.139 reaches 0xC9 with a live heartbeat
+         * and clear DSP scratch after boot. Accept it temporarily so the
+         * recovered firmware can be probed with real triggers.
+         */
+        if ((ret != REGMAP_STATUS_OK) || ((temp_reg_val != 0xCB) && (temp_reg_val != 0xC9)))
         {
             return CS40L25_STATUS_FAIL;
         }
@@ -785,6 +790,17 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
     if (temp_reg_val)
     {
         return CS40L25_STATUS_FAIL;
+    }
+
+    if (driver->state == CS40L25_STATE_DSP_STANDBY)
+    {
+        /*
+         * Surface RAM firmware can report a live HALO state while POWERSTATE
+         * is still BLANK. Nudge the firmware into the active control path
+         * before the caller starts sending trigger mailbox commands.
+         */
+        (void)regmap_write(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_4_REG, CS40L25_POWERCONTROL_WAKEUP);
+        bsp_driver_if_g->set_timer(BSP_TIMER_DURATION_5MS, NULL, NULL);
     }
 
     return CS40L25_STATUS_OK;

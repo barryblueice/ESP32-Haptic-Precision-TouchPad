@@ -71,6 +71,8 @@ uint32_t bsp_dut_update_haptic_config(uint8_t config_index);
 uint32_t bsp_dut_enable_haptic_processing(bool enable);
 uint32_t bsp_dut_dynamic_calibrate(void);
 uint32_t bsp_dut_process(void);
+void bsp_dut_dump_diagnostics(void);
+void bsp_dut_dump_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms);
 
 uint32_t bsp_dut_enable_vamp(bool is_enabled);
 uint32_t bsp_dut_discharge_vamp(void);
