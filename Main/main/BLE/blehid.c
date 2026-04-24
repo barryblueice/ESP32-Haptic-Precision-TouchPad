@@ -27,7 +27,7 @@ void ble_hid_task(void *arg) {
 
                     if (current_tp_mode == MOUSE_MODE) {
                         #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                            mouse_msg_t report = {0};
+                            mouse_hid_report_t report = {0};
 
                             parse_ptp_simulated_mouse_report(&tp_msg, &report);
 
@@ -36,10 +36,23 @@ void ble_hid_task(void *arg) {
                                 conn_id, 
                                 HID_RPT_ID_MOUSE_IN,
                                 HID_REPORT_TYPE_INPUT, 
-                                sizeof(mouse_hid_report_t), 
+                                sizeof(mouse_hid_report_t),
                                 (uint8_t *)&report
 
                             );
+
+                            if (ptp_simulated_mouse_click_needs_release()) {
+                                mouse_hid_report_t release_report = {0};
+
+                                hid_dev_send_report(
+                                    hidd_le_env.gatt_if,
+                                    conn_id,
+                                    HID_RPT_ID_MOUSE_IN,
+                                    HID_REPORT_TYPE_INPUT,
+                                    sizeof(mouse_hid_report_t),
+                                    (uint8_t *)&release_report
+                                );
+                            }
                             
                         #endif
                     } else {
