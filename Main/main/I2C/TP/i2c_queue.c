@@ -215,12 +215,6 @@ void i2c_queue_task(void *arg) {
 
                         active_finger_count++;
 
-                        watchdog_id = id;
-                        watchdog_x = tp_msg.fingers[id].x;
-                        watchdog_y = tp_msg.fingers[id].y;
-                        watchdog_tip_switch = tp_msg.fingers[id].tip_switch;
-                        global_scan_time = tp_msg.scan_time;
-
                     } else {
                         tp_msg.fingers[id].x = history_x[id];
                         tp_msg.fingers[id].y = history_y[id];
@@ -237,11 +231,22 @@ void i2c_queue_task(void *arg) {
                             raw_x_history[id][h] = 0; raw_y_history[id][h] = 0;
                         }
                     }
+
+                    // watchdog_id = 0;
+                    // watchdog_x = tp_msg.fingers[watchdog_id].x;
+                    // watchdog_y = tp_msg.fingers[watchdog_id].y;
+                    // watchdog_tip_switch = tp_msg.fingers[watchdog_id].tip_switch;
+                    // global_scan_time = tp_msg.scan_time;
+
                 }
 
+                // if (watchdog_tip_switch == 0x01) {
+                //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
+                // }
+
                 tp_msg.actual_count = (active_finger_count > 0) ? active_finger_count : 1;
-                watchdog_refresh(active_finger_count > 0);
                 xQueueOverwrite(tp_queue, &tp_msg);
+                // ESP_DRAM_LOGI(TAG, "%d %d %d %d",watchdog_x, watchdog_y, watchdog_tip_switch, global_scan_time);
 
             } else {
                 #if CONFIG_REVERT_X_Y

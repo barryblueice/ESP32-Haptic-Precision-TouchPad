@@ -5,6 +5,8 @@
 #include "SYS/hid_msg.h"
 #include "esp_timer.h"
 
+#define WATCHDOG_TIMEOUT_US (100*1000)
+
 extern i2c_master_bus_handle_t bus_handle;
 extern i2c_master_dev_handle_t dev_handle;
 extern i2c_master_dev_handle_t dev_haptic_motor_handle;

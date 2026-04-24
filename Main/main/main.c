@@ -115,7 +115,7 @@ void app_main(void) {
 
             while (1) {
                 tud_task(); 
-                vTaskDelay(pdMS_TO_TICKS(1)); 
+                vTaskDelay(1); 
             }
 
             break;

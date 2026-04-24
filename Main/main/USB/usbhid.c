@@ -101,9 +101,99 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
 static uint8_t ptp_input_mode = 0x00;
 static uint8_t button_press_threshold = 0x02;
 static uint8_t haptic_click_intensity = 0x02;
+static portMUX_TYPE usb_ptp_tx_lock = portMUX_INITIALIZER_UNLOCKED;
+static ptp_report_t usb_pending_ptp_report = {0};
+static ptp_report_t usb_in_flight_ptp_report = {0};
+static bool usb_has_pending_ptp_report = false;
+static bool usb_ptp_report_in_flight = false;
+
+static void usb_ptp_clear_tx(void) {
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_has_pending_ptp_report = false;
+    usb_ptp_report_in_flight = false;
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+}
+
+static void usb_ptp_kick_tx(void) {
+    ptp_report_t report = {0};
+    bool should_send = false;
+
+    if (current_tp_mode != PTP_MODE) {
+        usb_ptp_clear_tx();
+        return;
+    }
+
+    if (!tud_mounted()) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    if (!usb_ptp_report_in_flight && usb_has_pending_ptp_report) {
+        report = usb_pending_ptp_report;
+        usb_in_flight_ptp_report = report;
+        usb_has_pending_ptp_report = false;
+        usb_ptp_report_in_flight = true;
+        should_send = true;
+    }
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+
+    if (!should_send) {
+        return;
+    }
+
+    if (!tud_hid_n_report(1, REPORTID_TOUCHPAD, &report, sizeof(report))) {
+        taskENTER_CRITICAL(&usb_ptp_tx_lock);
+        usb_ptp_report_in_flight = false;
+        if (!usb_has_pending_ptp_report) {
+            usb_pending_ptp_report = report;
+            usb_has_pending_ptp_report = true;
+        }
+        taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+    }
+}
+
+static void usb_ptp_enqueue_report(const ptp_report_t *report) {
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_pending_ptp_report = *report;
+    usb_has_pending_ptp_report = true;
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+
+    usb_ptp_kick_tx();
+}
 
 static uint16_t read_le16(uint8_t const *buffer) {
     return (uint16_t)buffer[0] | ((uint16_t)buffer[1] << 8);
+}
+
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const* report, uint16_t len) {
+    (void)report;
+    (void)len;
+
+    if (instance != 1) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_ptp_report_in_flight = false;
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+}
+
+void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t report_type, uint8_t const* report, uint16_t xferred_bytes) {
+    (void)report_type;
+    (void)report;
+    (void)xferred_bytes;
+
+    if (instance != 1) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_ptp_report_in_flight = false;
+    if (!usb_has_pending_ptp_report) {
+        usb_pending_ptp_report = usb_in_flight_ptp_report;
+        usb_has_pending_ptp_report = true;
+    }
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
 }
 
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
@@ -272,6 +362,7 @@ void usb_mount_task(void *arg) {
 
                     default:
                         ESP_LOGW(TAG, "Mode 0x%02X detected: Activating Default Mouse Mode", ptp_input_mode);
+                        usb_ptp_clear_tx();
                         current_tp_mode = MOUSE_MODE;
                         touchpad_mode_set(false);
                         break;
@@ -294,6 +385,7 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg) {
 
         case TINYUSB_EVENT_DETACHED:
             xEventGroupClearBits(usb_event_group, USB_CONNECTED);
+            usb_ptp_clear_tx();
             ptp_input_mode = 0x00;
             break;
 
@@ -324,7 +416,9 @@ void usbhid_task(void *arg) {
     mouse_msg_t mouse_msg;
 
     while (1) {
-        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
+        usb_ptp_kick_tx();
+
+        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, 1);
 
         if (xActivatedMember == mouse_queue) {
             if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
@@ -363,11 +457,13 @@ void usbhid_task(void *arg) {
 
                     parse_ptp_report(&tp_msg, &report);
 
-                    if (tud_hid_n_ready(1)) {
-                        tud_hid_n_report(1, REPORTID_TOUCHPAD, &report, sizeof(report));
-                    }
+                    usb_ptp_enqueue_report(&report);
                 }
             }
+        }
+
+        if (xActivatedMember != NULL) {
+            vTaskDelay(1);
         }
     }
 }
