@@ -45,8 +45,8 @@ int get_battery_percentage();
 
 void charging_state_monitor_task(void *pvParameters);
 
-esp_err_t mp28167_set_vref_mv(i2c_master_dev_handle_t dev, uint16_t mv);
-float mp28167_get_vref_mv(i2c_master_dev_handle_t dev);
+esp_err_t mp28167_set_vref_mv(uint16_t mv);
+float mp28167_get_vref_mv();
 
 extern i2c_master_dev_handle_t sub_dev_mp28167_handle;
 extern i2c_master_dev_handle_t sub_dev_ip5x09_handle;
