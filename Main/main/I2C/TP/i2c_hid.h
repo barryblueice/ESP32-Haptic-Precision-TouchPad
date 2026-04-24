@@ -13,6 +13,8 @@ extern uint16_t global_scan_time;
 
 extern uint16_t watchdog_x;
 extern uint16_t watchdog_y;
+extern uint16_t watchdog_id;
+extern uint16_t watchdog_tip_switch;
 
 void touchpad_init(void);
 void read_touch_task(void *pvParameters);

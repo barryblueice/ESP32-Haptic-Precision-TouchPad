@@ -118,6 +118,8 @@ void i2c_queue_task(void *arg) {
 
                     tp_msg.fingers[id].contact_id = id;
 
+                    tp_msg.fingers[id].tip_switch = finger_status & 0x01;
+
                     if (finger_status & 0x01) {
 
                         bool is_confident = true;
@@ -209,16 +211,18 @@ void i2c_queue_task(void *arg) {
                         last_raw_x[id] = rx;
                         last_raw_y[id] = ry;
 
-                        tp_msg.fingers[id].tip_switch = 1;
-
                         tp_msg.fingers[id].pressure_z = pressure_z;
 
                         active_finger_count++;
 
+                        watchdog_id = id;
+                        watchdog_x = tp_msg.fingers[id].x;
+                        watchdog_y = tp_msg.fingers[id].y;
+                        watchdog_tip_switch = tp_msg.fingers[id].tip_switch;
+
                     } else {
                         tp_msg.fingers[id].x = history_x[id];
                         tp_msg.fingers[id].y = history_y[id];
-                        tp_msg.fingers[id].tip_switch = 0;
                         tp_msg.fingers[id].confidence = last_confidence[id];
 
                         slot_active[id] = false;
