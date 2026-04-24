@@ -98,10 +98,8 @@ typedef struct __attribute__((packed)) {
     uint8_t buttons;
     int8_t  x;
     int8_t  y;
-    #if CONFIG_PTP_SIMULATED_MOUSE_MODE
     int8_t  wheel;
     int8_t  pan;
-    #endif
 } mouse_hid_report_t;
 
 typedef struct __attribute__((packed)) {

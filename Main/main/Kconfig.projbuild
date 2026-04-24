@@ -74,7 +74,6 @@ menu "TouchPad Configuration"
         choice
             prompt "Mouse Mode Select"
             default ORI_MOUSE_MODE
-            depends on BLE_ENABLE_MOUSE_MODE
             help
             Select Mouse Mode what you used.
 
