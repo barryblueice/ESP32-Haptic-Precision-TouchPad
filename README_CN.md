@@ -37,6 +37,15 @@
 
 <img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/687e8a38-8139-482d-ae35-d18f7c7536c9" />
 
+
+ - **系统应用:**
+
+<img width="541" height="832" alt="image" src="https://github.com/user-attachments/assets/747130b1-241c-4b78-aa1a-21d87529cdef" />
+
+<img width="430" height="225" alt="image" src="https://github.com/user-attachments/assets/6c938d22-ceb2-4b2d-9e3d-539477b2a283" />
+
+<img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" />
+
 ***
 
 # TODO List:
@@ -56,10 +65,14 @@
   - [x] 添加新的HID端口以支持Mouse Mode兼容<br>
         （对于部分不支持PTP的老系统/BIOS可用，例如Windows 7/Windows XP）
   - [x] 2.4G无线模式支持
+    - [x] 与上代项目[ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)兼容
   - [x] 蓝牙无线模式支持
     - [x] Mouse Mode
     - [ ] PTP Mode
   - [x] 压感调整原理破解
+    - [x] CS40L25 SDK适配
+    - [x] ROM模式下触发振动
+    - [ ] 通过特定wavefrom固件获取更好的震感反馈
 
 # 目前仍然存在的问题：
  - 在蓝牙模式下，Windows接受到并正确解析了HID报文，但是手势处于不可用的状态。只有很小一部分手势例如四指轻触可以识别到。<br>
