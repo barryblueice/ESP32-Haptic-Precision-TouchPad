@@ -1,5 +1,6 @@
 #include "SYS/hid_msg.h"
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "esp_log.h"
 
 #include <math.h>
@@ -81,6 +82,10 @@ static struct {
     bool suppress_tap_until_release;
     bool click_release_pending;
 } m_state = {0};
+
+static uint8_t simulated_click_button_from_x(float x) {
+    return (x < (float)CLICK_REGION_SPLIT_X) ? 0x01 : 0x02;
+}
 
 static int find_active_finger(const tp_multi_msg_t *msg, int start_index) {
     for (int i = start_index; i < 5; i++) {
@@ -187,13 +192,17 @@ static void handle_tap_release(const tp_multi_msg_t *msg, mouse_hid_report_t *ou
         m_state.drag_active = false;
         m_state.has_last_single_tap = false;
     } else if (!m_state.tap_moved && elapsed <= TAP_MAX_TIME && buttons != 0) {
+        if (m_state.tap_max_count == 1) {
+            buttons = simulated_click_button_from_x(m_state.tap_start_x);
+        }
         out_report->buttons = buttons;
         m_state.click_release_pending = true;
+        cs40l25_surface_trigger_click();
 
         if (m_state.tap_max_count == 1) {
             if (m_state.has_last_single_tap &&
                 scan_time_delta(msg->scan_time, m_state.last_single_tap_time) <= DOUBLE_TAP_MAX_INTERVAL) {
-                out_report->buttons = 0x01;
+                out_report->buttons = simulated_click_button_from_x(m_state.tap_start_x);
             }
             m_state.has_last_single_tap = true;
             m_state.last_single_tap_time = msg->scan_time;

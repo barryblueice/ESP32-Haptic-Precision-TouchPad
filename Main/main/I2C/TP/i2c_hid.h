@@ -10,6 +10,7 @@
 #define CLICK_LIGHT_WEIGHT_THERHOLD  80
 #define CLICK_MIDIUM_WEIGHT_THERHOLD 100
 #define CLICK_STRONG_WEIGHT_THERHOLD 130
+#define CLICK_REGION_SPLIT_X         1150
 
 extern i2c_master_bus_handle_t bus_handle;
 extern i2c_master_dev_handle_t dev_handle;

@@ -114,7 +114,12 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     debug_counter++;
     should_log_sample = (debug_counter % 64U) == 0U;
 
-    if ((current_tp_mode != PTP_MODE) || (active_finger_count != 1)) {
+    if ((active_finger_count != 1) ||
+        ((current_tp_mode != PTP_MODE)
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+         && (current_tp_mode != MOUSE_MODE)
+#endif
+        )) {
         if (should_log_sample) {
             // ESP_LOGI(TAG,
             //          "PTP force click bypass: mode=%u active_fingers=%d threshold_level=%u",
@@ -227,7 +232,15 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         }
     }
 
-    msg->button_mask = ptp_force_click_state.button_down ? 0x01 : 0x00;
+    if (ptp_force_click_state.button_down) {
+        if (current_tp_mode == PTP_MODE) {
+            msg->button_mask = 0x01;
+        } else {
+            msg->button_mask = (msg->fingers[tracked_index].x < CLICK_REGION_SPLIT_X) ? 0x01 : 0x02;
+        }
+    } else {
+        msg->button_mask = 0x00;
+    }
 
     if (!was_button_down && ptp_force_click_state.button_down) {
         cs40l25_surface_trigger_click();
