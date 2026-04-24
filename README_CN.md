@@ -27,26 +27,23 @@
 
  - **触摸板PCB:**
 
-<img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/5b6872fd-f712-44a8-9dfa-73c060ba20b4" />
+<img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/5b6872fd-f712-44a8-9dfa-73c060ba20b4" /><br>
 
-<img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/549454a9-c079-4c0e-b090-b5cde212baf4" />
+<img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/549454a9-c079-4c0e-b090-b5cde212baf4" /><br>
 
  - **2.4G接收器:**
 
-<img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/70d6ea15-2a78-452b-8408-d5225be4694f" />
+<img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/70d6ea15-2a78-452b-8408-d5225be4694f" /><br>
 
-<img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/687e8a38-8139-482d-ae35-d18f7c7536c9" />
-
+<img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/687e8a38-8139-482d-ae35-d18f7c7536c9" /><br>
 
  - **系统应用:**
 
-<img width="541" height="832" alt="image" src="https://github.com/user-attachments/assets/747130b1-241c-4b78-aa1a-21d87529cdef" />
+<img width="541" height="832" alt="image" src="https://github.com/user-attachments/assets/747130b1-241c-4b78-aa1a-21d87529cdef" /><br>
 
-<img width="430" height="225" alt="image" src="https://github.com/user-attachments/assets/6c938d22-ceb2-4b2d-9e3d-539477b2a283" />
+<img width="430" height="225" alt="image" src="https://github.com/user-attachments/assets/6c938d22-ceb2-4b2d-9e3d-539477b2a283" /><br>
 
-<img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" />
-
-***
+<img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" /><br>
 
 # TODO List:
   ## 硬件:
