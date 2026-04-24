@@ -27,6 +27,7 @@
 const uint8_t generic_hid_report_descriptor[] = {
     TUD_HID_REPORT_DESC_GENERIC_INOUT(64)
 };
+
 const uint8_t mouse_hid_report_descriptor[] = {
 
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
