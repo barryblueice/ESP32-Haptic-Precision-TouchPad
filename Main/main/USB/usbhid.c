@@ -461,9 +461,5 @@ void usbhid_task(void *arg) {
                 }
             }
         }
-
-        if (xActivatedMember != NULL) {
-            vTaskDelay(1);
-        }
     }
 }

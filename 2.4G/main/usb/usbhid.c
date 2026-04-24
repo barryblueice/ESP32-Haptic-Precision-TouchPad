@@ -36,6 +36,9 @@ static const char *TAG = "USB_HID_TP";
 #define REPORTID_LEGACY_FEATURE         0x07  // Input Mode
 #define REPORTID_FUNCTION_SWITCH        0x08
 #define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
+#define REPORTID_HAPTIC_INTENSITY       0x41
+#define REPORTID_HAPTIC_WAVEFORM_LIST   0x42
+#define REPORTID_HAPTIC_MANUAL_TRIGGER  0x43
 
 #define TPD_REPORT_ID 0x01
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
@@ -98,6 +101,100 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
     return NULL;
 }
 
+static uint8_t ptp_input_mode = 0x00;
+static uint8_t button_press_threshold = 0x02;
+static uint8_t haptic_click_intensity = 0x02;
+static portMUX_TYPE usb_ptp_tx_lock = portMUX_INITIALIZER_UNLOCKED;
+static haptic_ptp_report_t usb_pending_ptp_report = {0};
+static haptic_ptp_report_t usb_in_flight_ptp_report = {0};
+static bool usb_has_pending_ptp_report = false;
+static bool usb_ptp_report_in_flight = false;
+
+static void usb_ptp_clear_tx(void) {
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_has_pending_ptp_report = false;
+    usb_ptp_report_in_flight = false;
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+}
+
+static void usb_ptp_kick_tx(void) {
+    haptic_ptp_report_t report = {0};
+    bool should_send = false;
+
+    if (current_mode != TP_PTP_MODE) {
+        usb_ptp_clear_tx();
+        return;
+    }
+
+    if (!tud_mounted()) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    if (!usb_ptp_report_in_flight && usb_has_pending_ptp_report) {
+        report = usb_pending_ptp_report;
+        usb_in_flight_ptp_report = report;
+        usb_has_pending_ptp_report = false;
+        usb_ptp_report_in_flight = true;
+        should_send = true;
+    }
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+
+    if (!should_send) {
+        return;
+    }
+
+    if (!tud_hid_n_report(1, REPORTID_HAPTIC_TOUCHPAD, &report, sizeof(report))) {
+        taskENTER_CRITICAL(&usb_ptp_tx_lock);
+        usb_ptp_report_in_flight = false;
+        if (!usb_has_pending_ptp_report) {
+            usb_pending_ptp_report = report;
+            usb_has_pending_ptp_report = true;
+        }
+        taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+    }
+}
+
+static void usb_ptp_enqueue_report(const haptic_ptp_report_t *report) {
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_pending_ptp_report = *report;
+    usb_has_pending_ptp_report = true;
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+
+    usb_ptp_kick_tx();
+}
+
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const* report, uint16_t len) {
+    (void)report;
+    (void)len;
+
+    if (instance != 1) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_ptp_report_in_flight = false;
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+}
+
+void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t report_type, uint8_t const* report, uint16_t xferred_bytes) {
+    (void)report_type;
+    (void)report;
+    (void)xferred_bytes;
+
+    if (instance != 1) {
+        return;
+    }
+
+    taskENTER_CRITICAL(&usb_ptp_tx_lock);
+    usb_ptp_report_in_flight = false;
+    if (!usb_has_pending_ptp_report) {
+        usb_pending_ptp_report = usb_in_flight_ptp_report;
+        usb_has_pending_ptp_report = true;
+    }
+    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+}
+
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
     if (report_type == HID_REPORT_TYPE_FEATURE) {
         if (report_id == REPORTID_LEGACY_FEATURE) {
@@ -121,14 +218,14 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             return 256;
         }
         if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-            buffer[0] = 0x02;
+            buffer[0] = button_press_threshold;
             return 1;
         }
-        if (report_id == 0x41) {
-            buffer[0] = 0x02;
+        if (report_id == REPORTID_HAPTIC_INTENSITY) {
+            buffer[0] = haptic_click_intensity;
             return 1;
         }
-        if (report_id == 0x42) {
+        if (report_id == REPORTID_HAPTIC_WAVEFORM_LIST) {
             uint16_t *waveforms = (uint16_t *)&buffer[0];
             waveforms[0] = 4097; // Instance 3
             waveforms[1] = 4098; // Instance 4
@@ -148,23 +245,70 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
     return 0;
 }
 
-static uint8_t ptp_input_mode = 0x00;
-
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const *buffer, uint16_t bufsize) {
-    (void)instance;
+    if (bufsize == 0 || buffer == NULL) {
+        ESP_LOGW(TAG, "SET_REPORT empty: instance=%u report_id=0x%02X type=%u", instance, report_id, report_type);
+        return;
+    }
 
-    uint8_t command = buffer[0];
+    uint8_t effective_report_id = report_id;
+    uint8_t const *payload = buffer;
+    uint16_t payload_size = bufsize;
 
-    if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORTID_LEGACY_FEATURE) {
-        if (bufsize >= 1) {
-            ptp_input_mode = buffer[0];
+    if (report_id == 0 && bufsize > 1) {
+        switch (buffer[0]) {
+            case REPORTID_HAPTIC_FEATURE:
+            case REPORTID_LEGACY_FEATURE:
+            case REPORTID_BUTTON_PRESS_THRESHOLD:
+            case REPORTID_HAPTIC_INTENSITY:
+            case REPORTID_HAPTIC_MANUAL_TRIGGER:
+                effective_report_id = buffer[0];
+                payload = &buffer[1];
+                payload_size = bufsize - 1;
+                break;
+
+            default:
+                break;
         }
     }
 
-    if (report_type == HID_REPORT_TYPE_FEATURE && report_id == REPORTID_HAPTIC_FEATURE) {
-        if (bufsize >= 1) {
-            ptp_input_mode = buffer[0];
+    uint8_t command = buffer[0];
+
+    if (payload_size == 0) {
+        ESP_LOGW(TAG, "SET_REPORT empty payload: instance=%u report_id=0x%02X type=%u", instance, effective_report_id, report_type);
+        return;
+    }
+
+    if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_LEGACY_FEATURE) {
+        if (payload_size >= 1) {
+            ptp_input_mode = payload[0];
         }
+    }
+
+    if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_FEATURE) {
+        if (payload_size >= 1) {
+            ptp_input_mode = payload[0];
+        }
+    }
+
+    if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
+        button_press_threshold = payload[0];
+        if (button_press_threshold < 0x01) {
+            button_press_threshold = 0x01;
+        } else if (button_press_threshold > 0x03) {
+            button_press_threshold = 0x03;
+        }
+    }
+
+    if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_INTENSITY) {
+        haptic_click_intensity = payload[0];
+        if (haptic_click_intensity > 0x04) {
+            haptic_click_intensity = 0x04;
+        }
+    }
+
+    if (report_type == HID_REPORT_TYPE_OUTPUT && effective_report_id == REPORTID_HAPTIC_MANUAL_TRIGGER) {
+        ESP_LOGI(TAG, "Haptic signal OUTPUT: instance=%u len=%u", instance, payload_size);
     }
 
     if (command == REPORTID_DFU_CMD) {
@@ -212,6 +356,7 @@ void usb_mount_task(void *arg) {
 
                 default:
                     ESP_LOGW(TAG, "Mode 0x%02X detected: Activating Default Mouse Mode", ptp_input_mode);
+                    usb_ptp_clear_tx();
                     current_mode = TP_MOUSE_MODE;
                     break;
                 }
@@ -234,6 +379,7 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg) {
 
         case TINYUSB_EVENT_DETACHED:
             xEventGroupClearBits(usb_event_group, USB_CONNECTED);
+            usb_ptp_clear_tx();
             ptp_input_mode = 0x00;
             break;
 
@@ -296,7 +442,9 @@ void usbhid_task(void *arg) {
     mouse_hid_report_t mouse_report;
 
     while (1) {
-        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
+        usb_ptp_kick_tx();
+
+        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, 1);
 
         if (xActivatedMember == mouse_queue) {
             if (xQueueReceive(mouse_queue, &mouse_report, 0)) {
@@ -306,9 +454,7 @@ void usbhid_task(void *arg) {
             }
         } else if (xActivatedMember == haptic_tp_queue) {
             if (xQueueReceive(haptic_tp_queue, &haptic_tp_report, 0)) {
-                if (tud_hid_n_ready(1)) {
-                    tud_hid_n_report(1, REPORTID_HAPTIC_TOUCHPAD, &haptic_tp_report, sizeof(haptic_tp_report));
-                }
+                usb_ptp_enqueue_report(&haptic_tp_report);
             }
         } else if (xActivatedMember == legacy_tp_queue) {
             if (xQueueReceive(legacy_tp_queue, &legacy_tp_report, 0)) {
