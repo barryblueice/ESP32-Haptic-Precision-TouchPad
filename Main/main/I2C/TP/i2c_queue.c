@@ -82,14 +82,14 @@ static ptp_force_click_state_t ptp_force_click_state = {0};
 static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
     switch (threshold_level) {
         case 1:
-            return CLICK_LIGHT_WEIGHT_THERHOLD;
+            return click_light_weight_threshold;
 
         case 3:
-            return CLICK_STRONG_WEIGHT_THERHOLD;
+            return click_strong_weight_threshold;
 
         case 2:
         default:
-            return CLICK_MIDIUM_WEIGHT_THERHOLD;
+            return click_midium_weight_threshold;
     }
 }
 
@@ -106,7 +106,7 @@ static void ptp_reset_force_click(tp_multi_msg_t *msg) {
 static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger_count) {
     int tracked_index = -1;
     bool was_button_down = ptp_force_click_state.button_down;
-    uint8_t tracked_confidence = 0;
+    // uint8_t tracked_confidence = 0;
     static uint32_t debug_counter = 0;
     bool should_log_sample = false;
 
@@ -134,7 +134,7 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     for (int id = 0; id < 5; id++) {
         if (msg->fingers[id].tip_switch != 0) {
             tracked_index = id;
-            tracked_confidence = msg->fingers[id].confidence;
+            // tracked_confidence = msg->fingers[id].confidence;
             break;
         }
     }

@@ -8,14 +8,75 @@
 #include "sdkconfig.h"
 
 #include "I2C/I2C_handle.h"
+#include "NVS/nvs_handle.h"
 
 #define TAG "I2C_CMD"
+
+#define NVS_KEY_CLICK_LIGHT  "clk_th_l"
+#define NVS_KEY_CLICK_MID    "clk_th_m"
+#define NVS_KEY_CLICK_STRONG "clk_th_s"
 
 i2c_master_bus_handle_t bus_handle;
 i2c_master_dev_handle_t dev_handle;
 i2c_master_dev_handle_t dev_haptic_motor_handle;
 
 bool global_watchdog_start = false;
+uint8_t click_light_weight_threshold = CLICK_LIGHT_WEIGHT_DEFAULT;
+uint8_t click_midium_weight_threshold = CLICK_MIDIUM_WEIGHT_DEFAULT;
+uint8_t click_strong_weight_threshold = CLICK_STRONG_WEIGHT_DEFAULT;
+
+static uint8_t clamp_click_threshold(int32_t value, uint8_t fallback) {
+    if ((value < 1) || (value > 255)) {
+        return fallback;
+    }
+
+    return (uint8_t)value;
+}
+
+static void load_click_threshold_from_nvs(const char *key, uint8_t *target, uint8_t fallback) {
+    int32_t value = 0;
+    esp_err_t err;
+
+    err = nvs_read_int(key, &value);
+    if (err == ESP_OK) {
+        *target = clamp_click_threshold(value, fallback);
+        if (*target != (uint8_t)value) {
+            nvs_write_int(key, *target);
+        }
+        return;
+    }
+
+    *target = fallback;
+    nvs_write_int(key, fallback);
+}
+
+void click_thresholds_load_from_nvs(void) {
+    load_click_threshold_from_nvs(NVS_KEY_CLICK_LIGHT,
+                                 &click_light_weight_threshold,
+                                 CLICK_LIGHT_WEIGHT_DEFAULT);
+    load_click_threshold_from_nvs(NVS_KEY_CLICK_MID,
+                                 &click_midium_weight_threshold,
+                                 CLICK_MIDIUM_WEIGHT_DEFAULT);
+    load_click_threshold_from_nvs(NVS_KEY_CLICK_STRONG,
+                                 &click_strong_weight_threshold,
+                                 CLICK_STRONG_WEIGHT_DEFAULT);
+
+    if (click_midium_weight_threshold < click_light_weight_threshold) {
+        click_midium_weight_threshold = click_light_weight_threshold;
+        nvs_write_int(NVS_KEY_CLICK_MID, click_midium_weight_threshold);
+    }
+
+    if (click_strong_weight_threshold < click_midium_weight_threshold) {
+        click_strong_weight_threshold = click_midium_weight_threshold;
+        nvs_write_int(NVS_KEY_CLICK_STRONG, click_strong_weight_threshold);
+    }
+
+    ESP_LOGI(TAG,
+             "Click thresholds loaded: light=%u medium=%u strong=%u",
+             click_light_weight_threshold,
+             click_midium_weight_threshold,
+             click_strong_weight_threshold);
+}
 
 esp_err_t tp_read(uint16_t reg, uint8_t *data, size_t len) {
     uint8_t reg_buf[2] = { reg & 0xFF, reg >> 8 };

@@ -7,9 +7,9 @@
 
 #define WATCHDOG_TIMEOUT_US (100 * 1000)
 
-#define CLICK_LIGHT_WEIGHT_THERHOLD  80
-#define CLICK_MIDIUM_WEIGHT_THERHOLD 100
-#define CLICK_STRONG_WEIGHT_THERHOLD 130
+#define CLICK_LIGHT_WEIGHT_DEFAULT  80
+#define CLICK_MIDIUM_WEIGHT_DEFAULT 100
+#define CLICK_STRONG_WEIGHT_DEFAULT 130
 #define CLICK_REGION_SPLIT_X         1150
 
 extern i2c_master_bus_handle_t bus_handle;
@@ -24,10 +24,14 @@ extern uint16_t watchdog_x;
 extern uint16_t watchdog_y;
 extern uint16_t watchdog_id;
 extern uint16_t watchdog_tip_switch;
+extern uint8_t click_light_weight_threshold;
+extern uint8_t click_midium_weight_threshold;
+extern uint8_t click_strong_weight_threshold;
 
 void touchpad_init(void);
 void read_touch_task(void *pvParameters);
 esp_err_t touchpad_mode_set(bool is_ptp_mode);
+void click_thresholds_load_from_nvs(void);
 void i2c_queue_task(void *arg);
 void watchdog_refresh(bool touch_active);
 void watchdog_timeout_callback(void* arg);
