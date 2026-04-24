@@ -13,7 +13,8 @@
 
 #include "wireless/wireless.h"
 
-QueueHandle_t tp_queue = NULL;
+QueueHandle_t legacy_tp_queue = NULL;
+QueueHandle_t haptic_tp_queue = NULL;
 QueueHandle_t mouse_queue = NULL;
 QueueSetHandle_t main_queue_set = NULL;
 volatile uint8_t current_mode = MOUSE_MODE;
@@ -21,25 +22,30 @@ volatile uint8_t current_mode = MOUSE_MODE;
 static const char *TAG = "WIFI_QUENE";
 
 static void wifi_now_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len) {
-    if (len < sizeof(input_mode_t)) return;
+    if (len < sizeof(wireless_input_mode_t)) return;
 
     wireless_msg_t *msg = (wireless_msg_t *)data;
 
     switch (msg->type) {
         case MOUSE_MODE:
-            if (len >= sizeof(input_mode_t) + sizeof(mouse_hid_report_t)) {
+            if (len >= sizeof(wireless_input_mode_t) + sizeof(mouse_hid_report_t)) {
                 xQueueSend(mouse_queue, &msg->payload.mouse, 0);
             }
             break;
 
-        case PTP_MODE:
-            if (len >= sizeof(input_mode_t) + sizeof(ptp_report_t)) {
-                xQueueSend(tp_queue, &msg->payload.ptp, 0);
+        case LEGACY_PTP_MODE:
+            if (len >= sizeof(wireless_input_mode_t) + sizeof(legacy_ptp_report_t)) {
+                xQueueSend(legacy_tp_queue, &msg->payload.legacy_ptp, 0);
+            }
+            break;
+        case HAPTIC_PTP_MODE:
+            if (len >= sizeof(wireless_input_mode_t) + sizeof(haptic_ptp_report_t)) {
+                xQueueSend(haptic_tp_queue, &msg->payload.haptic_ptp, 0);
             }
             break;
 
-        case VBUS_STATUS: 
-    
+        case VBUS_STATUS:
+
             gpio_set_level(GPIO_NUM_9, msg->payload.vbus.vbus_level);
             // ESP_DRAM_LOGI(TAG, "Remote VBUS Level: %d", msg->payload.vbus.vbus_level);
             break;
@@ -72,7 +78,7 @@ void wifi_recieve_task_init() {
     gpio_config(&io_conf);
 
     gpio_set_level(GPIO_NUM_9, 1);
-    
+
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

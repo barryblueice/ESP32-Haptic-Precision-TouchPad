@@ -28,8 +28,8 @@ void parse_mac_from_config() {
     const char* mac_str = CONFIG_RECEIVER_MAC_ADDR;
     int values[6];
 
-    if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x", 
-               &values[0], &values[1], &values[2], 
+    if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x",
+               &values[0], &values[1], &values[2],
                &values[3], &values[4], &values[5]) == 6) {
         for (int i = 0; i < 6; ++i) {
             receiver_mac[i] = (uint8_t)values[i];
@@ -69,8 +69,8 @@ void wireless_wifi_init(void) {
     ESP_ERROR_CHECK(esp_now_add_peer(&peer));
 
     vbus_sem = xSemaphoreCreateBinary();
-    
-    
+
+
     esp_now_send(receiver_mac, (uint8_t *)&pkt, sizeof(pkt));
 
     xTaskCreatePinnedToCore(alive_heartbeat_task, "alive_heartbeat_task", 2048, NULL, 5, NULL, 0);
@@ -90,25 +90,25 @@ void wifi_send_task(void *arg) {
         if (xActivatedMember == mouse_queue) {
             if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
                 mouse_hid_report_t report = {0};
-                
+
                 parse_mouse_report(&mouse_msg, &report);
 
                 pkt.type = MOUSE_MODE;
                 pkt.payload.mouse = report;
                 esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
-                
+
             }
-        } 
+        }
         else if (xActivatedMember == tp_queue) {
             if (xQueueReceive(tp_queue, &tp_msg, 0)) {
                 if (current_tp_mode == MOUSE_MODE) {
-                        
+
                 } else {
                     ptp_report_t report = {0};
-                    
+
                     parse_ptp_report(&tp_msg, &report);
 
-                    pkt.type = PTP_MODE;
+                    pkt.type = WIRELESS_HAPTIC_PTP_MODE;
                     pkt.payload.ptp = report;
                     esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
                 }

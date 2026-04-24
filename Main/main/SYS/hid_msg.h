@@ -75,7 +75,8 @@ typedef enum {
     MOUSE_MODE = 0,
     PTP_MODE = 1,
     VBUS_STATUS = 2,
-    ALIVE_MODE = 3
+    ALIVE_MODE = 3,
+    WIRELESS_HAPTIC_PTP_MODE = 4
 } input_mode_t;
 
 typedef struct __attribute__((packed)) {

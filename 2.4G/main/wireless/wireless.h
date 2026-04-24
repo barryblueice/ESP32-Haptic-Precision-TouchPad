@@ -4,7 +4,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
-extern QueueHandle_t tp_queue;
+extern QueueHandle_t legacy_tp_queue;
+extern QueueHandle_t haptic_tp_queue;
 extern QueueHandle_t mouse_queue;
 extern QueueSetHandle_t main_queue_set;
 extern uint32_t last_seen_timestamp;
@@ -19,7 +20,7 @@ typedef struct {
     } fingers[5];
     uint8_t actual_count;
     uint8_t button_mask;
-} tp_multi_msg_t;
+} legacy_tp_multi_msg_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t buttons;
@@ -39,23 +40,43 @@ typedef struct __attribute__((packed)) {
 
 typedef enum {
     MOUSE_MODE = 0,
-    PTP_MODE = 1,
+    LEGACY_PTP_MODE = 1,
     VBUS_STATUS = 2,
-    ALIVE_MODE = 3
-} input_mode_t;
+    ALIVE_MODE = 3,
+    HAPTIC_PTP_MODE = 4,
+} wireless_input_mode_t;
+
+typedef enum {
+    TP_MOUSE_MODE = 0,
+    TP_PTP_MODE = 1
+} current_input_mode_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t tip_conf_id;  // Bit0:Conf, Bit1:Tip, Bit2-7:ID
-    uint16_t x;           
-    uint16_t y;           
-} finger_t;
+    uint16_t x;
+    uint16_t y;
+} legacy_finger_t;
 
 typedef struct __attribute__((packed)) {
-    finger_t fingers[5];   // 5 * 5 = 25 bytes
+    uint8_t tip_conf_id;  // Bit0:None, Bit1:Confidence, Bit2:Tip, Bit3:Confidence Tip
+    uint16_t x;
+    uint16_t y;
+    uint8_t pressure_z;
+} haptic_finger_t;
+
+typedef struct __attribute__((packed)) {
+    legacy_finger_t fingers[5];   // 5 * 5 = 25 bytes
     uint16_t scan_time;    // 2 bytes
     uint8_t contact_count; // 1 byte
     uint8_t buttons;       // 1 byte
-} ptp_report_t;
+} legacy_ptp_report_t;
+
+typedef struct __attribute__((packed)) {
+    haptic_finger_t fingers[5];   // 5 * 5 = 25 bytes
+    uint16_t scan_time;    // 2 bytes
+    uint8_t contact_count; // 1 byte
+    uint8_t buttons;       // 1 byte
+} haptic_ptp_report_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t buttons;
@@ -64,12 +85,13 @@ typedef struct __attribute__((packed)) {
 } mouse_hid_report_t;
 
 typedef struct __attribute__((packed)) {
-    input_mode_t type;
+    wireless_input_mode_t type;
     union {
-        mouse_hid_report_t mouse;
-        ptp_report_t       ptp;
-        vbus_msg_t         vbus;
-        alive_msg_t        alive;
+        mouse_hid_report_t        mouse;
+        legacy_ptp_report_t       legacy_ptp;
+        haptic_ptp_report_t       haptic_ptp;
+        vbus_msg_t                vbus;
+        alive_msg_t               alive;
     } payload;
 } wireless_msg_t;
 
