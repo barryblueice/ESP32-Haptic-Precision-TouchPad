@@ -28,6 +28,22 @@ const uint8_t generic_hid_report_descriptor[] = {
     TUD_HID_REPORT_DESC_GENERIC_INOUT(64)
 };
 
+#if CONFIG_LAST_GEN_DESC
+#define LOGICAL_X  0x26, 0x7F, 0x0D
+#define LOGICAL_Y  0x26, 0x6F, 0x08
+#define PHYSICAL_X 0x46, 0xF0, 0x01
+#define PHYSICAL_Y 0x46, 0x46, 0x01
+#define PHYSICAL_UNIT_EXPONENT 0x55, 0x0E
+#define PHYSICAL_UNIT 0x65, 0x13
+#else
+#define LOGICAL_X  0x26, 0xFA, 0x08
+#define LOGICAL_Y  0x26, 0xFC, 0x05
+#define PHYSICAL_X 0x46, 0x7D, 0x04
+#define PHYSICAL_Y 0x46, 0xFE, 0x02
+#define PHYSICAL_UNIT_EXPONENT 0x55, 0x0E
+#define PHYSICAL_UNIT 0x65, 0x11
+#endif
+
 const uint8_t mouse_hid_report_descriptor[] = {
 
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
@@ -91,13 +107,12 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
     // ---- X Axis ----
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
+    LOGICAL_X,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
-    0x55, 0x0E,             // UNIT_EXPONENT (-3)
-    0x65, 0x11,                      // UNIT (Centimeter)
+    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT
+    PHYSICAL_UNIT,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -105,11 +120,10 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
 
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
+    LOGICAL_Y,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -139,13 +153,12 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
     // ---- X Axis ----
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
+    LOGICAL_X,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
-    0x55, 0x0E,             // UNIT_EXPONENT (-3)
-    0x65, 0x11,                      // UNIT (Centimeter)
+    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT
+    PHYSICAL_UNIT,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -153,11 +166,10 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
 
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
+    LOGICAL_Y,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -188,12 +200,12 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
+    LOGICAL_X,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
-    0x55, 0x0E,             // UNIT_EXPONENT (-3)
-    0x65, 0x11,                      // UNIT (Centimeter)
+    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT
+    PHYSICAL_UNIT,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -201,11 +213,10 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
 
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
+    LOGICAL_Y,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -235,13 +246,12 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
     // ---- X Axis ----
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
+    LOGICAL_X,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
-    0x55, 0x0E,             // UNIT_EXPONENT (-3)
-    0x65, 0x11,                      // UNIT (Centimeter)
+    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT
+    PHYSICAL_UNIT,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -249,11 +259,10 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
 
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
+    LOGICAL_Y,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -284,12 +293,12 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                          // LOGICAL_MAXIMUM
+    LOGICAL_X,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                         // PHYSICAL_MAXIMUM
-    0x55, 0x0E,             // UNIT_EXPONENT (-3)
-    0x65, 0x11,                      // UNIT (Centimeter)
+    PHYSICAL_X,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_UNIT_EXPONENT,             // UNIT_EXPONENT
+    PHYSICAL_UNIT,                      // UNIT (Centimeter)
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -297,11 +306,10 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
 
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
-    0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                          // LOGICAL_MAXIMUM
+    LOGICAL_Y,                          // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                         // PHYSICAL_MAXIMUM
+    PHYSICAL_Y,                         // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
