@@ -37,6 +37,13 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 
 <img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/687e8a38-8139-482d-ae35-d18f7c7536c9" />
 
+ - **System Application:**
+
+<img width="541" height="832" alt="image" src="https://github.com/user-attachments/assets/747130b1-241c-4b78-aa1a-21d87529cdef" />
+
+<img width="430" height="225" alt="image" src="https://github.com/user-attachments/assets/6c938d22-ceb2-4b2d-9e3d-539477b2a283" />
+
+<img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" />
 ***
 
 # TODO List:
@@ -56,10 +63,14 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
   - [x] Add a new HID port to support Mouse Mode compatibility.<br>
         (available for some old systems/BIOS that doesn't support PTP, like Windows 7)
   - [x] 2.4G wireless mode support
+      - [x] Compatible with product from project [ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)
   - [x] Bluetooth wireless mode support
     - [x] Mouse Mode
     - [ ] PTP Mode
   - [x] Hacking on Haptic Sensitivity Adjustment Principle
+    - [x] CS40L25 SDK Support
+    - [x] ROM Vibrate
+    - [ ] Specific wavefrom firmware for better haptic feedback
 
 # Current Issues:
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
