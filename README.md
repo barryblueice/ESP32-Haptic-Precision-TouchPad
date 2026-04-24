@@ -44,6 +44,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 <img width="430" height="225" alt="image" src="https://github.com/user-attachments/assets/6c938d22-ceb2-4b2d-9e3d-539477b2a283" />
 
 <img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" />
+
 ***
 
 # TODO List:
