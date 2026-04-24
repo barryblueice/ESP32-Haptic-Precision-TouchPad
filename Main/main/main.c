@@ -70,6 +70,8 @@ void app_main(void) {
 
     nvs_init();
 
+    click_thresholds_load_from_nvs();
+
     esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
     if (nvs_err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to initialize NVS, storing default mode.");
