@@ -240,7 +240,9 @@ void i2c_queue_task(void *arg) {
                 }
 
                 tp_msg.actual_count = (active_finger_count > 0) ? active_finger_count : 1;
+                watchdog_refresh(active_finger_count > 0);
                 xQueueOverwrite(tp_queue, &tp_msg);
+
             } else {
                 #if CONFIG_REVERT_X_Y
                     mouse_msg.x = -(int8_t)tp_packet[4];
