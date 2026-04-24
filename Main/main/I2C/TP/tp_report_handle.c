@@ -129,6 +129,10 @@ static void update_tap_state(const tp_multi_msg_t *msg, int active_count, float 
 
     if (active_count > m_state.tap_max_count) {
         m_state.tap_max_count = active_count;
+        m_state.tap_start_time = msg->scan_time;
+        m_state.tap_start_x = centroid_x;
+        m_state.tap_start_y = centroid_y;
+        return;
     }
 
     float dx = centroid_x - m_state.tap_start_x;
@@ -252,6 +256,13 @@ void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_repor
 
     for (int i = first_active; i >= 0; i = find_active_finger(msg, i + 1)) {
         active_count++;
+    }
+
+    if (m_state.tap_active && active_count < m_state.tap_max_count) {
+        reset_move_state();
+        reset_scroll_state();
+        handle_tap_release(msg, out_report);
+        return;
     }
 
     if (active_count > 0) {
