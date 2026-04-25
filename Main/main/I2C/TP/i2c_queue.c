@@ -1,6 +1,7 @@
 #include "I2C/TP/i2c_hid.h"
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
@@ -28,6 +29,7 @@
 #define SCAN_INTERVAL_PER_FINGER 80
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
+#define FORCE_CLICK_MOVE_DEADZONE 45
 
 typedef enum {
     TOUCH_NONE = 0,
@@ -71,8 +73,15 @@ static bool slot_active[5] = {false};
 typedef struct {
     bool tracking_contact;
     bool button_down;
+    bool click_anchor_valid;
+    bool click_drag_unlocked;
+    bool last_position_valid;
     uint8_t tracked_contact_id;
     uint8_t filtered_z;
+    uint16_t click_anchor_x;
+    uint16_t click_anchor_y;
+    uint16_t last_position_x;
+    uint16_t last_position_y;
     uint8_t press_stable_frames;
     uint8_t release_stable_frames;
 } ptp_force_click_state_t;
@@ -96,11 +105,43 @@ static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
 static void ptp_reset_force_click(tp_multi_msg_t *msg) {
     ptp_force_click_state.tracking_contact = false;
     ptp_force_click_state.button_down = false;
+    ptp_force_click_state.click_anchor_valid = false;
+    ptp_force_click_state.click_drag_unlocked = false;
+    ptp_force_click_state.last_position_valid = false;
     ptp_force_click_state.tracked_contact_id = 0;
     ptp_force_click_state.filtered_z = 0;
+    ptp_force_click_state.click_anchor_x = 0;
+    ptp_force_click_state.click_anchor_y = 0;
+    ptp_force_click_state.last_position_x = 0;
+    ptp_force_click_state.last_position_y = 0;
     ptp_force_click_state.press_stable_frames = 0;
     ptp_force_click_state.release_stable_frames = 0;
     msg->button_mask = 0;
+}
+
+static void ptp_apply_force_click_deadzone(tp_multi_msg_t *msg, int tracked_index) {
+    uint16_t current_x = msg->fingers[tracked_index].x;
+    uint16_t current_y = msg->fingers[tracked_index].y;
+
+    if (!ptp_force_click_state.click_anchor_valid) {
+        ptp_force_click_state.click_anchor_valid = true;
+        ptp_force_click_state.click_drag_unlocked = false;
+        ptp_force_click_state.click_anchor_x = current_x;
+        ptp_force_click_state.click_anchor_y = current_y;
+    }
+
+    int dx = abs((int)current_x - (int)ptp_force_click_state.click_anchor_x);
+    int dy = abs((int)current_y - (int)ptp_force_click_state.click_anchor_y);
+
+    if (!ptp_force_click_state.click_drag_unlocked &&
+        dx <= FORCE_CLICK_MOVE_DEADZONE &&
+        dy <= FORCE_CLICK_MOVE_DEADZONE) {
+        msg->fingers[tracked_index].x = ptp_force_click_state.click_anchor_x;
+        msg->fingers[tracked_index].y = ptp_force_click_state.click_anchor_y;
+        return;
+    }
+
+    ptp_force_click_state.click_drag_unlocked = true;
 }
 
 static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger_count) {
@@ -151,6 +192,8 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     uint8_t press_threshold = ptp_map_button_press_threshold(ptp_button_press_threshold);
     uint8_t release_threshold = (press_threshold > 12) ? (press_threshold - 12) : press_threshold;
     uint8_t effective_z;
+    uint16_t current_x = msg->fingers[tracked_index].x;
+    uint16_t current_y = msg->fingers[tracked_index].y;
 
     if (!ptp_force_click_state.tracking_contact ||
         (ptp_force_click_state.tracked_contact_id != (uint8_t)tracked_index)) {
@@ -158,6 +201,13 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         ptp_force_click_state.button_down = false;
         ptp_force_click_state.tracked_contact_id = (uint8_t)tracked_index;
         ptp_force_click_state.filtered_z = raw_z;
+        ptp_force_click_state.click_anchor_valid = false;
+        ptp_force_click_state.click_drag_unlocked = false;
+        ptp_force_click_state.click_anchor_x = 0;
+        ptp_force_click_state.click_anchor_y = 0;
+        ptp_force_click_state.last_position_valid = true;
+        ptp_force_click_state.last_position_x = current_x;
+        ptp_force_click_state.last_position_y = current_y;
         ptp_force_click_state.press_stable_frames = 0;
         ptp_force_click_state.release_stable_frames = 0;
         msg->button_mask = 0;
@@ -195,6 +245,12 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
             }
             if (ptp_force_click_state.press_stable_frames >= FORCE_CLICK_PRESS_STABLE_FRAMES) {
                 ptp_force_click_state.button_down = true;
+                ptp_force_click_state.click_anchor_valid = true;
+                ptp_force_click_state.click_drag_unlocked = false;
+                ptp_force_click_state.click_anchor_x = ptp_force_click_state.last_position_valid ?
+                    ptp_force_click_state.last_position_x : current_x;
+                ptp_force_click_state.click_anchor_y = ptp_force_click_state.last_position_valid ?
+                    ptp_force_click_state.last_position_y : current_y;
                 ptp_force_click_state.release_stable_frames = 0;
                 // ESP_LOGI(TAG,
                 //          "PTP force click down: id=%d raw_z=%u filtered_z=%u press=%u release=%u conf=%u level=%u",
@@ -216,6 +272,8 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
             }
             if (ptp_force_click_state.release_stable_frames >= FORCE_CLICK_RELEASE_STABLE_FRAMES) {
                 ptp_force_click_state.button_down = false;
+                ptp_force_click_state.click_anchor_valid = false;
+                ptp_force_click_state.click_drag_unlocked = false;
                 ptp_force_click_state.press_stable_frames = 0;
                 // ESP_LOGI(TAG,
                 //          "PTP force click up: id=%d raw_z=%u filtered_z=%u press=%u release=%u conf=%u level=%u",
@@ -233,6 +291,8 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     }
 
     if (ptp_force_click_state.button_down) {
+        ptp_apply_force_click_deadzone(msg, tracked_index);
+
         if (current_tp_mode == PTP_MODE) {
             msg->button_mask = 0x01;
         } else {
@@ -240,6 +300,11 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         }
     } else {
         msg->button_mask = 0x00;
+        if (ptp_force_click_state.press_stable_frames == 0) {
+            ptp_force_click_state.last_position_valid = true;
+            ptp_force_click_state.last_position_x = current_x;
+            ptp_force_click_state.last_position_y = current_y;
+        }
     }
 
     if (!was_button_down && ptp_force_click_state.button_down) {
