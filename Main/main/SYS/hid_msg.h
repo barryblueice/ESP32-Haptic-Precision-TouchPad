@@ -1,6 +1,7 @@
 #ifndef HID_MSG_H
 #define HID_MSG_H
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -122,5 +123,10 @@ extern int32_t current_mode;
 extern uint8_t current_tp_mode;
 extern uint8_t ptp_button_press_threshold;
 extern uint8_t ptp_haptic_click_intensity;
+
+uint8_t ptp_haptic_click_intensity_clamp(uint8_t intensity);
+uint32_t ptp_haptic_click_duration_ms_from_intensity(uint8_t intensity);
+void ptp_haptic_click_intensity_set(uint8_t intensity, bool persist);
+void ptp_haptic_click_intensity_load_from_nvs(void);
 
 #endif

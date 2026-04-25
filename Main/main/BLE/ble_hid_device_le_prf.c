@@ -1,5 +1,6 @@
 #include "BLE/hidd_le_prf_int.h"
 #include "esp_gatt_common_api.h"
+#include <inttypes.h>
 #include <string.h>
 #include "esp_log.h"
 
@@ -239,6 +240,7 @@ static esp_gatts_attr_db_t hidd_le_gatt_db[HIDD_LE_IDX_NB] = {
 
 void hidd_le_prepare_gatt_table() {
     #if CONFIG_BLE_ENABLE_PTP_MODE
+        ptp_haptic_intensity_data[0] = ptp_haptic_click_intensity_clamp(ptp_haptic_click_intensity);
         hidd_le_gatt_db[HIDD_LE_IDX_REPORT_MAP_VAL].att_desc.length = ble_ptp_hid_report_len;
         hidd_le_gatt_db[HIDD_LE_IDX_REPORT_MAP_VAL].att_desc.value = (uint8_t *)ble_ptp_hid_report_descriptor;
     #else
@@ -364,12 +366,14 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL] &&
                     param->write.len >= 1) {
-                    uint8_t intensity = param->write.value[0];
-                    if (intensity > 0x04) {
-                        intensity = 0x04;
-                    }
+                    uint8_t intensity = ptp_haptic_click_intensity_clamp(param->write.value[0]);
                     ptp_haptic_intensity_data[0] = intensity;
-                    ptp_haptic_click_intensity = intensity;
+                    ptp_haptic_click_intensity_set(intensity, true);
+                    ESP_LOGI(TAG,
+                             "BLE haptic intensity write raw=0x%02X intensity=%u duration_ms=%" PRIu32,
+                             param->write.value[0],
+                             ptp_haptic_click_intensity,
+                             ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
                 }
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_VAL] &&

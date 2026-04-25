@@ -1,4 +1,5 @@
 #include "esp_log.h"
+#include <inttypes.h>
 #include "soc/rtc_cntl_reg.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
@@ -291,17 +292,17 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_INTENSITY) {
-        ptp_haptic_click_intensity = payload[0];
-        if (ptp_haptic_click_intensity > 0x04) {
-            ptp_haptic_click_intensity = 0x04;
-        }
+        uint8_t intensity = ptp_haptic_click_intensity_clamp(payload[0]);
+
+        ptp_haptic_click_intensity_set(intensity, true);
 
         ESP_LOGI(TAG,
-                 "Haptic click SET_FEATURE: instance=%u raw=0x%02X enabled=%s intensity=%u",
+                 "Haptic click SET_FEATURE: instance=%u raw=0x%02X enabled=%s intensity=%u duration_ms=%" PRIu32,
                  instance,
                  payload[0],
                  ptp_haptic_click_intensity > 0 ? "true" : "false",
-                 ptp_haptic_click_intensity);
+                 ptp_haptic_click_intensity,
+                 ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
     }
 
     if (report_type == HID_REPORT_TYPE_OUTPUT && effective_report_id == REPORTID_HAPTIC_MANUAL_TRIGGER) {

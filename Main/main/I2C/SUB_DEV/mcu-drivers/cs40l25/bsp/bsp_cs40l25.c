@@ -814,6 +814,43 @@ uint32_t bsp_dut_update_haptic_config(uint8_t config_index)
     }
 }
 
+uint32_t bsp_dut_apply_haptic_mapping(uint8_t press_waveform,
+                                      uint8_t release_waveform,
+                                      uint16_t control_gain,
+                                      uint16_t gpi_gain,
+                                      bool gpio_enable)
+{
+    uint32_t ret;
+    cs40l25_haptic_config_t config = {0};
+
+    if (control_gain > 0x03FFU)
+    {
+        control_gain = 0x03FFU;
+    }
+
+    if (gpi_gain > 0x03FFU)
+    {
+        gpi_gain = 0x03FFU;
+    }
+
+    config.index_button_press[0] = press_waveform;
+    config.index_button_release[0] = release_waveform;
+    config.gain_control.control_gain = control_gain;
+    config.gain_control.gpi_gain = gpi_gain;
+    config.gpio_enable.gpio_enable = gpio_enable ? 1U : 0U;
+
+    ret = cs40l25_update_haptic_config(&cs40l25_driver, &config);
+
+    if (ret == CS40L25_STATUS_OK)
+    {
+        return BSP_STATUS_OK;
+    }
+    else
+    {
+        return BSP_STATUS_FAIL;
+    }
+}
+
 uint32_t bsp_dut_enable_haptic_processing(bool enable)
 {
     uint32_t ret = BSP_STATUS_OK;
@@ -852,6 +889,48 @@ uint32_t bsp_dut_enable_haptic_processing(bool enable)
 #endif
 
     return ret;
+}
+
+uint32_t bsp_dut_set_click_compensation(bool f0_enable, bool redc_enable)
+{
+    uint32_t ret = cs40l25_set_click_compensation_enable(&cs40l25_driver, f0_enable, redc_enable);
+
+    if (ret == CS40L25_STATUS_OK)
+    {
+        return BSP_STATUS_OK;
+    }
+    else
+    {
+        return BSP_STATUS_FAIL;
+    }
+}
+
+uint32_t bsp_dut_set_clab_enable(bool enable)
+{
+    uint32_t ret = cs40l25_set_clab_enable(&cs40l25_driver, enable);
+
+    if (ret == CS40L25_STATUS_OK)
+    {
+        return BSP_STATUS_OK;
+    }
+    else
+    {
+        return BSP_STATUS_FAIL;
+    }
+}
+
+uint32_t bsp_dut_set_clab_peak_amplitude(uint32_t amplitude)
+{
+    uint32_t ret = cs40l25_set_clab_peak_amplitude(&cs40l25_driver, amplitude);
+
+    if (ret == CS40L25_STATUS_OK)
+    {
+        return BSP_STATUS_OK;
+    }
+    else
+    {
+        return BSP_STATUS_FAIL;
+    }
 }
 
 uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms)
