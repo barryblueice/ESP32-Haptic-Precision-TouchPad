@@ -70,7 +70,11 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
   - [x] Hacking on Haptic Sensitivity Adjustment Principle
     - [x] CS40L25 SDK Support
     - [x] ROM Vibrate
-    - [ ] Specific wavefrom firmware for better haptic feedback
+    - [x] Specific wavefrom firmware for better haptic feedback (Experimental Feature)
+  - [x] Haptic Support
+    - [x] Click Sensitive Support (Experimental Feature)
+    - [x] Haptic click and intensity adjustment (Experimental Feature)
+    - [ ] Haptic feedback and intensity control (Tentative Feature)
 
 # Current Issues:
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
