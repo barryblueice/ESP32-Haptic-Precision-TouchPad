@@ -30,8 +30,6 @@
 
 void app_main(void) {
 
-    esp_reset_reason_t reason = esp_reset_reason();
-
     tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
     mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
     tp_data_queue = xQueueCreate(1, 64);
