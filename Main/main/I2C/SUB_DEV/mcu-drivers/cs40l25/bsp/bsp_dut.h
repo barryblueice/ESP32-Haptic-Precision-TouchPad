@@ -68,7 +68,15 @@ uint32_t bsp_dut_stop_i2s(void);
 uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms);
 uint32_t bsp_dut_has_processed(bool *has_processed);
 uint32_t bsp_dut_update_haptic_config(uint8_t config_index);
+uint32_t bsp_dut_apply_haptic_mapping(uint8_t press_waveform,
+                                      uint8_t release_waveform,
+                                      uint16_t control_gain,
+                                      uint16_t gpi_gain,
+                                      bool gpio_enable);
 uint32_t bsp_dut_enable_haptic_processing(bool enable);
+uint32_t bsp_dut_set_click_compensation(bool f0_enable, bool redc_enable);
+uint32_t bsp_dut_set_clab_enable(bool enable);
+uint32_t bsp_dut_set_clab_peak_amplitude(uint32_t amplitude);
 uint32_t bsp_dut_dynamic_calibrate(void);
 uint32_t bsp_dut_process(void);
 void bsp_dut_dump_diagnostics(void);

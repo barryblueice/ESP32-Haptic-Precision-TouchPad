@@ -30,6 +30,8 @@
 
 void app_main(void) {
 
+    esp_reset_reason_t reason = esp_reset_reason();
+
     tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
     mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
     tp_data_queue = xQueueCreate(1, 64);
@@ -40,19 +42,36 @@ void app_main(void) {
     xQueueAddToSet(mouse_queue, main_queue_set);
     xQueueAddToSet(tp_queue, main_queue_set);
 
+    switch (reason) {
+        case ESP_RST_SW:
+        case ESP_RST_PANIC:
+        case ESP_RST_INT_WDT:
+        case ESP_RST_TASK_WDT:
+        case ESP_RST_WDT:
+        case ESP_RST_DEEPSLEEP:
+            ESP_LOGW(TAG, "RST Reason: %d, reset queue",reason);
+            xQueueReset(tp_queue);
+            xQueueReset(mouse_queue);
+            break;
+        default:
+            ESP_LOGW(TAG, "RST Reason: %d, will not reset queue",reason);
+            break;
+    }
+
     gpio_init();
 
     irq_func_btn_init();
 
     touchpad_init();
 
-    cs40l25_surface_init();
-
-    sub_dev_init();
-
     nvs_init();
 
     click_thresholds_load_from_nvs();
+    ptp_haptic_click_intensity_load_from_nvs();
+
+    cs40l25_surface_init();
+
+    sub_dev_init();
 
     esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
     if (nvs_err != ESP_OK) {

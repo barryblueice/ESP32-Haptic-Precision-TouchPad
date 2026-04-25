@@ -15,7 +15,8 @@
 
 #define HAPTIC_BOOT_SETTLE_MS 100
 #define HAPTIC_INIT_DELAY_MS  250
-#define HAPTIC_CLICK_DURATION_MS 50
+#define HAPTIC_CLICK_WAVEFORM  3
+#define HAPTIC_MANUAL_DEFAULT_DURATION_MS 50
 #define HAPTIC_DEFAULT_GAP_MS 50
 #define HAPTIC_ROM_TEST_SETTLE_MS 500
 
@@ -61,19 +62,6 @@ static void haptic_pump_driver_events(uint32_t duration_ms)
         (void)bsp_dut_process();
         vTaskDelay(pdMS_TO_TICKS(10));
     }
-}
-
-static uint8_t haptic_click_waveform_from_intensity(uint8_t intensity)
-{
-    if (intensity < 1U) {
-        return 0U;
-    }
-
-    if (intensity > 4U) {
-        intensity = 4U;
-    }
-
-    return intensity;
 }
 
 static void cs40l25_surface_run_rom_test(void)
@@ -136,11 +124,11 @@ static bool cs40l25_surface_bringup(void)
 
 static void cs40l25_surface_handle_click(void)
 {
-    uint8_t waveform = haptic_click_waveform_from_intensity(ptp_haptic_click_intensity);
+    uint32_t duration_ms = ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity);
     uint32_t ret;
 
-    if (waveform == 0U) {
-        ESP_LOGI(TAG, "skip click haptic: intensity=%u", ptp_haptic_click_intensity);
+    if (duration_ms == 0U) {
+        // ESP_LOGI(TAG, "skip click haptic: intensity=%u", ptp_haptic_click_intensity);
         return;
     }
 
@@ -149,10 +137,15 @@ static void cs40l25_surface_handle_click(void)
         return;
     }
 
-    ret = bsp_dut_trigger_haptic(waveform, HAPTIC_CLICK_DURATION_MS);
+    ret = bsp_dut_trigger_haptic(HAPTIC_CLICK_WAVEFORM, duration_ms);
     if (ret != BSP_STATUS_OK) {
-        ESP_LOGE(TAG, "click trigger failed: waveform=%u ret=0x%08" PRIX32, waveform, ret);
-        bsp_dut_dump_trigger_diagnostics(waveform, HAPTIC_CLICK_DURATION_MS);
+        ESP_LOGE(TAG,
+                 "click trigger failed: intensity=%u waveform=%u duration_ms=%" PRIu32 " ret=0x%08" PRIX32,
+                 ptp_haptic_click_intensity,
+                 HAPTIC_CLICK_WAVEFORM,
+                 duration_ms,
+                 ret);
+        bsp_dut_dump_trigger_diagnostics(HAPTIC_CLICK_WAVEFORM, duration_ms);
     }
 }
 
@@ -257,7 +250,7 @@ void cs40l25_surface_trigger_manual(uint8_t waveform,
         .intensity = intensity,
         .repeat_count = repeat_count,
         .retrigger_period_ms = retrigger_period_ms,
-        .duration_ms = HAPTIC_CLICK_DURATION_MS,
+        .duration_ms = HAPTIC_MANUAL_DEFAULT_DURATION_MS,
     };
 
     if (cutoff_time_ms > 0U && cutoff_time_ms < 1000U) {
