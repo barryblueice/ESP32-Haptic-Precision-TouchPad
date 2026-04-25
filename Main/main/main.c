@@ -42,22 +42,6 @@ void app_main(void) {
     xQueueAddToSet(mouse_queue, main_queue_set);
     xQueueAddToSet(tp_queue, main_queue_set);
 
-    switch (reason) {
-        case ESP_RST_SW:
-        case ESP_RST_PANIC:
-        case ESP_RST_INT_WDT:
-        case ESP_RST_TASK_WDT:
-        case ESP_RST_WDT:
-        case ESP_RST_DEEPSLEEP:
-            ESP_LOGW(TAG, "RST Reason: %d, reset queue",reason);
-            xQueueReset(tp_queue);
-            xQueueReset(mouse_queue);
-            break;
-        default:
-            ESP_LOGW(TAG, "RST Reason: %d, will not reset queue",reason);
-            break;
-    }
-
     gpio_init();
 
     irq_func_btn_init();
