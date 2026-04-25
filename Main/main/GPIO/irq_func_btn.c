@@ -17,8 +17,8 @@ static TaskHandle_t button_task_handle = NULL;
 void button_handler_task(void* arg) {
     while (1) {
         if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY) > 0) {
-            
-            vTaskDelay(pdMS_TO_TICKS(20)); 
+
+            vTaskDelay(pdMS_TO_TICKS(20));
             if (gpio_get_level(BOOT_BUTTON_GPIO) != 0) continue;
 
             uint64_t start_time = esp_timer_get_time() / 1000;
@@ -33,7 +33,7 @@ void button_handler_task(void* arg) {
                     nvs_write_int("current_mode", WIRED_MODE);
                     reset_triggered = true;
                     led_all_handle(LED_OFF);
-                    esp_restart(); 
+                    esp_restart();
                 } else if (duration == CONFIG_FUNC_TIMEOUT_MS) {
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Reaching FUNC_TIMEOUT_MS", duration);
                     if (CONFIG_LED_FLASH_FUNC_TIMEOUT) {
@@ -46,12 +46,12 @@ void button_handler_task(void* arg) {
 
             if (!reset_triggered) {
                 uint64_t final_duration = (esp_timer_get_time() / 1000) - start_time;
-                
+
                 if (final_duration >= CONFIG_FUNC_TIMEOUT_MS) {
                     current_mode = (current_mode == BLE_MODE) ? 0 : current_mode + 1;
                     ESP_LOGW(TAG, "BTN Pressed: %d ms. Switching mode %d", final_duration, current_mode);
                     nvs_write_int("current_mode", current_mode);
-                    
+
                     led_all_handle(LED_OFF);
 
                     esp_restart();
@@ -75,10 +75,11 @@ void irq_func_btn_init(void) {
     xTaskCreatePinnedToCore(button_handler_task, "button_handler_task", 4096, NULL, 10, &button_task_handle, 1);
 
     gpio_config_t io_conf = {
-        .intr_type = GPIO_INTR_NEGEDGE, 
         .pin_bit_mask = (1ULL << BOOT_BUTTON_GPIO),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = 1,
+        .intr_type = GPIO_INTR_NEGEDGE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
     gpio_config(&io_conf);
 

@@ -182,16 +182,16 @@ uint32_t bsp_initialize(bsp_app_callback_t cb, void *cb_arg)
     gpio_config_t reset_conf = {
         .pin_bit_mask = (1ULL << TP_RESET_GPIO),
         .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
     gpio_config_t alert_conf = {
         .pin_bit_mask = (1ULL << GPIO_HAPTIC_ALERT_N),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
 
     app_cb = cb;
@@ -336,9 +336,9 @@ uint32_t bsp_register_gpio_cb(uint32_t gpio_id, bsp_callback_t cb, void *cb_arg)
     gpio_config_t int_conf = {
         .pin_bit_mask = (1ULL << GPIO_HAPTIC_ALERT_N),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_NEGEDGE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
 
     if ((gpio_id != BSP_GPIO_ID_DUT_CDC_INT) || (cb == NULL))
