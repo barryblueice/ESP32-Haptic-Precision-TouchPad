@@ -49,10 +49,11 @@ void irq_int_init(void) {
     xTaskCreatePinnedToCore(tp_i2c_int_task, "tp_i2c_int_task", 2048, NULL, 11, &tp_task_handle, 1);
 
     gpio_config_t io_conf = {
-        .intr_type = GPIO_INTR_NEGEDGE,
         .pin_bit_mask = (1ULL << TP_INT_GPIO),
         .mode = GPIO_MODE_INPUT,
-        .pull_up_en = 1,
+        .intr_type = GPIO_INTR_NEGEDGE,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
     gpio_config(&io_conf);
     gpio_isr_handler_add(TP_INT_GPIO, gpio_isr_handler, NULL);
