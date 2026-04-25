@@ -7,6 +7,7 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
+#include "I2C/SUB_DEV/mcu-drivers/common/platform_bsp/platform_bsp.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/bsp/bsp_dut.h"
 #include "SYS/hid_msg.h"
 
@@ -16,6 +17,7 @@
 #define HAPTIC_INIT_DELAY_MS  250
 #define HAPTIC_CLICK_DURATION_MS 50
 #define HAPTIC_DEFAULT_GAP_MS 50
+#define HAPTIC_ROM_TEST_SETTLE_MS 500
 
 typedef enum {
     HAPTIC_CMD_CLICK = 0,
@@ -74,8 +76,28 @@ static uint8_t haptic_click_waveform_from_intensity(uint8_t intensity)
     return intensity;
 }
 
+static void cs40l25_surface_run_rom_test(void)
+{
+    uint32_t ret;
+
+    ESP_LOGW(TAG, "try ROM/BHM power-on buzz before RAM firmware boot");
+
+    ret = bsp_dut_trigger_haptic(BSP_DUT_TRIGGER_HAPTIC_POWER_ON, 0);
+    if (ret == BSP_STATUS_OK) {
+        ESP_LOGI(TAG, "ROM/BHM trigger test complete");
+    } else {
+        ESP_LOGE(TAG, "ROM/BHM trigger test failed: 0x%08" PRIX32, ret);
+    }
+
+    haptic_pump_driver_events(HAPTIC_ROM_TEST_SETTLE_MS);
+}
+
 static bool cs40l25_surface_bringup(void)
 {
+    if (!haptic_step_ok("bsp_initialize", bsp_initialize(NULL, NULL))) {
+        return false;
+    }
+
     if (!haptic_step_ok("bsp_dut_initialize", bsp_dut_initialize())) {
         return false;
     }
@@ -86,6 +108,8 @@ static bool cs40l25_surface_bringup(void)
     // In the integrated firmware that GPIO belongs to the touchpad, so
     // issuing bsp_dut_reset() here destabilizes touch tracking.
     ESP_LOGW(TAG, "skip bsp_dut_reset in integrated build: reset GPIO is shared with touchpad");
+
+    cs40l25_surface_run_rom_test();
 
     if (!haptic_step_ok("bsp_dut_boot(false)", bsp_dut_boot(false))) {
         return false;
