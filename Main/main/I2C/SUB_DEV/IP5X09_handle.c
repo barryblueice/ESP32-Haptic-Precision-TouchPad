@@ -81,6 +81,7 @@ void charging_state_monitor_task(void *pvParameters) {
         if (vbus_det_level == 1) {
 
             gpio_set_level(GPIO_LED_1, LED_OFF);
+            led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
 
             uint8_t raw_data = ip5x09_read_reg(0x71);
 
@@ -91,11 +92,12 @@ void charging_state_monitor_task(void *pvParameters) {
 
                 switch (status.reg.state) {
                     case IP5X09_STATE_FULL:
-                        led_send_command(GPIO_LED_2, LED_CMD_STOP, 100, 1000, 0, false);
+                        led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
                         gpio_set_level(GPIO_LED_2, LED_ON);
                         break;
                     default:
-                        led_send_command(GPIO_LED_1, LED_CMD_STOP, 100, 1000, 0, false);
+                        gpio_set_level(GPIO_LED_2, LED_OFF);
+                        led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
                         led_send_command(GPIO_LED_2, LED_CMD_BLINK, 500, 500, 0, true);
                         break;
                 }
@@ -104,15 +106,18 @@ void charging_state_monitor_task(void *pvParameters) {
 
             }
         } else {
-            gpio_set_level(GPIO_LED_1, LED_ON);
-            // if ((battery_percentage) > 20) {
-            //     led_send_command(GPIO_LED_1, LED_CMD_STOP, 100, 1000, 0, false);
-            //     led_send_command(GPIO_LED_2, LED_CMD_STOP, 100, 1000, 0, false);
-            //     gpio_set_level(GPIO_LED_1, LED_ON);
-            // } else {
-            //     gpio_set_level(GPIO_LED_1, LED_OFF);
-            //     led_send_command(GPIO_LED_1, LED_CMD_BLINK, 500, 500, 0, true);
-            // }
+
+            gpio_set_level(GPIO_LED_2, LED_OFF);
+            led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
+
+            if ((battery_percentage) > 20) {
+                led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
+                gpio_set_level(GPIO_LED_1, LED_ON);
+            } else {
+                gpio_set_level(GPIO_LED_1, LED_OFF);
+                led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
+                led_send_command(GPIO_LED_1, LED_CMD_BLINK, 500, 500, 0, true);
+            }
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
 
