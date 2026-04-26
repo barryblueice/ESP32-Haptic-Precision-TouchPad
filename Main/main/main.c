@@ -67,6 +67,7 @@ void app_main(void) {
     nvs_init();
 
     click_thresholds_load_from_nvs();
+    ptp_button_press_threshold_load_from_nvs();
     ptp_haptic_click_intensity_load_from_nvs();
 
     cs40l25_surface_init();
