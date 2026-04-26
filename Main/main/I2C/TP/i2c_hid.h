@@ -12,6 +12,8 @@
 #define CLICK_STRONG_WEIGHT_DEFAULT 130
 #define CLICK_REGION_SPLIT_X         1150
 
+#define SENSITIVITY 2.0f
+
 extern i2c_master_bus_handle_t bus_handle;
 extern i2c_master_dev_handle_t dev_handle;
 extern i2c_master_dev_handle_t dev_haptic_motor_handle;
@@ -40,5 +42,14 @@ void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report);
 void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report);
 void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_report_t *out_report);
 bool ptp_simulated_mouse_click_needs_release(void);
+
+int find_active_finger(const tp_multi_msg_t *msg, int start_index);
+void reset_move_state(void);
+void reset_scroll_state(void);
+void handle_tap_release(const tp_multi_msg_t *msg, mouse_hid_report_t *out_report);
+void get_active_centroid(const tp_multi_msg_t *msg, int active_count, float *x, float *y);
+void update_tap_state(const tp_multi_msg_t *msg, int active_count, float centroid_x, float centroid_y);
+void handle_single_finger_move(const tp_multi_msg_t *msg, int finger_index, mouse_hid_report_t *out_report);
+void handle_dual_finger_scroll(const tp_multi_msg_t *msg, int first_index, int second_index, mouse_hid_report_t *out_report);
 
 #endif
