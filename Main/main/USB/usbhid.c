@@ -277,12 +277,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-        ptp_button_press_threshold = payload[0];
-        if (ptp_button_press_threshold < 0x01) {
-            ptp_button_press_threshold = 0x01;
-        } else if (ptp_button_press_threshold > 0x03) {
-            ptp_button_press_threshold = 0x03;
-        }
+        ptp_button_press_threshold_set(payload[0], true);
 
         ESP_LOGI(TAG,
                  "Button press threshold SET_FEATURE: instance=%u raw=0x%02X threshold=%u",

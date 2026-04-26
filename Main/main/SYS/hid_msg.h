@@ -124,6 +124,9 @@ extern uint8_t current_tp_mode;
 extern uint8_t ptp_button_press_threshold;
 extern uint8_t ptp_haptic_click_intensity;
 
+uint8_t ptp_button_press_threshold_clamp(uint8_t threshold);
+void ptp_button_press_threshold_set(uint8_t threshold, bool persist);
+void ptp_button_press_threshold_load_from_nvs(void);
 uint8_t ptp_haptic_click_intensity_clamp(uint8_t intensity);
 uint32_t ptp_haptic_click_duration_ms_from_intensity(uint8_t intensity);
 void ptp_haptic_click_intensity_set(uint8_t intensity, bool persist);
