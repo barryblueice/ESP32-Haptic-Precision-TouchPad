@@ -30,6 +30,7 @@
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_ext.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_syscfg_regs.h"
+#include "I2C/SUB_DEV/mcu-drivers/fw_img/cs40l25_cal_fw_img.h"
 #include "I2C/SUB_DEV/mcu-drivers/fw_img/cs40l25_fw_img.h"
 #ifdef CONFIG_USE_BRIDGE
 #include "bridge.h"
@@ -45,7 +46,6 @@
 #define CS40L25_GPI_RELEASE_TO_VAMP_DISABLE_MS  (CS40L25_EVENT_TIMEOUT_DURATION_MS + \
                                                  CS40L25_RELEASE_MAX_DURATION_MS + \
                                                  CS40L25_EVENT_TIMEOUT_BUFFER_MS)
-
 static const char *TAG = "bsp_cs40l25";
 
 /***********************************************************************************************************************
@@ -498,8 +498,21 @@ uint32_t bsp_dut_boot(bool cal_boot)
     const uint8_t *fw_img_end;
     uint32_t write_size;
 
-    fw_img = cs40l25_fw_img;
-    fw_img_end = cs40l25_fw_img + FW_IMG_SIZE(cs40l25_fw_img);
+    if (cal_boot)
+    {
+        fw_img = cs40l25_cal_fw_img;
+        fw_img_end = cs40l25_cal_fw_img + FW_IMG_SIZE(cs40l25_cal_fw_img);
+    }
+    else
+    {
+        fw_img = cs40l25_fw_img;
+        fw_img_end = cs40l25_fw_img + FW_IMG_SIZE(cs40l25_fw_img);
+    }
+
+    ESP_LOGW(TAG,
+             "boot request: mode=%s fw_img_size=%" PRIu32,
+             cal_boot ? "calibration" : "runtime",
+             (uint32_t)(fw_img_end - fw_img));
 
 
     // Inform the driver that any current firmware is no longer available by passing a NULL

@@ -26,6 +26,7 @@ set(srcs
     "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_ext.c"
     "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_spec.c"
     "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25.c"
+    "I2C/SUB_DEV/mcu-drivers/fw_img/cs40l25_cal_fw_img.c"
     "I2C/SUB_DEV/mcu-drivers/fw_img/cs40l25_fw_img.c"
 
     "USB/usb_descriptor.c"
