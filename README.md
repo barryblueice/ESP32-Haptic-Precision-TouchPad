@@ -31,7 +31,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 
 <img width="1000" height="680" alt="image" src="https://github.com/user-attachments/assets/549454a9-c079-4c0e-b090-b5cde212baf4" /><br>
 
- - **2.4G Reciever:**
+ - **2.4G Receiver:**
 
 <img width="1000" height="293" alt="image" src="https://github.com/user-attachments/assets/70d6ea15-2a78-452b-8408-d5225be4694f" /><br>
 

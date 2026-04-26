@@ -7,7 +7,7 @@ menu "TouchPad Configuration"
             default  "R-SODIUM Technology"
 
         config TOUCHPAD_PRODUCT_STRING
-            string "TouchPad Product"
+            string "TouchPad Product String"
             default  "R-SODIUM Haptic 2.4G Receiver"
 
         config TOUCHPAD_SERIAL_NUMBER_STRING
