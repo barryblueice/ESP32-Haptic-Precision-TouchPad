@@ -21,9 +21,9 @@ menu "TouchPad Configuration"
 
         config LAST_GEN_DESC
             default n
-            bool "Use Goodix Descriptor from ESP32-Haptic-Touchpad for better capability"
+            bool "Using Goodix Descriptor from ESP32 Precision Touchpad for better capability"
             help
-                Use Goodix Descriptor from ESP32-Haptic-Touchpad for better capability. This setting value will only change legacy ptp descriptor value.
+                Using Goodix Descriptor from ESP32 Haptic Touchpad for better capability. This setting value will only change legacy ptp descriptor value.
 
     endmenu
 
