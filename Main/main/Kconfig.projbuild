@@ -33,11 +33,25 @@ menu "TouchPad Configuration"
 
     menu  "Feature Options"
 
-        config REVERT_X_Y
-            default n
-            bool "Reverse the TouchPad's XY"
+        choice
+            prompt "TouchPad Rotation"
+            default TP_ROTATION_LANDSCAPE
             help
-                Reverted the coodinate for easy debug and install.
+            Configure the orientation of the TouchPad.
+
+        config TP_ROTATION_LANDSCAPE
+            bool "Landscape"
+
+        config TP_ROTATION_PORTRAIT
+            bool "Portrait"
+
+        config TP_ROTATION_LANDSCAPE_FLIPPED
+            bool "Landscape (flipped)"
+
+        config TP_ROTATION_PORTRAIT_FLIPPED
+            bool "Portrait (flipped)"
+
+        endchoice
 
         config FUNC_TIMEOUT_MS
             int "Press FUNC key to switch mode timeout (ms)"
