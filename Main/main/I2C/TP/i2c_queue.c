@@ -350,14 +350,22 @@ void i2c_queue_task(void *arg) {
                     int offset = 4 + (id * 8);
                     uint8_t finger_status = tp_packet[offset];
 
-                    #if CONFIG_REVERT_X_Y
-                    uint16_t rx_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
-                    uint16_t rx = 2302 - (rx_raw > 2303 ? 2303 : rx_raw);
-                    uint16_t ry = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
-                    #else
+                    #if CONFIG_TP_ROTATION_LANDSCAPE
                     uint16_t rx = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
                     uint16_t ry_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
                     uint16_t ry = 1532 - (ry_raw > 1533 ? 1533 : ry_raw);
+                    #elif CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
+                    uint16_t rx_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
+                    uint16_t rx = 2302 - (rx_raw > 2303 ? 2303 : rx_raw);
+                    uint16_t ry = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
+                    #elif CONFIG_TP_ROTATION_PORTRAIT
+                    uint16_t ry_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
+                    uint16_t ry = 2302 - (ry_raw > 2303 ? 2303 : ry_raw);
+                    uint16_t rx_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
+                    uint16_t rx = 1532 - (rx_raw > 1533 ? 1533 : rx_raw);
+                    #elif CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
+                    uint16_t ry = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
+                    uint16_t rx = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
                     #endif
                     uint8_t pressure_z = tp_packet[offset + 5];
                     uint8_t major = tp_packet[offset + 6];
@@ -497,12 +505,18 @@ void i2c_queue_task(void *arg) {
                 // ESP_DRAM_LOGI(TAG, "%d %d %d %d",watchdog_x, watchdog_y, watchdog_tip_switch, global_scan_time);
 
             } else {
-                #if CONFIG_REVERT_X_Y
-                    mouse_msg.x = -(int8_t)tp_packet[4];
-                    mouse_msg.y = -(int8_t)tp_packet[5];
-                #else
+                #if CONFIG_TP_ROTATION_LANDSCAPE
                     mouse_msg.x = (int8_t)tp_packet[4];
                     mouse_msg.y = (int8_t)tp_packet[5];
+                #elif CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
+                    mouse_msg.x = -(int8_t)tp_packet[4];
+                    mouse_msg.y = -(int8_t)tp_packet[5];
+                #elif CONFIG_TP_ROTATION_PORTRAIT
+                    mouse_msg.x = (int8_t)tp_packet[5];
+                    mouse_msg.y = -(int8_t)tp_packet[4];
+                #elif CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
+                    mouse_msg.x = -(int8_t)tp_packet[5];
+                    mouse_msg.y = (int8_t)tp_packet[4];
                 #endif
                 mouse_msg.buttons = tp_packet[3];
 

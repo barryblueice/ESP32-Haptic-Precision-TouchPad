@@ -3,6 +3,18 @@
 
 #include "BLE/BLE_bluedroid.h"
 
+#if CONFIG_TP_ROTATION_LANDSCAPE || CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
+#define LOGICAL_X_MAX   0x26, 0xFA, 0x08
+#define LOGICAL_Y_MAX   0x26, 0xFC, 0x05
+#define PHYSICAL_X_MAX  0x46, 0x7D, 0x04
+#define PHYSICAL_Y_MAX  0x46, 0xFE, 0x02
+#elif CONFIG_TP_ROTATION_PORTRAIT || CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
+#define LOGICAL_Y_MAX   0x26, 0xFA, 0x08
+#define LOGICAL_X_MAX   0x26, 0xFC, 0x05
+#define PHYSICAL_Y_MAX  0x46, 0x7D, 0x04
+#define PHYSICAL_X_MAX  0x46, 0xFE, 0x02
+#endif
+
 const uint8_t ble_mouse_hid_report_descriptor[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x02,        // Usage (Mouse)
@@ -77,10 +89,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    LOGICAL_X_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_X_MAX,                     // PHYSICAL_MAXIMUM
     0x55, 0x0E,                         // UNIT_EXPONENT (-3)
     0x65, 0x11,                         // UNIT (Centimeter)
 
@@ -91,10 +103,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                   // LOGICAL_MAXIMUM
+    LOGICAL_Y_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_Y_MAX,                     // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -134,10 +146,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    LOGICAL_X_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_X_MAX,                     // PHYSICAL_MAXIMUM
     0x55, 0x0E,                         // UNIT_EXPONENT (-3)
     0x65, 0x11,                         // UNIT (Centimeter)
 
@@ -148,10 +160,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                   // LOGICAL_MAXIMUM
+    LOGICAL_Y_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_Y_MAX,                     // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -191,10 +203,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    LOGICAL_X_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_X_MAX,                     // PHYSICAL_MAXIMUM
     0x55, 0x0E,                         // UNIT_EXPONENT (-3)
     0x65, 0x11,                         // UNIT (Centimeter)
 
@@ -205,10 +217,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                   // LOGICAL_MAXIMUM
+    LOGICAL_Y_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_Y_MAX,                     // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -248,10 +260,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    LOGICAL_X_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_X_MAX,                     // PHYSICAL_MAXIMUM
     0x55, 0x0E,                         // UNIT_EXPONENT (-3)
     0x65, 0x11,                         // UNIT (Centimeter)
 
@@ -262,10 +274,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                   // LOGICAL_MAXIMUM
+    LOGICAL_Y_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_Y_MAX,                     // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
@@ -305,10 +317,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    LOGICAL_X_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_X_MAX,                     // PHYSICAL_MAXIMUM
     0x55, 0x0E,                         // UNIT_EXPONENT (-3)
     0x65, 0x11,                         // UNIT (Centimeter)
 
@@ -319,10 +331,10 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     // ---- Y Axis ----
     0x09, 0x31,                         // USAGE (Y)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFC, 0x05,                   // LOGICAL_MAXIMUM
+    LOGICAL_Y_MAX,                      // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
-    0x46, 0xFE, 0x02,                   // PHYSICAL_MAXIMUM
+    PHYSICAL_Y_MAX,                     // PHYSICAL_MAXIMUM
 
     0x75, 0x10,                         // REPORT_SIZE (16)
     0x95, 0x01,                         // REPORT_COUNT (1)
