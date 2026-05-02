@@ -16,10 +16,9 @@
 #define HAPTIC_BOOT_SETTLE_MS 100
 #define HAPTIC_INIT_DELAY_MS  250
 #define HAPTIC_CLICK_WAVEFORM  3
-#define HAPTIC_MANUAL_DEFAULT_DURATION_MS 50
+#define HAPTIC_CLICK_DURATION_MS 50
 #define HAPTIC_DEFAULT_GAP_MS 50
 #define HAPTIC_ROM_TEST_SETTLE_MS 500
-
 typedef enum {
     HAPTIC_CMD_CLICK = 0,
     HAPTIC_CMD_MANUAL_TRIGGER,
@@ -38,6 +37,11 @@ static QueueHandle_t s_haptic_queue = NULL;
 static TaskHandle_t s_haptic_task = NULL;
 static bool s_haptic_ready = false;
 
+static uint16_t haptic_gain_from_intensity(uint8_t intensity)
+{
+    return ptp_haptic_click_cp_dig_scale_from_intensity(intensity);
+}
+
 static bool haptic_step_ok(const char *step, uint32_t ret)
 {
     if (ret != BSP_STATUS_OK) {
@@ -48,6 +52,14 @@ static bool haptic_step_ok(const char *step, uint32_t ret)
 
     ESP_LOGI(TAG, "%s ok", step);
     return true;
+}
+
+static void cs40l25_surface_restore_default_config(void)
+{
+    if (bsp_dut_update_haptic_config(0) != BSP_STATUS_OK) {
+        ESP_LOGE(TAG, "failed to restore default haptic config");
+        bsp_dut_dump_diagnostics();
+    }
 }
 
 static void haptic_pump_driver_events(uint32_t duration_ms)
@@ -124,11 +136,10 @@ static bool cs40l25_surface_bringup(void)
 
 static void cs40l25_surface_handle_click(void)
 {
-    uint32_t duration_ms = ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity);
+    uint16_t gain = haptic_gain_from_intensity(ptp_haptic_click_intensity);
     uint32_t ret;
 
-    if (duration_ms == 0U) {
-        // ESP_LOGI(TAG, "skip click haptic: intensity=%u", ptp_haptic_click_intensity);
+    if (ptp_haptic_click_intensity == 0U) {
         return;
     }
 
@@ -137,22 +148,37 @@ static void cs40l25_surface_handle_click(void)
         return;
     }
 
-    ret = bsp_dut_trigger_haptic(HAPTIC_CLICK_WAVEFORM, duration_ms);
+    ret = bsp_dut_apply_haptic_mapping(HAPTIC_CLICK_WAVEFORM, 0U, gain, 0U, false);
     if (ret != BSP_STATUS_OK) {
         ESP_LOGE(TAG,
-                 "click trigger failed: intensity=%u waveform=%u duration_ms=%" PRIu32 " ret=0x%08" PRIX32,
+                 "click gain mapping failed: intensity=%u cp_dig_scale=%u",
+                 ptp_haptic_click_intensity,
+                 gain);
+        bsp_dut_dump_diagnostics();
+        return;
+    }
+
+    ret = bsp_dut_trigger_haptic(HAPTIC_CLICK_WAVEFORM, HAPTIC_CLICK_DURATION_MS);
+    if (ret != BSP_STATUS_OK) {
+        ESP_LOGE(TAG,
+                 "click trigger failed: intensity=%u waveform=%u cp_dig_scale=%u duration_ms=%u ret=0x%08" PRIX32,
                  ptp_haptic_click_intensity,
                  HAPTIC_CLICK_WAVEFORM,
-                 duration_ms,
+                 gain,
+                 HAPTIC_CLICK_DURATION_MS,
                  ret);
-        bsp_dut_dump_trigger_diagnostics(HAPTIC_CLICK_WAVEFORM, duration_ms);
+        bsp_dut_dump_trigger_diagnostics(HAPTIC_CLICK_WAVEFORM, HAPTIC_CLICK_DURATION_MS);
     }
+
+    cs40l25_surface_restore_default_config();
 }
 
 static void cs40l25_surface_handle_manual(const haptic_command_t *cmd)
 {
     uint8_t total_triggers;
     uint16_t gap_ms;
+    uint16_t gain;
+    bool mapping_applied = false;
 
     if (!s_haptic_ready || (cmd->waveform == 0U) || (cmd->intensity == 0U)) {
         return;
@@ -160,6 +186,18 @@ static void cs40l25_surface_handle_manual(const haptic_command_t *cmd)
 
     total_triggers = (uint8_t)(cmd->repeat_count + 1U);
     gap_ms = (cmd->retrigger_period_ms > 0U) ? cmd->retrigger_period_ms : HAPTIC_DEFAULT_GAP_MS;
+    gain = haptic_gain_from_intensity(cmd->intensity);
+
+    if (bsp_dut_apply_haptic_mapping(cmd->waveform, 0U, gain, 0U, false) != BSP_STATUS_OK) {
+        ESP_LOGE(TAG,
+                 "manual gain mapping failed: waveform=%u intensity=%u cp_dig_scale=%u",
+                 cmd->waveform,
+                 cmd->intensity,
+                 gain);
+        bsp_dut_dump_diagnostics();
+        return;
+    }
+    mapping_applied = true;
 
     for (uint8_t i = 0; i < total_triggers; i++) {
         uint32_t ret = bsp_dut_trigger_haptic(cmd->waveform, cmd->duration_ms);
@@ -176,6 +214,10 @@ static void cs40l25_surface_handle_manual(const haptic_command_t *cmd)
         if ((i + 1U) < total_triggers) {
             haptic_pump_driver_events(gap_ms);
         }
+    }
+
+    if (mapping_applied) {
+        cs40l25_surface_restore_default_config();
     }
 }
 
@@ -244,18 +286,16 @@ void cs40l25_surface_trigger_manual(uint8_t waveform,
                                     uint16_t retrigger_period_ms,
                                     uint16_t cutoff_time_ms)
 {
+    (void)cutoff_time_ms;
+
     haptic_command_t cmd = {
         .type = HAPTIC_CMD_MANUAL_TRIGGER,
         .waveform = waveform,
         .intensity = intensity,
         .repeat_count = repeat_count,
         .retrigger_period_ms = retrigger_period_ms,
-        .duration_ms = HAPTIC_MANUAL_DEFAULT_DURATION_MS,
+        .duration_ms = HAPTIC_CLICK_DURATION_MS,
     };
-
-    if (cutoff_time_ms > 0U && cutoff_time_ms < 1000U) {
-        cmd.duration_ms = cutoff_time_ms;
-    }
 
     if (s_haptic_queue == NULL) {
         return;

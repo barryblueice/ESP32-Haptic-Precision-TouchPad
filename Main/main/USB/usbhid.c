@@ -292,12 +292,12 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
         ptp_haptic_click_intensity_set(intensity, true);
 
         ESP_LOGI(TAG,
-                 "Haptic click SET_FEATURE: instance=%u raw=0x%02X enabled=%s intensity=%u duration_ms=%" PRIu32,
+                 "Haptic click SET_FEATURE: instance=%u raw=0x%02X enabled=%s intensity=%u cp_dig_scale=%u",
                  instance,
                  payload[0],
                  ptp_haptic_click_intensity > 0 ? "true" : "false",
                  ptp_haptic_click_intensity,
-                 ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
+                 ptp_haptic_click_cp_dig_scale_from_intensity(ptp_haptic_click_intensity));
     }
 
     if (report_type == HID_REPORT_TYPE_OUTPUT && effective_report_id == REPORTID_HAPTIC_MANUAL_TRIGGER) {
