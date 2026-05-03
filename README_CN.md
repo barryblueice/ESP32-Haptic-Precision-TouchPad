@@ -107,7 +107,7 @@
 
 # 关于方案实现：
 
-可前往[wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/wiki) 了解更多内容。
+可前往[wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/wiki)了解更多内容。
 
 ***
 
