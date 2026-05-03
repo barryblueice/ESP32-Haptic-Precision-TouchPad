@@ -55,7 +55,7 @@
 
 ### 基础功能
 - [x] Microsoft精确式触摸板握手
-- [x] **从Mouse Mode（仅单指）切换到Absolute Mode（支持多指）**
+- [x] **从Mouse Mode（仅单指）切换到Absolute Mode（支持多指**
 
 ### 触摸支持
 - [x] 单指触摸
@@ -65,7 +65,7 @@
   - [x] 多指Tap
 
 ### 物理按键
-- [ ] 左键 & 右键支持
+- [x] 左键 & 右键支持
 
 ### 兼容性
 - [x] 添加HID端口以支持Mouse Mode兼容（适用于不支持PTP的老系统/BIOS，如Windows 7/XP）
