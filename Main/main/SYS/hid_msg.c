@@ -82,23 +82,23 @@ uint8_t ptp_haptic_click_intensity_clamp(uint8_t intensity)
     return intensity;
 }
 
-uint16_t ptp_haptic_click_cp_dig_scale_from_intensity(uint8_t intensity)
+uint32_t ptp_haptic_click_duration_ms_from_intensity(uint8_t intensity)
 {
     switch (ptp_haptic_click_intensity_clamp(intensity)) {
         case 0x01:
-            return 192U;
+            return 12U;
 
         case 0x02:
-            return 128U;
+            return 20U;
 
         case 0x03:
-            return 64U;
+            return 32U;
 
         case 0x04:
-            return 0U;
+            return 48U;
 
         default:
-            return 128U;
+            return 0U;
     }
 }
 
@@ -130,16 +130,16 @@ void ptp_haptic_click_intensity_load_from_nvs(void)
         }
         ptp_haptic_click_intensity_set((uint8_t)value, false);
         ESP_LOGI(TAG,
-                 "Loaded haptic intensity=%u cp_dig_scale=%u",
+                 "Loaded haptic intensity=%u duration_ms=%" PRIu32,
                  ptp_haptic_click_intensity,
-                 ptp_haptic_click_cp_dig_scale_from_intensity(ptp_haptic_click_intensity));
+                 ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
         return;
     }
 
     ptp_haptic_click_intensity_set(ptp_haptic_click_intensity, false);
     (void)nvs_write_int(NVS_KEY_HAPTIC_CLICK, ptp_haptic_click_intensity);
     ESP_LOGI(TAG,
-             "Using default haptic intensity=%u cp_dig_scale=%u",
+             "Using default haptic intensity=%u duration_ms=%" PRIu32,
              ptp_haptic_click_intensity,
-             ptp_haptic_click_cp_dig_scale_from_intensity(ptp_haptic_click_intensity));
+             ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
 }
