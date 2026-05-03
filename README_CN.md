@@ -80,6 +80,7 @@
  - 在蓝牙模式下，Windows接受到并正确解析了HID报文，但是手势处于不可用的状态。只有很小一部分手势例如四指轻触可以识别到。<br>
 同时，在蓝牙模式下目前Windows依旧不支持PTP设置。
  - 蓝牙模式下暂时不支持PTP/Mouse Mode切换，所以目前默认只使用BLE Mouse模式。
+ - 由于CS40L25的固件问题，按下的振动反馈比较奇怪。
 
 # 目前支持的系统（已经过测试）：
 
@@ -100,5 +101,5 @@
 
 # 相关的衍生计划:
 
- - ESP32 Precision TouchPad - 上一代关于ELAN & Goodix TouchPad破解的项目。 [Link](https://github.com/barryblueice/ESP32-Precision-TouchPad)
- - R-SODIUM Precision TouchPad Configurator - R-SODIUM触摸板产品系列的GUI设置软件。 [Link](https://github.com/barryblueice/R-SODIUM-Precision-TouchPad-Configurator)
+ - [ESP32 Precision TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad) - 上一代关于ELAN & Goodix TouchPad破解的项目。
+ - [R-SODIUM Precision TouchPad Configurator](https://github.com/barryblueice/R-SODIUM-Precision-TouchPad-Configurator) - R-SODIUM触摸板产品系列的GUI设置软件。
