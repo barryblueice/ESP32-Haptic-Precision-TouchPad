@@ -370,10 +370,10 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
                     ptp_haptic_intensity_data[0] = intensity;
                     ptp_haptic_click_intensity_set(intensity, true);
                     ESP_LOGI(TAG,
-                             "BLE haptic intensity write raw=0x%02X intensity=%u cp_dig_scale=%u",
+                             "BLE haptic intensity write raw=0x%02X intensity=%u duration_ms=%" PRIu32,
                              param->write.value[0],
                              ptp_haptic_click_intensity,
-                             ptp_haptic_click_cp_dig_scale_from_intensity(ptp_haptic_click_intensity));
+                             ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
                 }
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_VAL] &&
