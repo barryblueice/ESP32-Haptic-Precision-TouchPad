@@ -45,36 +45,48 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 
 <img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" /><br>
 
-# TODO List:
-  ## Hardware:
-  - [x] PCB Design
-  - [ ] Appearance Design (Modeling by SOLIDWORKS)
+# TODO List
 
-  ## Software:
-  - [x] Recognized as a Microsoft Precision TouchPad
-  - [x] **Switching From Mouse Mode (Only One Finger) to Absolute Mode (Supported Multi Finger)**
-  - [x] Single Touch Support
-  - [x] Multi Touch Support
-    - [x] Scroll Gesture Support
-    - [x] Single Tap Support
-    - [x] Multi Tap Support
-  - [ ] Physical Buttons Support (left click & right click)
-  - [x] Add a new HID port to support Mouse Mode compatibility.<br>
-        (available for some old systems/BIOS that doesn't support PTP, like Windows 7)
-  - [x] PTP Simulated Mouse Mode Support
-  - [x] 2.4G wireless mode support
-      - [x] Compatible with product from project [ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)
-  - [x] Bluetooth wireless mode support
-    - [x] Mouse Mode
-    - [ ] PTP Mode
-  - [x] Hacking on Haptic Sensitivity Adjustment Principle
-    - [x] CS40L25 SDK Support
-    - [x] ROM Vibrate
-    - [x] Specific wavefrom firmware for better haptic feedback (Experimental Feature)
-  - [x] Haptic Support
-    - [x] Click Sensitive Support (Experimental Feature)
-    - [x] Haptic click and intensity adjustment (Experimental Feature)
-    - [ ] Haptic feedback and intensity control (Tentative Feature)
+## Hardware
+- [x] PCB Design
+- [ ] Appearance Design (Modeling in SOLIDWORKS)
+
+## Software
+
+### General Support
+- [x] Recognized as a Microsoft Precision TouchPad
+- [x] Switching from Mouse Mode (single finger) to Absolute Mode (multi-finger supported)
+
+### Touch Support
+- [x] Single Touch
+- [x] Multi Touch
+  - [x] Scroll Gesture
+  - [x] Single Tap
+  - [x] Multi Tap
+
+### Physical Controls
+- [ ] Physical Buttons (Left & Right Click)
+
+### Compatibility
+- [x] Add new HID port for Mouse Mode (for older systems/BIOS, e.g., Windows 7)
+- [x] PTP Simulated Mouse Mode
+
+### Wireless Modes
+- [x] 2.4G Wireless
+  - [x] Compatible with [ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)
+- [x] Bluetooth
+  - [x] Mouse Mode
+  - [ ] PTP Mode
+
+### Haptic Feedback
+- [x] Hacking on Haptic Sensitivity
+  - [x] CS40L25 SDK Support
+  - [x] ROM Vibrate
+  - [x] Specific waveform firmware (experimental)
+- [x] Haptic Support
+  - [x] Click Sensitivity Adjustment (experimental)
+  - [x] Haptic Click & Intensity Adjustment (experimental)
+  - [ ] Haptic Feedback & Intensity Control (tentative)
 
 # Current Issues:
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>

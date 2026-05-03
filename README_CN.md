@@ -45,36 +45,48 @@
 
 <img width="442" height="226" alt="image" src="https://github.com/user-attachments/assets/d59daa97-79a1-4e96-ae57-ae769c75d617" /><br>
 
-# TODO List:
-  ## 硬件:
-  - [x] PCB设计
-  - [ ] 外观设计 (SOLIDWORKS建模)
+# TODO List
 
-  ## Software:
-  - [x] Microsoft精确式触摸板握手
-  - [x] **从Mouse Mode (仅支持单指) 切换到Absolute Mode（支持多指）**
-  - [x] 单指触摸支持
-  - [x] 多指触摸支持
-    - [x] 多指滑动手势支持
-    - [x] 单指Tap支持
-    - [x] 多指Tap支持
-  - [ ] 物理按键支持（左键 & 右键）
-  - [x] 添加新的HID端口以支持Mouse Mode兼容<br>
-        （对于部分不支持PTP的老系统/BIOS可用，例如Windows 7/Windows XP）
-  - [x] PTP模拟Mouse Mode支持
-  - [x] 2.4G无线模式支持
-    - [x] 与上代项目[ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)兼容
-  - [x] 蓝牙无线模式支持
-    - [x] Mouse Mode
-    - [ ] PTP Mode
-  - [x] 压感调整原理破解
-    - [x] CS40L25 SDK适配
-    - [x] ROM模式下触发振动
-    - [x] 通过特定wavefrom固件获取更好的震感反馈（实验性功能）
-  - [x] 压感支持
-    - [x] 单击敏感度支持（实验性功能）
-    - [x] 触觉点击和点击强度调整支持（实验性功能）
-    - [ ] 触觉信号和触觉信号强度调整支持（后续可能支持）
+## 硬件
+- [x] PCB设计
+- [ ] 外观设计 (SOLIDWORKS建模)
+
+## 软件
+
+### 基础功能
+- [x] Microsoft精确式触摸板握手
+- [x] **从Mouse Mode（仅单指）切换到Absolute Mode（支持多指）**
+
+### 触摸支持
+- [x] 单指触摸
+- [x] 多指触摸
+  - [x] 多指滑动手势
+  - [x] 单指Tap
+  - [x] 多指Tap
+
+### 物理按键
+- [ ] 左键 & 右键支持
+
+### 兼容性
+- [x] 添加HID端口以支持Mouse Mode兼容（适用于不支持PTP的老系统/BIOS，如Windows 7/XP）
+- [x] PTP模拟Mouse Mode支持
+
+### 无线模式
+- [x] 2.4G无线
+  - [x] 与[ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)兼容
+- [x] 蓝牙
+  - [x] Mouse Mode
+  - [ ] PTP Mode
+
+### 压感与触觉
+- [x] 压感调整原理破解
+  - [x] CS40L25 SDK适配
+  - [x] ROM模式下触发振动
+  - [x] 特定waveform固件优化触觉反馈（实验性）
+- [x] 压感支持
+  - [x] 单击敏感度（实验性）
+  - [x] 触觉点击和强度调整（实验性）
+  - [ ] 触觉反馈和强度控制（后续可能支持）
 
 # 目前仍然存在的问题：
  - 在蓝牙模式下，Windows接受到并正确解析了HID报文，但是手势处于不可用的状态。只有很小一部分手势例如四指轻触可以识别到。<br>
