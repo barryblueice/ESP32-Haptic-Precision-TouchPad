@@ -37,7 +37,7 @@ menu "TouchPad Configuration"
             prompt "TouchPad Rotation"
             default TP_ROTATION_LANDSCAPE
             help
-            Configure the orientation of the TouchPad.
+            Configure the orientation of the TouchPad. Only effective in the wired-connect and BLE mode.
 
         config TP_ROTATION_LANDSCAPE
             bool "Landscape"
