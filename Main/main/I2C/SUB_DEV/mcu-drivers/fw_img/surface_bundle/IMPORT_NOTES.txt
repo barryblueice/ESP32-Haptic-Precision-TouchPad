@@ -1,0 +1,27 @@
+Imported from:
+D:\Documents\test\CS40L25\mcu-drivers\analysis\surface_capsule\esp32_fw_bundle
+
+Purpose:
+- Preserve the generated Surface firmware bundle inside the ESP32 project.
+- Keep the files available for later driver integration work.
+
+Current integration status:
+- `surface_bundle/cs40l25_fw_img.c` has been copied into the active runtime
+  build path as `fw_img/cs40l25_fw_img.c`.
+- Calibration image and symbol bindings are still left on the existing public
+  calibration path.
+- The current CS40L25 driver code in this project expects the public/ext-boost
+  firmware control symbol layout exposed through:
+  - main/I2C/SUB_DEV/mcu-drivers/cs40l25/config/cs40l25_sym.h
+  - main/I2C/SUB_DEV/mcu-drivers/cs40l25/config/cs40l25_cal_sym.h
+- The imported Surface bundle exposes a different symbol table
+  (SURFACE_SAML_* only), so a direct replacement would break many fw_control
+  accesses used by cs40l25.c, cs40l25_ext.c, and bsp_cs40l25.c.
+- The runtime image generated in `surface_bundle/cs40l25_fw_img.c` is still
+  usable here because its symbol table was rebuilt against the public ext-boost
+  layout. The raw `surface_bundle/cs40l25_sym.h` is not used by the build.
+
+Recommended next step for full migration:
+- Add a Surface-specific symbol alias/config layer, or
+- Add a Surface-specific BSP/driver path that avoids the public ext-boost
+  fw_control assumptions.

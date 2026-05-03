@@ -11,6 +11,9 @@ void cs40l25_surface_trigger_manual(uint8_t waveform,
                                     uint8_t repeat_count,
                                     uint16_t retrigger_period_ms,
                                     uint16_t cutoff_time_ms);
+void cs40l25_surface_trigger_scaled(uint8_t waveform,
+                                    uint16_t cp_dig_scale,
+                                    uint16_t duration_ms);
 bool cs40l25_surface_is_ready(void);
 
 #endif

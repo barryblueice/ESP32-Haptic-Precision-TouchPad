@@ -1,5 +1,6 @@
 #include "I2C/TP/i2c_hid.h"
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
 
@@ -30,6 +31,8 @@
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 #define FORCE_CLICK_MOVE_DEADZONE 45
+#define FORCE_CLICK_HAPTIC_WAVEFORM 4
+#define FORCE_CLICK_HAPTIC_DURATION_MS 100
 
 typedef enum {
     TOUCH_NONE = 0,
@@ -99,6 +102,25 @@ static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
         case 2:
         default:
             return click_midium_weight_threshold;
+    }
+}
+
+static uint16_t ptp_map_haptic_cp_dig_scale(uint8_t intensity_level) {
+    switch (ptp_haptic_click_intensity_clamp(intensity_level)) {
+        case 4:
+            return 3;
+
+        case 3:
+            return 33;
+
+        case 2:
+            return 66;
+
+        case 1:
+            return 100;
+
+        default:
+            return UINT16_MAX;
     }
 }
 
@@ -308,7 +330,13 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     }
 
     if (!was_button_down && ptp_force_click_state.button_down) {
-        cs40l25_surface_trigger_click();
+        uint16_t cp_dig_scale = ptp_map_haptic_cp_dig_scale(ptp_haptic_click_intensity);
+
+        if (cp_dig_scale != UINT16_MAX) {
+            cs40l25_surface_trigger_scaled(FORCE_CLICK_HAPTIC_WAVEFORM,
+                                           cp_dig_scale,
+                                           FORCE_CLICK_HAPTIC_DURATION_MS);
+        }
     }
 }
 

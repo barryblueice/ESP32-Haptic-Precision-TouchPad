@@ -15,7 +15,7 @@
 
 #define HAPTIC_BOOT_SETTLE_MS 100
 #define HAPTIC_INIT_DELAY_MS  250
-#define HAPTIC_CLICK_WAVEFORM  3
+#define HAPTIC_CLICK_WAVEFORM  4
 #define HAPTIC_MANUAL_DEFAULT_DURATION_MS 50
 #define HAPTIC_DEFAULT_GAP_MS 50
 #define HAPTIC_ROM_TEST_SETTLE_MS 500
@@ -23,12 +23,13 @@
 typedef enum {
     HAPTIC_CMD_CLICK = 0,
     HAPTIC_CMD_MANUAL_TRIGGER,
+    HAPTIC_CMD_SCALED_TRIGGER,
 } haptic_command_type_t;
 
 typedef struct {
     haptic_command_type_t type;
     uint8_t waveform;
-    uint8_t intensity;
+    uint16_t intensity;
     uint8_t repeat_count;
     uint16_t retrigger_period_ms;
     uint16_t duration_ms;
@@ -179,6 +180,48 @@ static void cs40l25_surface_handle_manual(const haptic_command_t *cmd)
     }
 }
 
+static void cs40l25_surface_handle_scaled(const haptic_command_t *cmd)
+{
+    uint16_t cp_dig_scale = cmd->intensity;
+    uint32_t ret;
+
+    if (!s_haptic_ready || (cmd->waveform == 0U)) {
+        return;
+    }
+
+    if (cp_dig_scale > 0x03FFU) {
+        cp_dig_scale = 0x03FFU;
+    }
+
+    ret = bsp_dut_apply_haptic_mapping(cmd->waveform,
+                                       cmd->waveform,
+                                       cp_dig_scale,
+                                       cp_dig_scale,
+                                       false);
+    if (ret != BSP_STATUS_OK) {
+        ESP_LOGE(TAG,
+                 "scaled mapping failed: waveform=%u cp_dig_scale=%u (0x%03X) ret=0x%08" PRIX32,
+                 cmd->waveform,
+                 (unsigned int)cp_dig_scale,
+                 (unsigned int)cp_dig_scale,
+                 ret);
+        bsp_dut_dump_trigger_diagnostics(cmd->waveform, cmd->duration_ms);
+        return;
+    }
+
+    ret = bsp_dut_trigger_haptic(cmd->waveform, cmd->duration_ms);
+    if (ret != BSP_STATUS_OK) {
+        ESP_LOGE(TAG,
+                 "scaled trigger failed: waveform=%u cp_dig_scale=%u (0x%03X) duration_ms=%u ret=0x%08" PRIX32,
+                 cmd->waveform,
+                 (unsigned int)cp_dig_scale,
+                 (unsigned int)cp_dig_scale,
+                 (unsigned int)cmd->duration_ms,
+                 ret);
+        bsp_dut_dump_trigger_diagnostics(cmd->waveform, cmd->duration_ms);
+    }
+}
+
 static void cs40l25_surface_task(void *arg)
 {
     haptic_command_t cmd;
@@ -197,6 +240,10 @@ static void cs40l25_surface_task(void *arg)
 
                 case HAPTIC_CMD_MANUAL_TRIGGER:
                     cs40l25_surface_handle_manual(&cmd);
+                    break;
+
+                case HAPTIC_CMD_SCALED_TRIGGER:
+                    cs40l25_surface_handle_scaled(&cmd);
                     break;
 
                 default:
@@ -256,6 +303,24 @@ void cs40l25_surface_trigger_manual(uint8_t waveform,
     if (cutoff_time_ms > 0U && cutoff_time_ms < 1000U) {
         cmd.duration_ms = cutoff_time_ms;
     }
+
+    if (s_haptic_queue == NULL) {
+        return;
+    }
+
+    (void)xQueueSendToBack(s_haptic_queue, &cmd, 0);
+}
+
+void cs40l25_surface_trigger_scaled(uint8_t waveform,
+                                    uint16_t cp_dig_scale,
+                                    uint16_t duration_ms)
+{
+    haptic_command_t cmd = {
+        .type = HAPTIC_CMD_SCALED_TRIGGER,
+        .waveform = waveform,
+        .intensity = (cp_dig_scale > 0x03FFU) ? 0x03FFU : cp_dig_scale,
+        .duration_ms = duration_ms,
+    };
 
     if (s_haptic_queue == NULL) {
         return;
