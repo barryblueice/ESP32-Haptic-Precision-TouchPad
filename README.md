@@ -55,7 +55,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 
 ### General Support
 - [x] Recognized as a Microsoft Precision TouchPad
-- [x] Switching from Mouse Mode (single finger) to Absolute Mode (multi-finger supported)
+- [x] **Switching from Mouse Mode (single finger) to Absolute Mode (multi-finger supported)**
 
 ### Touch Support
 - [x] Single Touch
@@ -65,7 +65,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
   - [x] Multi Tap
 
 ### Physical Controls
-- [ ] Physical Buttons (Left & Right Click)
+- [x] Physical Buttons (Left & Right Click)
 
 ### Compatibility
 - [x] Add new HID port for Mouse Mode (for older systems/BIOS, e.g., Windows 7)
