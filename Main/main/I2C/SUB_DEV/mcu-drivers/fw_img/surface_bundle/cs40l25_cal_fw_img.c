@@ -1,7 +1,7 @@
 /**
- * @file cs40l25_fw_img.c
+ * @file cs40l25_cal_fw_img.c
  *
- * @brief CS40L25 FW IMG Source File
+ * @brief CS40L25_CAL FW IMG Source File
  *
  * @copyright
  * Copyright (c) Cirrus Logic 2026 All Rights Reserved, http://www.cirrus.com/
@@ -19,27 +19,27 @@
  * limitations under the License.
  *
  * firmware_converter.py SDK version: 4.29.5 - f8e3db79b513ea4cf1fd88d04c0ebd10f4f0e311
- * Command:  tools\firmware_converter\firmware_converter.py fw_img_v2 cs40l25 analysis\surface_capsule\pseudo_wmfw\SurfaceTouchpadHaptic_2.9.139_payload_0_body_after_header\SurfaceTouchpadHaptic_2.9.139_payload_0_body_after_header_pseudo.wmfw --output-directory analysis\surface_capsule\pseudo_wmfw\fw_img_out
+ * Command:  tools\firmware_converter\firmware_converter.py fw_img_v2 cs40l25 analysis\surface_capsule\pseudo_wmfw\SurfaceTouchpadHaptic_2.9.139_payload_0_body_after_header\SurfaceTouchpadHaptic_2.9.139_payload_0_body_after_header_pseudo.wmfw --suffix cal --output-directory analysis\surface_capsule\pseudo_wmfw\fw_img_out
  *
  */
 
 /***********************************************************************************************************************
  * INCLUDES
  **********************************************************************************************************************/
-#include "cs40l25_fw_img.h"
+#include "cs40l25_cal_fw_img.h"
 
 /***********************************************************************************************************************
  * FW_IMG
  **********************************************************************************************************************/
 
 /**
- * @defgroup CS40L25_FW_IMG
+ * @defgroup CS40L25_CAL_FW_IMG
  * @brief Firmware image
  *
  * @{
  */
 
-const uint8_t cs40l25_fw_img[] __attribute__((aligned(4))) = {
+const uint8_t cs40l25_cal_fw_img[] __attribute__((aligned(4))) = {
 // Header
 0xFF,0x98,0xB9,0x54, // IMG_MAGIC_NUMBER_1
 0x02,0x00,0x00,0x00, // IMG_FORMAT_REV
