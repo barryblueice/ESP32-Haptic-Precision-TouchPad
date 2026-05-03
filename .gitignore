@@ -62,3 +62,4 @@ main/sdkconfig.old
 /.vscode
 esp32-haptic-precision-touchpad.code-workspace
 Main/*bak*.zip
+Main/dependencies.lock
