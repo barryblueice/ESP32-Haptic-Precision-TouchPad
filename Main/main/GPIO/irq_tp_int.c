@@ -22,6 +22,8 @@ void tp_i2c_int_task(void *pvParameters) {
 
     while (1) {
         if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY)) {
+            tp_modern_sleep_record_activity();
+
             if ((i2c_master_receive(dev_handle, packet, 64, 100)) == ESP_OK) {
                 xQueueSend(tp_data_queue, (void *)packet, portMAX_DELAY);
             }
@@ -31,6 +33,7 @@ void tp_i2c_int_task(void *pvParameters) {
 
 static void IRAM_ATTR gpio_isr_handler(void* arg) {
     esp_timer_stop(timeout_watchdog_timer);
+    tp_modern_sleep_signal_activity_from_isr();
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(tp_task_handle, &xHigherPriorityTaskWoken);
     if (xHigherPriorityTaskWoken) {
@@ -47,6 +50,7 @@ void irq_int_init(void) {
     esp_timer_create(&timer_args, &timeout_watchdog_timer);
 
     xTaskCreatePinnedToCore(tp_i2c_int_task, "tp_i2c_int_task", 2048, NULL, 11, &tp_task_handle, 1);
+    tp_modern_sleep_init();
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << TP_INT_GPIO),
