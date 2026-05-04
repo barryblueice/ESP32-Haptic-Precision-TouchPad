@@ -37,6 +37,10 @@ void click_thresholds_load_from_nvs(void);
 void i2c_queue_task(void *arg);
 void watchdog_refresh(bool touch_active);
 void watchdog_timeout_callback(void* arg);
+void tp_modern_sleep_init(void);
+void tp_modern_sleep_record_activity(void);
+void tp_modern_sleep_signal_activity_from_isr(void);
+bool tp_modern_sleep_is_active(void);
 
 void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report);
 void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report);

@@ -53,6 +53,19 @@ menu "TouchPad Configuration"
 
         endchoice
 
+        config TP_ENABLE_SLEEP_MODE
+            bool "Enable Sleep Mode"
+            default y
+            help 
+                Enable sleep mode for power-saving.
+
+        config TP_SLEEP_MODE_TIME_MS
+            int "Sleep mode timeout value(ms)"
+            default 180000
+            depends on TP_ENABLE_SLEEP_MODE
+            help 
+                TouchPad will enter sleep mode after timeout threshold.
+
         config FUNC_TIMEOUT_MS
             int "Press FUNC key to switch mode timeout (ms)"
             default 3000

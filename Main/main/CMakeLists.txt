@@ -3,6 +3,7 @@ set(srcs
 
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
+    "I2C/TP/tp_sleep.c"
     "I2C/TP/i2c_watchdog.c"
     "I2C/TP/tp_report_handle.c"
     "I2C/TP/ptp_simulated_mouse_gesture.c"
