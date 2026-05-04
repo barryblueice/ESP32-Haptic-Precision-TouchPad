@@ -16,8 +16,8 @@
 
 #define VBUS_DET_GPIO GPIO_NUM_9
 #define BOOT_BUTTON_GPIO GPIO_NUM_0
-#define GPIO_LED_1 GPIO_NUM_5 // LED1: Charging when blink. Keep solid on when fully charged. Turn dark when USB is disconnected.
-#define GPIO_LED_2 GPIO_NUM_6 // LED2: Blinking if battery is low. Keep solid on wehn USB is disconnected. Turn dark when charging.
+#define GPIO_LED_1 GPIO_NUM_5 // LED1: Blinking if battery is low. Keep solid on wehn USB is disconnected. Turn dark when charging.
+#define GPIO_LED_2 GPIO_NUM_6 // LED2: Charging when blink. Keep solid on when fully charged. Turn dark when USB is disconnected.
 #define GPIO_LED_3 GPIO_NUM_7 // LED3: Function LED.
 #define GPIO_HAPTIC_BUCK_BOOST_EN GPIO_NUM_14
 #define GPIO_HAPTIC_FUNC_FOR_TP_EN GPIO_NUM_38
