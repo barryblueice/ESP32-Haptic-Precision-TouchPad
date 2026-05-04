@@ -96,11 +96,11 @@
 
 # 目前支持的系统 (已经过测试) ：
 
- - Windows XP  (鼠标模式) ；
- - Windows 7  (鼠标模式) ；
- - Windows 10/11 (精确式触摸板模式) ；
- - Ubuntu 22.04及更新版本系统 (精确式触摸板模式) ；
- - Color OS 17  (基于Android 16) , 测试设备为一加Ace2 (精确式触摸板模式) ；
+ - Windows XP  (鼠标模式) ; 
+ - Windows 7  (鼠标模式) ; 
+ - Windows 10/11 (精确式触摸板模式) ; 
+ - Ubuntu 22.04及更新版本系统 (精确式触摸板模式) ; 
+ - Color OS 17  (基于Android 16) , 测试设备为一加Ace2 (精确式触摸板模式) ; 
  - HP / MSI BIOS (鼠标模式) 
 
 ***
