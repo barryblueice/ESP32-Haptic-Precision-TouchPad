@@ -7,12 +7,15 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/portmacro.h"
+#include "freertos/task.h"
 
 #include "GPIO/GPIO_handle.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "I2C/SUB_DEV/sub_dev.h"
 #include "sdkconfig.h"
 
 #define TAG "TP_SLEEP"
+#define TP_SLEEP_HAPTIC_POWER_SETTLE_MS 20
 
 #ifdef CONFIG_TP_ENABLE_SLEEP_MODE
 
@@ -45,6 +48,7 @@ static void tp_modern_sleep_enter_cb(void *arg)
     taskEXIT_CRITICAL(&s_modern_sleep_lock);
 
     if (should_enter) {
+        cs40l25_surface_set_modern_sleep(true);
         gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_OFF);
         ESP_LOGI(TAG,
                  "modern sleep enter: idle timeout=%" PRIu32 " ms, haptic buck/boost off",
@@ -125,8 +129,13 @@ void tp_modern_sleep_record_activity(void)
 
     if (restore_needed) {
         gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_ON);
-        (void)mp28167_set_vref_mv(840);
-        ESP_LOGI(TAG, "modern sleep exit: TP activity, haptic buck/boost on, VREF restored");
+        vTaskDelay(pdMS_TO_TICKS(TP_SLEEP_HAPTIC_POWER_SETTLE_MS));
+        esp_err_t err = mp28167_set_vref_mv(840);
+        if (err != ESP_OK) {
+            ESP_LOGW(TAG, "modern sleep exit: failed to restore VREF: 0x%x", err);
+        }
+        cs40l25_surface_set_modern_sleep(false);
+        ESP_LOGI(TAG, "modern sleep exit: TP activity, haptic buck/boost on");
     }
 
     tp_modern_sleep_restart_timer();
@@ -134,19 +143,12 @@ void tp_modern_sleep_record_activity(void)
 
 void tp_modern_sleep_signal_activity_from_isr(void)
 {
-    bool should_enable_boost = false;
-
     taskENTER_CRITICAL_ISR(&s_modern_sleep_lock);
     if (s_modern_sleep_active) {
         s_modern_sleep_active = false;
         s_restore_vref_pending = true;
-        should_enable_boost = true;
     }
     taskEXIT_CRITICAL_ISR(&s_modern_sleep_lock);
-
-    if (should_enable_boost) {
-        gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_ON);
-    }
 }
 
 bool tp_modern_sleep_is_active(void)

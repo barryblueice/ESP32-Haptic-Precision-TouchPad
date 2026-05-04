@@ -14,6 +14,8 @@ void cs40l25_surface_trigger_manual(uint8_t waveform,
 void cs40l25_surface_trigger_scaled(uint8_t waveform,
                                     uint16_t cp_dig_scale,
                                     uint16_t duration_ms);
+void cs40l25_surface_set_modern_sleep(bool sleep_active);
+bool cs40l25_surface_is_modern_sleep(void);
 bool cs40l25_surface_is_ready(void);
 
 #endif

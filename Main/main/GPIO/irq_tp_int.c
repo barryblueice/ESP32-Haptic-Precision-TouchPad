@@ -14,18 +14,18 @@
 #include "I2C/I2C_handle.h"
 
 #define TAG "IRQ_TP_INT"
+#define TP_I2C_INT_TASK_STACK_SIZE 6144
 
 static TaskHandle_t tp_task_handle = NULL;
+static uint8_t s_tp_packet[64];
 
 void tp_i2c_int_task(void *pvParameters) {
-    uint8_t packet[64];
-
     while (1) {
         if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY)) {
             tp_modern_sleep_record_activity();
 
-            if ((i2c_master_receive(dev_handle, packet, 64, 100)) == ESP_OK) {
-                xQueueSend(tp_data_queue, (void *)packet, portMAX_DELAY);
+            if ((i2c_master_receive(dev_handle, s_tp_packet, sizeof(s_tp_packet), 100)) == ESP_OK) {
+                xQueueSend(tp_data_queue, (void *)s_tp_packet, portMAX_DELAY);
             }
         }
     }
@@ -49,7 +49,13 @@ void irq_int_init(void) {
     };
     esp_timer_create(&timer_args, &timeout_watchdog_timer);
 
-    xTaskCreatePinnedToCore(tp_i2c_int_task, "tp_i2c_int_task", 2048, NULL, 11, &tp_task_handle, 1);
+    xTaskCreatePinnedToCore(tp_i2c_int_task,
+                            "tp_i2c_int_task",
+                            TP_I2C_INT_TASK_STACK_SIZE,
+                            NULL,
+                            11,
+                            &tp_task_handle,
+                            1);
     tp_modern_sleep_init();
 
     gpio_config_t io_conf = {
