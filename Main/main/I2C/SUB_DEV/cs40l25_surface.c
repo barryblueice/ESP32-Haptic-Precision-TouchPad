@@ -4,6 +4,7 @@
 
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 
@@ -38,6 +39,8 @@ typedef struct {
 static QueueHandle_t s_haptic_queue = NULL;
 static TaskHandle_t s_haptic_task = NULL;
 static bool s_haptic_ready = false;
+static portMUX_TYPE s_haptic_sleep_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool s_haptic_modern_sleep = false;
 
 static bool haptic_step_ok(const char *step, uint32_t ret)
 {
@@ -133,7 +136,7 @@ static void cs40l25_surface_handle_click(void)
         return;
     }
 
-    if (!s_haptic_ready) {
+    if (!s_haptic_ready || cs40l25_surface_is_modern_sleep()) {
         ESP_LOGW(TAG, "skip click haptic: CS40L25 not ready");
         return;
     }
@@ -155,7 +158,7 @@ static void cs40l25_surface_handle_manual(const haptic_command_t *cmd)
     uint8_t total_triggers;
     uint16_t gap_ms;
 
-    if (!s_haptic_ready || (cmd->waveform == 0U) || (cmd->intensity == 0U)) {
+    if (!s_haptic_ready || cs40l25_surface_is_modern_sleep() || (cmd->waveform == 0U) || (cmd->intensity == 0U)) {
         return;
     }
 
@@ -185,7 +188,7 @@ static void cs40l25_surface_handle_scaled(const haptic_command_t *cmd)
     uint16_t cp_dig_scale = cmd->intensity;
     uint32_t ret;
 
-    if (!s_haptic_ready || (cmd->waveform == 0U)) {
+    if (!s_haptic_ready || cs40l25_surface_is_modern_sleep() || (cmd->waveform == 0U)) {
         return;
     }
 
@@ -232,6 +235,11 @@ static void cs40l25_surface_task(void *arg)
     s_haptic_ready = cs40l25_surface_bringup();
 
     while (1) {
+        if (cs40l25_surface_is_modern_sleep()) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+
         if (xQueueReceive(s_haptic_queue, &cmd, pdMS_TO_TICKS(10)) == pdPASS) {
             switch (cmd.type) {
                 case HAPTIC_CMD_CLICK:
@@ -251,7 +259,7 @@ static void cs40l25_surface_task(void *arg)
             }
         }
 
-        if (s_haptic_ready) {
+        if (s_haptic_ready && !cs40l25_surface_is_modern_sleep()) {
             (void)bsp_dut_process();
         }
     }
@@ -278,7 +286,7 @@ void cs40l25_surface_trigger_click(void)
         .type = HAPTIC_CMD_CLICK,
     };
 
-    if (s_haptic_queue == NULL) {
+    if ((s_haptic_queue == NULL) || cs40l25_surface_is_modern_sleep()) {
         return;
     }
 
@@ -304,7 +312,7 @@ void cs40l25_surface_trigger_manual(uint8_t waveform,
         cmd.duration_ms = cutoff_time_ms;
     }
 
-    if (s_haptic_queue == NULL) {
+    if ((s_haptic_queue == NULL) || cs40l25_surface_is_modern_sleep()) {
         return;
     }
 
@@ -322,7 +330,7 @@ void cs40l25_surface_trigger_scaled(uint8_t waveform,
         .duration_ms = duration_ms,
     };
 
-    if (s_haptic_queue == NULL) {
+    if ((s_haptic_queue == NULL) || cs40l25_surface_is_modern_sleep()) {
         return;
     }
 
@@ -332,4 +340,26 @@ void cs40l25_surface_trigger_scaled(uint8_t waveform,
 bool cs40l25_surface_is_ready(void)
 {
     return s_haptic_ready;
+}
+
+void cs40l25_surface_set_modern_sleep(bool sleep_active)
+{
+    taskENTER_CRITICAL(&s_haptic_sleep_lock);
+    s_haptic_modern_sleep = sleep_active;
+    taskEXIT_CRITICAL(&s_haptic_sleep_lock);
+
+    if (sleep_active && (s_haptic_queue != NULL)) {
+        xQueueReset(s_haptic_queue);
+    }
+}
+
+bool cs40l25_surface_is_modern_sleep(void)
+{
+    bool sleep_active;
+
+    taskENTER_CRITICAL(&s_haptic_sleep_lock);
+    sleep_active = s_haptic_modern_sleep;
+    taskEXIT_CRITICAL(&s_haptic_sleep_lock);
+
+    return sleep_active;
 }

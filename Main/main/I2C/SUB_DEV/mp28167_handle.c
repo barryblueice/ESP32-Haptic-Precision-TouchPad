@@ -6,6 +6,7 @@
 #define TAG "MP28167"
 
 esp_err_t mp28167_set_vref_mv(uint16_t mv) {
+    esp_err_t err;
 
     uint16_t v_int = (uint16_t)((mv / 0.8f) + 0.5f);
     if (v_int > 2047) v_int = 2047;
@@ -17,9 +18,23 @@ esp_err_t mp28167_set_vref_mv(uint16_t mv) {
     uint8_t data_h[] = {MP28167_REG_VREF_H, v_h};
     uint8_t data_go[] = {MP28167_REG_VREF_GO, 0x01};
 
-    ESP_ERROR_CHECK(i2c_master_transmit(sub_dev_mp28167_handle, data_l, 2, -1));
-    ESP_ERROR_CHECK(i2c_master_transmit(sub_dev_mp28167_handle, data_h, 2, -1));
-    ESP_ERROR_CHECK(i2c_master_transmit(sub_dev_mp28167_handle, data_go, 2, -1));
+    err = i2c_master_transmit(sub_dev_mp28167_handle, data_l, 2, -1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "failed to write VREF_L: 0x%x", err);
+        return err;
+    }
+
+    err = i2c_master_transmit(sub_dev_mp28167_handle, data_h, 2, -1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "failed to write VREF_H: 0x%x", err);
+        return err;
+    }
+
+    err = i2c_master_transmit(sub_dev_mp28167_handle, data_go, 2, -1);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "failed to write VREF_GO: 0x%x", err);
+        return err;
+    }
 
     ESP_LOGI(TAG, "VREF set to %d mV (Raw: 0x%03X)", mv, v_int);
 
