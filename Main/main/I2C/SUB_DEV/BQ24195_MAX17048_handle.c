@@ -146,11 +146,18 @@ void bq24195_dump_charge_config(void)
 void charging_state_monitor_task(void *pvParameters)
 {
     static uint8_t last_chg_state = 0xFF;
+    static uint8_t last_vbus_det_level = 0xFF;
 
     while (1) {
         battery_percentage = get_battery_percentage();
+        uint8_t vbus_det_level = gpio_get_level(VBUS_DET_GPIO);
 
-        if (gpio_get_level(VBUS_DET_GPIO) == 1) {
+        if (last_vbus_det_level != vbus_det_level) {
+            last_chg_state = 0xFF;
+            last_vbus_det_level = vbus_det_level;
+        }
+
+        if (vbus_det_level == 1) {
             bq24195_status_reg_t status = {
                 .val = bq24195_read_reg(0x08),
             };
