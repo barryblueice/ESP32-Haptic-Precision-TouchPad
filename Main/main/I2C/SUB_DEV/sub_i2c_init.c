@@ -58,10 +58,13 @@ void sub_dev_init(void) {
 
     sub_dev_i2c_init();
 
+    bq24195_enable_charging();
+
     battery_percentage = get_battery_percentage();
 
     ESP_LOGI(TAG, "battery level: %d %%", battery_percentage);
     ESP_LOGI(TAG, "battery voltage: %.3f V", max17048_get_battery_voltage());
+    bq24195_dump_charge_config();
 
     float current_vref = mp28167_get_vref_mv();
     ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
