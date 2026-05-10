@@ -6,6 +6,7 @@
 #include "esp_log.h"
 
 #include "SYS/hid_msg.h"
+#include "I2C/SUB_DEV/sub_dev.h"
 #include "WIFI/wireless_wifi.h"
 
 bool stop_heartbeat = false;
@@ -21,7 +22,7 @@ void alive_heartbeat_task(void *pvParameters) {
 
         // ESP_LOGW("HeartBeat", "Starting Alive Heartbeat Task");
 
-        alive_pkt.payload.alive.battery_level = 100;
+        alive_pkt.payload.alive.battery_level = battery_percentage;
         alive_pkt.payload.alive.uptime = xTaskGetTickCount() * portTICK_PERIOD_MS / 1000;
         alive_pkt.payload.alive.vbus_level = 0;
 

@@ -18,7 +18,8 @@ int battery_percentage = 100;
 
 i2c_master_bus_handle_t sub_bus_handle;
 i2c_master_dev_handle_t sub_dev_mp28167_handle;
-i2c_master_dev_handle_t sub_dev_ip5x09_handle;
+i2c_master_dev_handle_t sub_dev_bq24195_handle;
+i2c_master_dev_handle_t sub_dev_max17048_handle;
 
 void sub_dev_i2c_init(void) {
     i2c_master_bus_config_t bus_cfg = {
@@ -38,12 +39,19 @@ void sub_dev_i2c_init(void) {
     };
     ESP_ERROR_CHECK(i2c_master_bus_add_device(sub_bus_handle, &dev_mp28167_cfg, &sub_dev_mp28167_handle));
 
-    i2c_device_config_t dev_ip5x09_cfg = {
+    i2c_device_config_t dev_bq24195_cfg = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = IP5X09_ADDR,
+        .device_address = BQ24195_ADDR,
         .scl_speed_hz = I2C_FREQ_HZ,
     };
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(sub_bus_handle, &dev_ip5x09_cfg, &sub_dev_ip5x09_handle));
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(sub_bus_handle, &dev_bq24195_cfg, &sub_dev_bq24195_handle));
+
+    i2c_device_config_t dev_max17048_cfg = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = MAX17048_ADDR,
+        .scl_speed_hz = I2C_FREQ_HZ,
+    };
+    ESP_ERROR_CHECK(i2c_master_bus_add_device(sub_bus_handle, &dev_max17048_cfg, &sub_dev_max17048_handle));
 }
 
 void sub_dev_init(void) {
@@ -53,15 +61,16 @@ void sub_dev_init(void) {
     battery_percentage = get_battery_percentage();
 
     ESP_LOGI(TAG, "battery level: %d %%", battery_percentage);
+    ESP_LOGI(TAG, "battery voltage: %.3f V", max17048_get_battery_voltage());
 
     float current_vref = mp28167_get_vref_mv();
     ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
 
     xTaskCreatePinnedToCore(charging_state_monitor_task, "charging_state_monitor_task", 4096, NULL, 5, NULL, 1);
 
-    uint8_t mp28167_vref = mp28167_get_vref_mv();
-    if (mp28167_vref != 840.0f) {
-        ESP_LOGW(TAG, "Over-Vref Detecting! setting Vref to 840mV");
+    float mp28167_vref = mp28167_get_vref_mv();
+    if ((mp28167_vref < 839.6f) || (mp28167_vref > 840.4f)) {
+        ESP_LOGW(TAG, "Unexpected Vref %.2f mV, setting Vref to 840mV", mp28167_vref);
         mp28167_set_vref_mv(840);
     }
 }

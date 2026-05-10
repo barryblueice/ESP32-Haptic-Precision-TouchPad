@@ -10,7 +10,7 @@ set(srcs
 
     "I2C/SUB_DEV/cs40l25_surface.c"
     "I2C/SUB_DEV/sub_i2c_init.c"
-    "I2C/SUB_DEV/IP5X09_handle.c"
+    "I2C/SUB_DEV/BQ24195_MAX17048_handle.c"
     "I2C/SUB_DEV/MP28167_handle.c"
 
     "I2C/SUB_DEV/mcu-drivers/common/bridge/bridge.c"

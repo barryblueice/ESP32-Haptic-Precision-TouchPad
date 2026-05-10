@@ -15,7 +15,8 @@
 #define TP_I2C_ADDR         0x2C
 #define HAPTIC_MOTOR_ADDR   0x43
 #define MP28167_ADDR        0x60
-#define IP5X09_ADDR         0xEA >> 1
+#define BQ24195_ADDR        0x6B
+#define MAX17048_ADDR       0x36
 
 #define TP_RESET_GPIO       33
 #define TP_INT_GPIO         34
