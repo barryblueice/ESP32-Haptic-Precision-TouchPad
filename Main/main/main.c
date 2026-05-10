@@ -72,7 +72,7 @@ void app_main(void) {
 
     cs40l25_surface_init();
 
-    // sub_dev_init();
+    sub_dev_init();
 
     esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
     if (nvs_err != ESP_OK) {
