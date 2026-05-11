@@ -23,7 +23,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 > [!TIP]
 > This project utilized AI-assisted development during its development process.
 
-##### Hardware opensource link: [Oshwhub - ESP32 Haptic Precision Touchpad](https://oshwhub.com/barryblueice/esp32-haptic-precision-touchpad)
+### Hardware opensource link: [Oshwhub - ESP32 Haptic Precision Touchpad](https://oshwhub.com/barryblueice/esp32-haptic-precision-touchpad)
 
 #### **Application:**
 
