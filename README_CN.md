@@ -23,6 +23,8 @@
 > [!TIP]
 > 这个项目在开发的过程中使用了AI辅助开发。
 
+### 硬件开源地址: [Oshwhub - 基于ESP32的三模精确式压感触摸板](https://oshwhub.com/barryblueice/esp32-haptic-precision-touchpad)
+
 #### **应用:**
 
  - **触摸板PCB:**
