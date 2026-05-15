@@ -20,7 +20,7 @@
 #define GPIO_LED_2 GPIO_NUM_6 // LED2: Charging when blink. Keep solid on when fully charged. Turn dark when USB is disconnected.
 #define GPIO_LED_3 GPIO_NUM_7 // LED3: Function LED.
 #define GPIO_HAPTIC_BUCK_BOOST_EN GPIO_NUM_14
-#define GPIO_HAPTIC_FUNC_FOR_TP_EN GPIO_NUM_38
+#define GPIO_HAPTIC_FUNC_FOR_TP_EN GPIO_NUM_33
 #define GPIO_HAPTIC_ALERT_N GPIO_NUM_37
 
 typedef enum {
