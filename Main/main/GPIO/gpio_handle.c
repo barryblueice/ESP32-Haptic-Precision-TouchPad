@@ -24,11 +24,14 @@ static void vLedTimerCallback(TimerHandle_t xTimer) {
     uint32_t total_flips_target = (ctx->max_counts == 0) ? UINT32_MAX : (ctx->max_counts * 2);
 
     if (ctx->current_flips >= total_flips_target) {
+        /* Every blink group must end in a known OFF state. */
+        ctx->is_on = false;
+        gpio_set_level(ctx->gpio, LED_OFF);
+
         if (ctx->repeat) {
             ctx->current_flips = 0;
             xTimerChangePeriod(xTimer, pdMS_TO_TICKS(ctx->interval_ms_loop), 0);
         } else {
-            gpio_set_level(ctx->gpio, LED_OFF);
             xTimerStop(xTimer, 0);
         }
     } else {
@@ -55,7 +58,7 @@ static void vLedTimerCallback(TimerHandle_t xTimer) {
 BaseType_t led_send_command(gpio_num_t pin, led_mode_t mode, uint32_t interval_ms, uint32_t interval_ms_loop, uint32_t counts, bool loop) {
     led_msg_t *ctx = NULL;
 
-    for(int i=0; i<3; i++) {
+    for(int i = 0; i < MAX_LED_SUPPORT; i++) {
         if(led_ctxs[i].gpio == pin || led_ctxs[i].timer == NULL) {
             ctx = &led_ctxs[i];
             break;
@@ -66,9 +69,15 @@ BaseType_t led_send_command(gpio_num_t pin, led_mode_t mode, uint32_t interval_m
 
     if (mode == LED_CMD_STOP) {
         if (ctx->timer) xTimerStop(ctx->timer, 0);
+        ctx->current_flips = 0;
+        ctx->is_on = false;
         gpio_set_level(pin, LED_OFF);
         return pdPASS;
     }
+
+    /* Keep the physical output synchronized when replacing a pattern. */
+    if (ctx->timer) xTimerStop(ctx->timer, 0);
+    gpio_set_level(pin, LED_OFF);
 
     ctx->gpio = pin;
     ctx->mode = mode;
@@ -78,6 +87,16 @@ BaseType_t led_send_command(gpio_num_t pin, led_mode_t mode, uint32_t interval_m
     ctx->repeat = loop;
     ctx->current_flips = 0;
     ctx->is_on = false;
+
+    if (mode == LED_CMD_ALWAYS) {
+        ctx->is_on = true;
+        gpio_set_level(pin, LED_ON);
+        return pdPASS;
+    }
+
+    if (interval_ms == 0 || (loop && interval_ms_loop == 0)) {
+        return pdFAIL;
+    }
 
     if (ctx->timer == NULL) {
         ctx->timer = xTimerCreate("LED_TMR", pdMS_TO_TICKS(interval_ms), pdTRUE, (void *)ctx, vLedTimerCallback);
