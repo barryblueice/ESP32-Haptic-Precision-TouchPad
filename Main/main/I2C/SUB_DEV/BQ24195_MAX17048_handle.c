@@ -146,14 +146,22 @@ void bq24195_dump_charge_config(void)
 void charging_state_monitor_task(void *pvParameters)
 {
     static uint8_t last_chg_state = 0xFF;
+    static uint8_t pending_chg_state = 0xFF;
+    static uint8_t pending_chg_count = 0;
     static uint8_t last_vbus_det_level = 0xFF;
+    static bool charge_done_latched = false;
 
     while (1) {
         battery_percentage = get_battery_percentage();
         uint8_t vbus_det_level = gpio_get_level(VBUS_DET_GPIO);
 
+        // ESP_LOGI(TAG, "Battery percentage: %d%%", battery_percentage);
+
         if (last_vbus_det_level != vbus_det_level) {
             last_chg_state = 0xFF;
+            pending_chg_state = 0xFF;
+            pending_chg_count = 0;
+            charge_done_latched = false;
             last_vbus_det_level = vbus_det_level;
         }
 
@@ -161,12 +169,30 @@ void charging_state_monitor_task(void *pvParameters)
             bq24195_status_reg_t status = {
                 .val = bq24195_read_reg(0x08),
             };
+            uint8_t effective_chg_state = status.reg.chrg_stat;
+
+            if (status.reg.chrg_stat == BQ24195_STATE_CHARGE_DONE ||
+                battery_percentage >= 99) {
+                charge_done_latched = true;
+            } else if (battery_percentage <= 97) {
+                charge_done_latched = false;
+            }
+
+            if (charge_done_latched) {
+                effective_chg_state = BQ24195_STATE_CHARGE_DONE;
+            }
 
             gpio_set_level(GPIO_LED_1, LED_OFF);
             led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
 
-            if (last_chg_state != status.reg.chrg_stat) {
-                switch (status.reg.chrg_stat) {
+            if (effective_chg_state == last_chg_state) {
+                pending_chg_state = 0xFF;
+                pending_chg_count = 0;
+            } else if (effective_chg_state != pending_chg_state) {
+                pending_chg_state = effective_chg_state;
+                pending_chg_count = 1;
+            } else if (++pending_chg_count >= 2) {
+                switch (effective_chg_state) {
                     case BQ24195_STATE_CHARGE_DONE:
                         led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
                         gpio_set_level(GPIO_LED_2, LED_ON);
@@ -180,7 +206,9 @@ void charging_state_monitor_task(void *pvParameters)
                         break;
                 }
 
-                last_chg_state = status.reg.chrg_stat;
+                last_chg_state = effective_chg_state;
+                pending_chg_state = 0xFF;
+                pending_chg_count = 0;
             }
         } else {
             gpio_set_level(GPIO_LED_2, LED_OFF);
