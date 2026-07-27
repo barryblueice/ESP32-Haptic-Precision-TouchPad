@@ -415,9 +415,37 @@ void usbhid_init(void) {
 void usbhid_task(void *arg) {
     tp_multi_msg_t tp_msg;
     mouse_msg_t mouse_msg;
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+    mouse_hid_report_t pending_tap_report = {0};
+    bool tap_press_pending = false;
+    bool tap_release_pending = false;
+#endif
 
     while (1) {
         usb_ptp_kick_tx();
+
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+        /*
+         * A HID endpoint cannot normally accept press and release reports in
+         * the same loop iteration. Preserve both halves of a tap across USB
+         * frames so a busy endpoint cannot leave the host button stuck down.
+         */
+        if (tap_press_pending && tud_hid_n_ready(2)) {
+            tud_hid_n_report(2,
+                             REPORTID_MOUSE,
+                             &pending_tap_report,
+                             sizeof(pending_tap_report));
+            tap_press_pending = false;
+            tap_release_pending = true;
+        } else if (tap_release_pending && tud_hid_n_ready(2)) {
+            mouse_hid_report_t release_report = {0};
+            tud_hid_n_report(2,
+                             REPORTID_MOUSE,
+                             &release_report,
+                             sizeof(release_report));
+            tap_release_pending = false;
+        }
+#endif
 
         QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, 1);
 
@@ -440,16 +468,24 @@ void usbhid_task(void *arg) {
 
                         parse_ptp_simulated_mouse_report(&tp_msg, &report);
 
-                        if (tud_hid_n_ready(2)) {
-                            tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
-                        }
-
                         if (ptp_simulated_mouse_click_needs_release()) {
-                            mouse_hid_report_t release_report = {0};
-
                             if (tud_hid_n_ready(2)) {
-                                tud_hid_n_report(2, REPORTID_MOUSE, &release_report, sizeof(release_report));
+                                tud_hid_n_report(2,
+                                                 REPORTID_MOUSE,
+                                                 &report,
+                                                 sizeof(report));
+                                tap_release_pending = true;
+                            } else {
+                                pending_tap_report = report;
+                                tap_press_pending = true;
                             }
+                        } else if (!tap_press_pending &&
+                                   !tap_release_pending &&
+                                   tud_hid_n_ready(2)) {
+                            tud_hid_n_report(2,
+                                             REPORTID_MOUSE,
+                                             &report,
+                                             sizeof(report));
                         }
 
                     #endif
