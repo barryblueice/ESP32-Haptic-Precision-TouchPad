@@ -36,7 +36,10 @@ void tp_modern_sleep_init(void)
 {
     if (CONFIG_TP_SLEEP_MODE_TIME_MS <= 0 || timer != NULL) return;
     const esp_timer_create_args_t args = {.callback = sleep_cb, .name = "tp_modern_sleep"};
-    if (esp_timer_create(&args, &timer) != ESP_OK) return;
+    if (esp_timer_create(&args, &timer) != ESP_OK) {
+        ESP_LOGW("TP_SLEEP", "Idle sleep disabled: timer allocation failed");
+        return;
+    }
     last_activity = esp_timer_get_time();
     restart_timer();
 }

@@ -1,3 +1,4 @@
+#include "SYS/input_pipeline.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -165,53 +166,30 @@ void ble_bluedroid_init() {
     led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 
     #if CONFIG_BLE_ENABLE_PTP_MODE
-        current_tp_mode = PTP_MODE;
-        touchpad_mode_set(true);
+        input_request_mode(PTP_MODE);
     #else
-        current_tp_mode = MOUSE_MODE;
-        touchpad_mode_set(false);
+        input_request_mode(MOUSE_MODE);
     #endif
 
-    xTaskCreatePinnedToCore(battery_ble_notify_task, "battery_ble_notify_task", 2048, NULL, 5, NULL, 0);
 
-    ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK( ret );
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
     ret = esp_bt_controller_init(&bt_cfg);
-    if (ret) {
-        ESP_LOGE(TAG, "%s initialize controller failed", __func__);
-        return;
-    }
+    ESP_ERROR_CHECK(ret);
 
     ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-    if (ret) {
-        ESP_LOGE(TAG, "%s enable controller failed", __func__);
-        return;
-    }
+    ESP_ERROR_CHECK(ret);
 
     esp_bluedroid_config_t cfg = BT_BLUEDROID_INIT_CONFIG_DEFAULT();
     ret = esp_bluedroid_init_with_cfg(&cfg);
-    if (ret) {
-        ESP_LOGE(TAG, "%s init bluedroid failed", __func__);
-        return;
-    }
+    ESP_ERROR_CHECK(ret);
 
     ret = esp_bluedroid_enable();
-    if (ret) {
-        ESP_LOGE(TAG, "%s init bluedroid failed", __func__);
-        return;
-    }
+    ESP_ERROR_CHECK(ret);
 
-    if((ret = esp_hidd_profile_init()) != ESP_OK) {
-        ESP_LOGE(TAG, "%s init bluedroid failed", __func__);
-    }
+    ESP_ERROR_CHECK(esp_hidd_profile_init());
 
     esp_ble_gap_register_callback(gap_event_handler);
     esp_hidd_register_callbacks(hidd_event_callback);
@@ -227,5 +205,6 @@ void ble_bluedroid_init() {
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_INIT_KEY, &init_key, sizeof(uint8_t));
     esp_ble_gap_set_security_param(ESP_BLE_SM_SET_RSP_KEY, &rsp_key, sizeof(uint8_t));
 
-    xTaskCreatePinnedToCore(ble_hid_conn_task, "ble_conn", 2048, NULL, 5, NULL, 0);
+    if (xTaskCreatePinnedToCore(battery_ble_notify_task, "battery_ble_notify_task", 2048, NULL, 5, NULL, 0) != pdPASS)
+        ESP_LOGW(TAG, "Battery notifications disabled: task allocation failed");
 }

@@ -1,102 +1,73 @@
 #include "BLE/ble_hid_dev.h"
-#include "BLE/hidd_le_prf_int.h"
-#include "esp_log.h"
-
+#include "BLE/BLE_bluedroid.h"
+#include "SYS/input_pipeline.h"
 #include "sdkconfig.h"
 
-#include "SYS/hid_msg.h"
+static portMUX_TYPE ble_tx_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool connected, subscribed, congested;
+static uint16_t active_conn;
 
-#include "BLE/BLE_bluedroid.h"
+static void update_link(void)
+{
+    taskENTER_CRITICAL(&ble_tx_lock);
+    bool ready = connected && subscribed;
+    taskEXIT_CRITICAL(&ble_tx_lock);
+#if CONFIG_BLE_ENABLE_PTP_MODE
+    input_set_link(ready ? (1U << PTP_MODE) : 0);
+#else
+    input_set_link(ready ? (1U << MOUSE_MODE) : 0);
+#endif
+}
+void ble_input_connection(bool up, uint16_t conn)
+{
+    taskENTER_CRITICAL(&ble_tx_lock);
+    if (!up && connected && active_conn != conn) {
+        taskEXIT_CRITICAL(&ble_tx_lock);
+        return;
+    }
+    connected = up; subscribed = congested = false; active_conn = conn;
+    taskEXIT_CRITICAL(&ble_tx_lock);
+    update_link();
+}
+void ble_input_subscription(uint16_t conn, bool enabled)
+{
+    taskENTER_CRITICAL(&ble_tx_lock);
+    if (connected && active_conn == conn) subscribed = enabled;
+    taskEXIT_CRITICAL(&ble_tx_lock);
+    update_link();
+}
+void ble_input_congestion(uint16_t conn, bool busy)
+{
+    taskENTER_CRITICAL(&ble_tx_lock);
+    if (connected && active_conn == conn) congested = busy;
+    taskEXIT_CRITICAL(&ble_tx_lock);
+    input_wake_sender();
+}
 
-#include "I2C/TP/i2c_hid.h"
-
-void ble_hid_task(void *arg) {
-    tp_multi_msg_t tp_msg;
-    mouse_msg_t mouse_msg;
-
-    while (1) {
-        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
-        
-        uint16_t conn_id = ble_conn_id;
-
-        if (ble_hid_is_connected) {
-
-            if (xActivatedMember == tp_queue) {
-
-                if (xQueueReceive(tp_queue, &tp_msg, 0)) {
-
-                    if (current_tp_mode == MOUSE_MODE) {
-                        #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                            mouse_hid_report_t report = {0};
-
-                            parse_ptp_simulated_mouse_report(&tp_msg, &report);
-
-                            hid_dev_send_report(
-                                hidd_le_env.gatt_if, 
-                                conn_id, 
-                                HID_RPT_ID_MOUSE_IN,
-                                HID_REPORT_TYPE_INPUT, 
-                                sizeof(mouse_hid_report_t),
-                                (uint8_t *)&report
-
-                            );
-
-                            if (ptp_simulated_mouse_click_needs_release()) {
-                                mouse_hid_report_t release_report = {0};
-
-                                hid_dev_send_report(
-                                    hidd_le_env.gatt_if,
-                                    conn_id,
-                                    HID_RPT_ID_MOUSE_IN,
-                                    HID_REPORT_TYPE_INPUT,
-                                    sizeof(mouse_hid_report_t),
-                                    (uint8_t *)&release_report
-                                );
-                            }
-                            
-                        #endif
-                    } else {
-                        ptp_report_t report = {0};
-                            
-                        parse_ptp_report(&tp_msg, &report);
-
-                        hid_dev_send_report(
-                            hidd_le_env.gatt_if, 
-                            conn_id, 
-                            HID_RPT_ID_PTP_IN,
-                            HID_REPORT_TYPE_INPUT, 
-                            sizeof(ptp_report_t), 
-                            (uint8_t *)&report
-                        );
-                    }
-
-                    // ESP_LOGI("BLE_HID_TASK", "Received PTP Report");
-                }
-            
-            } else if (xActivatedMember == mouse_queue) {
-
-                if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-
-                    mouse_hid_report_t report = {0};
-
-                    parse_mouse_report(&mouse_msg, &report);
-                    
-                    hid_dev_send_report(
-                        hidd_le_env.gatt_if, 
-                        conn_id, 
-                        HID_RPT_ID_MOUSE_IN,
-                        HID_REPORT_TYPE_INPUT, 
-                        sizeof(mouse_hid_report_t), 
-                        (uint8_t *)&report
-
-                    );
-
-                }
-
-                // ESP_LOGI("BLE_HID_TASK", "Received Mouse Report");
-
-            }
+void ble_hid_task(void *arg)
+{
+    (void)arg;
+    input_register_sender();
+    input_report_t pending;
+    bool have_pending = false;
+    while (true) {
+        input_log_stats();
+        if (have_pending && !input_report_current(&pending)) have_pending = false;
+        taskENTER_CRITICAL(&ble_tx_lock);
+        bool ready = connected && subscribed && !congested;
+        uint16_t conn = active_conn;
+        taskEXIT_CRITICAL(&ble_tx_lock);
+        if (!have_pending) have_pending = input_take_report(&pending);
+        if (have_pending && ready && input_report_current(&pending)) {
+            esp_err_t err = pending.mode == PTP_MODE ?
+                hid_dev_send_report(hidd_le_env.gatt_if, conn, HID_RPT_ID_PTP_IN,
+                    HID_REPORT_TYPE_INPUT, sizeof(ptp_report_t), (uint8_t *)&pending.data.ptp) :
+                hid_dev_send_report(hidd_le_env.gatt_if, conn, HID_RPT_ID_MOUSE_IN,
+                    HID_REPORT_TYPE_INPUT, sizeof(mouse_hid_report_t), (uint8_t *)&pending.data.mouse);
+            if (err == ESP_OK) { input_report_ack(&pending); have_pending = false; continue; }
+            else { input_submit_failed(); vTaskDelay(1); }
         }
-
+        /* A successful synchronous submit may leave more reports to drain. */
+        ulTaskNotifyTake(pdTRUE, have_pending ? 1 : portMAX_DELAY);
     }
 }

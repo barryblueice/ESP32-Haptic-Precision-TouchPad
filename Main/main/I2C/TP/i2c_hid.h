@@ -46,5 +46,6 @@ void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report);
 void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report);
 void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_report_t *out_report);
 bool ptp_simulated_mouse_click_needs_release(void);
+void ptp_simulated_mouse_reset(void);
 
 #endif

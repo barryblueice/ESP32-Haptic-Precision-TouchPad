@@ -79,6 +79,8 @@ typedef struct {
 
 static simulated_mouse_state_t m_state = {0};
 
+void ptp_simulated_mouse_reset(void) { m_state = (simulated_mouse_state_t){0}; }
+
 static uint16_t scan_time_delta(uint16_t now, uint16_t then) {
     return (uint16_t)(now - then);
 }

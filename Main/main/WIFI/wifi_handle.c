@@ -11,6 +11,7 @@
 #include "freertos/semphr.h"
 
 #include "SYS/hid_msg.h"
+#include "SYS/input_pipeline.h"
 #include "I2C/TP/i2c_hid.h"
 #include "WIFI/wireless_wifi.h"
 
@@ -20,13 +21,12 @@
 
 #define ESPNOW_CHANNEL 1
 
-wireless_msg_t pkt = {0};
 
 uint8_t receiver_mac[6];
 
 void parse_mac_from_config() {
     const char* mac_str = CONFIG_RECEIVER_MAC_ADDR;
-    int values[6];
+    unsigned int values[6];
 
     if (sscanf(mac_str, "%x:%x:%x:%x:%x:%x",
                &values[0], &values[1], &values[2],
@@ -41,78 +41,91 @@ void parse_mac_from_config() {
     }
 }
 
-TaskHandle_t xHeartbeatTaskHandle = NULL;
+static portMUX_TYPE send_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool send_done;
+static esp_now_send_status_t send_status;
 
-static SemaphoreHandle_t vbus_sem = NULL;
+static void send_callback(const esp_now_send_info_t *info, esp_now_send_status_t status)
+{
+    (void)info;
+    taskENTER_CRITICAL(&send_lock);
+    send_status = status; send_done = true;
+    taskEXIT_CRITICAL(&send_lock);
+    input_wake_sender();
+}
 
-extern bool stop_heartbeat;
-
-void wireless_wifi_init(void) {
-
-    ESP_ERROR_CHECK(nvs_flash_init());
+void wireless_wifi_init(void)
+{
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_start());
-
+    ESP_ERROR_CHECK(esp_wifi_set_channel(ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
     ESP_ERROR_CHECK(esp_now_init());
-
-    esp_now_peer_info_t peer = {};
-
+    esp_now_peer_info_t peer = {0};
     parse_mac_from_config();
-
-    memcpy(peer.peer_addr, receiver_mac, 6);
+    memcpy(peer.peer_addr, receiver_mac, sizeof(receiver_mac));
     peer.channel = ESPNOW_CHANNEL;
-    peer.encrypt = false;
     ESP_ERROR_CHECK(esp_now_add_peer(&peer));
-
-    vbus_sem = xSemaphoreCreateBinary();
-
-
-    esp_now_send(receiver_mac, (uint8_t *)&pkt, sizeof(pkt));
-
-    xTaskCreatePinnedToCore(alive_heartbeat_task, "alive_heartbeat_task", 2048, NULL, 5, NULL, 0);
-    stop_heartbeat = false;
-
+    ESP_ERROR_CHECK(esp_now_register_send_cb(send_callback));
     wireless_espnow_init();
-
+    input_set_link(3);
+    input_request_mode(PTP_MODE);
 }
 
-void wifi_send_task(void *arg) {
-    tp_multi_msg_t tp_msg;
-    mouse_msg_t mouse_msg;
-
-    while (1) {
-        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, portMAX_DELAY);
-
-        if (xActivatedMember == mouse_queue) {
-            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-                mouse_hid_report_t report = {0};
-
-                parse_mouse_report(&mouse_msg, &report);
-
-                pkt.type = MOUSE_MODE;
-                pkt.payload.mouse = report;
-                esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
-
+void wifi_send_task(void *arg)
+{
+    (void)arg;
+    input_register_sender();
+    input_report_t pending = {0};
+    wireless_msg_t packet = {0};
+    bool have_pending = false, in_flight = false, heartbeat = false;
+    uint32_t heartbeat_at = 0;
+    while (true) {
+        input_log_stats();
+        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        taskENTER_CRITICAL(&send_lock);
+        bool done = send_done;
+        esp_now_send_status_t status = send_status;
+        send_done = false;
+        taskEXIT_CRITICAL(&send_lock);
+        if (in_flight && done) {
+            in_flight = false;
+            if (status == ESP_NOW_SEND_SUCCESS) {
+                if (!heartbeat) input_report_ack(&pending);
+            } else {
+                input_submit_failed();
+                if (heartbeat || input_report_current(&pending)) input_recover();
             }
+            if (!heartbeat) have_pending = false;
         }
-        else if (xActivatedMember == tp_queue) {
-            if (xQueueReceive(tp_queue, &tp_msg, 0)) {
-                if (current_tp_mode == MOUSE_MODE) {
-
+        if (have_pending && !in_flight && !input_report_current(&pending)) have_pending = false;
+        if (!in_flight) {
+            heartbeat = (uint32_t)(now - heartbeat_at) >= 1000U;
+            if (!have_pending) have_pending = input_take_report(&pending);
+            if (heartbeat || have_pending) {
+                packet = (wireless_msg_t){0};
+                if (heartbeat) wireless_make_heartbeat(&packet);
+                else if (pending.mode == PTP_MODE) {
+                    packet.type = WIRELESS_HAPTIC_PTP_MODE;
+                    packet.payload.ptp = pending.data.ptp;
                 } else {
-                    ptp_report_t report = {0};
-
-                    parse_ptp_report(&tp_msg, &report);
-
-                    pkt.type = WIRELESS_HAPTIC_PTP_MODE;
-                    pkt.payload.ptp = report;
-                    esp_now_send(receiver_mac, (uint8_t*)&pkt, sizeof(pkt));
+                    packet.type = MOUSE_MODE;
+                    packet.payload.mouse = pending.data.mouse;
+                }
+                esp_err_t err = esp_now_send(receiver_mac, (uint8_t *)&packet, sizeof(packet));
+                if (err == ESP_OK) {
+                    in_flight = true;
+                    if (heartbeat) heartbeat_at = now;
+                } else {
+                    input_submit_failed();
+                    vTaskDelay(1);
                 }
             }
         }
+        /* The SDK callback retires each packet before this buffer is reused. */
+        ulTaskNotifyTake(pdTRUE, 1);
     }
 }

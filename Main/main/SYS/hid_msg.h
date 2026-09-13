@@ -68,9 +68,6 @@ typedef struct {
     bool tap_detected;
 } tp_finger_life_t;
 
-extern QueueHandle_t tp_queue;
-extern QueueHandle_t mouse_queue;
-extern QueueSetHandle_t main_queue_set;
 
 typedef enum {
     MOUSE_MODE = 0,

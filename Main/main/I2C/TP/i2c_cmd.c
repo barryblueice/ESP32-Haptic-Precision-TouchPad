@@ -95,12 +95,12 @@ esp_err_t tp_write(uint16_t reg, uint8_t *data, size_t len) {
 void hid_init_sequence(void) {
     // ESP_LOGI(TAG, "Sending HID Power ON...");
     uint8_t pwr_data[] = { POWER_ON, CMD_SET_POWER };
-    tp_write(HID_COMMAND_REG, pwr_data, 2);
+    ESP_ERROR_CHECK(tp_write(HID_COMMAND_REG, pwr_data, 2));
     vTaskDelay(pdMS_TO_TICKS(50));
 
     // ESP_LOGI(TAG, "Sending HID Reset Command...");
     uint8_t rst_data[] = { 0x00, CMD_RESET };
-    tp_write(HID_COMMAND_REG, rst_data, 2);
+    ESP_ERROR_CHECK(tp_write(HID_COMMAND_REG, rst_data, 2));
     vTaskDelay(pdMS_TO_TICKS(100));
 }
 
@@ -131,11 +131,11 @@ void tp_i2c_init(void) {
 }
 
 void tp_hw_reset(void) {
-    gpio_set_direction(TP_RESET_GPIO, GPIO_MODE_OUTPUT);
+    ESP_ERROR_CHECK(gpio_set_direction(TP_RESET_GPIO, GPIO_MODE_OUTPUT));
     ESP_LOGI(TAG, "Hardware Reset...");
-    gpio_set_level(TP_RESET_GPIO, 0);
+    ESP_ERROR_CHECK(gpio_set_level(TP_RESET_GPIO, 0));
     vTaskDelay(pdMS_TO_TICKS(50));
-    gpio_set_level(TP_RESET_GPIO, 1);
+    ESP_ERROR_CHECK(gpio_set_level(TP_RESET_GPIO, 1));
     vTaskDelay(pdMS_TO_TICKS(150));
 }
 
@@ -160,7 +160,7 @@ esp_err_t touchpad_mode_set(bool is_ptp_mode) {
     final_buf[0] = 0x22;
     memcpy(&final_buf[1], magic_cmd, sizeof(magic_cmd));
 
-    return i2c_master_transmit(dev_handle, final_buf, sizeof(final_buf), -1);
+    return i2c_master_transmit(dev_handle, final_buf, sizeof(final_buf), 100);
 }
 
 void touchpad_init(void) {
@@ -174,10 +174,10 @@ void touchpad_init(void) {
         .pull_down_en = GPIO_PULLDOWN_DISABLE
     };
 
-    gpio_config(&int_conf);
+    ESP_ERROR_CHECK(gpio_config(&int_conf));
     tp_hw_reset();
     hid_init_sequence();
 
-    xTaskCreatePinnedToCore(i2c_queue_task, "i2c_queue_task", 4096, NULL, 15, NULL, 1);
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(i2c_queue_task, "i2c_queue_task", 6144, NULL, 15, NULL, 1) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
 }

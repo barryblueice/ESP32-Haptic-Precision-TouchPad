@@ -6,6 +6,7 @@
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "SYS/hid_msg.h"
+#include "SYS/input_pipeline.h"
 
 #define TAG "WATCHDOG"
 #define TOUCH_TIMEOUT_US (100 * 1000)
@@ -18,34 +19,9 @@ uint16_t watchdog_id = 0;
 uint16_t watchdog_tip_switch = 0;
 
 void watchdog_timeout_callback(void* arg) {
-
+    (void)arg;
     if (current_tp_mode == PTP_MODE && global_watchdog_start) {
-
-        ESP_LOGI(TAG, "Watchdog Triggered!");
-
         global_watchdog_start = false;
-        watchdog_tip_switch = 0;
-
-        tp_multi_msg_t release_msg = {0};
-
-        global_scan_time += 100;
-        release_msg.scan_time = global_scan_time;
-
-        release_msg.fingers[watchdog_id].contact_id = 0;
-        release_msg.fingers[watchdog_id].tip_switch = 0;
-        release_msg.fingers[watchdog_id].confidence = 1;
-        release_msg.fingers[watchdog_id].pressure_z = 0;
-
-        release_msg.fingers[watchdog_id].x = watchdog_x;
-        release_msg.fingers[watchdog_id].y = watchdog_y;
-
-        release_msg.actual_count = 1;
-        release_msg.button_mask = 0;
-        cs40l25_surface_button_update(false, ptp_haptic_click_intensity_get());
-
-        if (tp_queue != NULL) {
-            xQueueOverwrite(tp_queue, &release_msg);
-        }
+        input_recover();
     }
-
 }
