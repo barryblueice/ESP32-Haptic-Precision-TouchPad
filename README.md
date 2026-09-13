@@ -1,5 +1,9 @@
 [English](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/blob/main/README.md) | [Simplified Chinese](https://github.com/barryblueice/ESP32-Haptic-Precision-TouchPad/blob/main/README_CN.md)
 
+<img width="1646" height="1080" alt="image" src="https://github.com/user-attachments/assets/62c18fca-4e30-4de0-82df-305f0f221452" />
+
+***
+
 # **What's This?**
 
 Another touchpad hacking project, based on ESP32-S3 + Surface Laptop Studio 1964 Synaptics TouchPad.
