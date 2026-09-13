@@ -24,6 +24,7 @@
  **********************************************************************************************************************/
 #include <stddef.h>
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25.h"
+#include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_syscfg_regs.h"
 #include "I2C/SUB_DEV/mcu-drivers/common/bsp_driver_if.h"
 #include "string.h"
 
@@ -344,7 +345,7 @@ static const uint32_t cs40l25_frame_sync_regs[] =
  */
 static const uint32_t cs40l25_wseq_regs[] =
 {
-    BOOST_VBST_CTL_1_REG, 0x00000000,
+    BOOST_VBST_CTL_1_REG, CS40L25_SURFACE_VBST_CTL,
     BOOST_VBST_CTL_2_REG, 0x00000001,
     BOOST_BST_IPK_CTL_REG, 0x0000004A,
     BOOST_BST_LOOP_COEFF_REG, 0x00002424,
@@ -966,10 +967,13 @@ static uint32_t cs40l25_hibernate(cs40l25_t *driver)
         if (driver->wseq_table[count].changed == 1)
         {
             //Write 16bit address and 32bit value to poweronsequence
-            regmap_write_block(cp,
+            if (regmap_write_block(cp,
                                reg_address + (8 * count),
                                (uint8_t *) driver->wseq_table[count].words,
-                               8);
+                               8) != REGMAP_STATUS_OK)
+            {
+                return CS40L25_STATUS_FAIL;
+            }
 
             driver->wseq_table[count].changed = 0;
         }
@@ -977,9 +981,16 @@ static uint32_t cs40l25_hibernate(cs40l25_t *driver)
         count++;
     }
 
-    regmap_write(cp, reg_address + (8 * count), 0x00FFFFFF);
+    if (regmap_write(cp, reg_address + (8 * count), 0x00FFFFFF) != REGMAP_STATUS_OK)
+    {
+        return CS40L25_STATUS_FAIL;
+    }
 
-    regmap_write(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_4_REG, CS40L25_POWERCONTROL_HIBERNATE);
+    if (regmap_write(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_4_REG,
+                     CS40L25_POWERCONTROL_HIBERNATE) != REGMAP_STATUS_OK)
+    {
+        return CS40L25_STATUS_FAIL;
+    }
 
     return CS40L25_STATUS_OK;
 }
@@ -1468,7 +1479,14 @@ uint32_t cs40l25_boot(cs40l25_t *driver, fw_img_info_t *fw_info)
     regmap_write(cp, CS40L25_CTRL_KEYS_TEST_KEY_CTRL_REG, CS40L25_TEST_KEY_CTRL_UNLOCK_1);
     regmap_write(cp, CS40L25_CTRL_KEYS_TEST_KEY_CTRL_REG, CS40L25_TEST_KEY_CTRL_UNLOCK_2);
 
-    regmap_write_array(cp, driver->config.syscfg_regs, driver->config.syscfg_regs_total);
+    if (regmap_write_array(cp, driver->config.syscfg_regs,
+                          driver->config.syscfg_regs_total) != REGMAP_STATUS_OK)
+    {
+        // Best-effort relock before the owner diagnoses and shuts down the rail.
+        regmap_write(cp, CS40L25_CTRL_KEYS_TEST_KEY_CTRL_REG, CS40L25_TEST_KEY_CTRL_LOCK_1);
+        regmap_write(cp, CS40L25_CTRL_KEYS_TEST_KEY_CTRL_REG, CS40L25_TEST_KEY_CTRL_LOCK_2);
+        return CS40L25_STATUS_FAIL;
+    }
 
     // If NOT Calibration boot, write HALO Core DSP configuration data and IRQMASKSEQ patch
     if (driver->state == CS40L25_STATE_DSP_STANDBY)

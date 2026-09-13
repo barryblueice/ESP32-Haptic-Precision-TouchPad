@@ -339,6 +339,7 @@ static bool bsp_surface_ram_ready(void)
 
 uint32_t cs40l25_syscfg_regs[] =
 {
+    BOOST_VBST_CTL_1_REG, CS40L25_SURFACE_VBST_CTL,
     0x6000, 0x81f0,
     0x4c40, 0x0008,
     0x4c44, 0x0018,
@@ -356,6 +357,9 @@ uint32_t cs40l25_syscfg_regs[] =
     0x4804, 0x0021,
     0x2904, 0x0098
 };
+
+_Static_assert(sizeof(cs40l25_syscfg_regs) / sizeof(cs40l25_syscfg_regs[0]) ==
+               CS40L25_SYSCFG_REGS_TOTAL, "CS40L25 system configuration word count mismatch");
 
 uint32_t bsp_dut_initialize(void)
 {

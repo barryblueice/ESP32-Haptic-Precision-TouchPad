@@ -1,0 +1,33 @@
+[
+  {
+    "kind": "init",
+    "table_address": "0x000841ec",
+    "index": 55,
+    "source_body_offset": 17316,
+    "register": "0x00003800",
+    "value": "0x000000aa",
+    "raw_hex": "00003800000000aa",
+    "raw_sha256": "c3c14451e1ba7eb25351be156bca12a3009a4626afecca6d6967ae50dabbdd31"
+  },
+  {
+    "kind": "init",
+    "table_address": "0x0008442c",
+    "index": 54,
+    "source_body_offset": 17884,
+    "register": "0x00003800",
+    "value": "0x000000aa",
+    "raw_hex": "00003800000000aa",
+    "raw_sha256": "c3c14451e1ba7eb25351be156bca12a3009a4626afecca6d6967ae50dabbdd31"
+  },
+  {
+    "kind": "wseq",
+    "register": "0x00003800",
+    "value": "0x000000aa",
+    "source_block_pointer": "0x8bd08",
+    "dsp_entry_address": "0x2801820",
+    "source_body_offset": 48488,
+    "block_payload_offset": 96,
+    "raw_hex": "00380000000000aa",
+    "raw_sha256": "644e25dbde0ae70062e15be9c02e9addc69396a169d45933af649c13ade12da4"
+  }
+]

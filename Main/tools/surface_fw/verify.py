@@ -17,6 +17,7 @@ from test_policy import run_policy_tests, verify_policy_reference
 from test_runtime import run_runtime_tests, verify_interfaces
 from test_service import run_service_tests
 from test_input import run_input_tests
+from test_boost import run_boost_tests, verify_boost_reference
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
@@ -273,6 +274,8 @@ def main():
     integration_tests = None
     worker_tests = None
     input_tests = None
+    boost_tests = None
+    boost_configuration = verify_boost_reference()
     verify_interfaces()
     if args.self_test:
         run_negative_tests(data, tables)
@@ -280,6 +283,7 @@ def main():
         integration_tests = run_runtime_tests()
         worker_tests = run_service_tests()
         input_tests = run_input_tests()
+        boost_tests = run_boost_tests()
     report = dict(image_size=len(data), image_sha256=digest(data),
                   firmware_id="0x1400e1", firmware_revision="0x0a0603",
                   symbols=len(symbols), ordered_blocks=len(blocks),
@@ -299,6 +303,8 @@ def main():
                   integration_host_tests=integration_tests,
                   worker_host_tests=worker_tests,
                   input_host_tests=input_tests,
+                  boost_configuration=boost_configuration,
+                  boost_host_tests=boost_tests,
                   standalone_board_test="previous five-setting test passed, user reported",
                   integration_board_test="not performed; no flashing")
     if args.write_report:
