@@ -15,6 +15,7 @@
 
 #include "I2C/I2C_handle.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
+#include "GPIO/GPIO_handle.h"
 
 #define TAG "I2C_QUEUE"
 
@@ -31,8 +32,6 @@
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 #define FORCE_CLICK_MOVE_DEADZONE 45
-#define FORCE_CLICK_HAPTIC_WAVEFORM 4
-#define FORCE_CLICK_HAPTIC_DURATION_MS 100
 
 typedef enum {
     TOUCH_NONE = 0,
@@ -105,25 +104,6 @@ static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
     }
 }
 
-static uint16_t ptp_map_haptic_cp_dig_scale(uint8_t intensity_level) {
-    switch (ptp_haptic_click_intensity_clamp(intensity_level)) {
-        case 4:
-            return 3;
-
-        case 3:
-            return 33;
-
-        case 2:
-            return 66;
-
-        case 1:
-            return 100;
-
-        default:
-            return UINT16_MAX;
-    }
-}
-
 static void ptp_reset_force_click(tp_multi_msg_t *msg) {
     ptp_force_click_state.tracking_contact = false;
     ptp_force_click_state.button_down = false;
@@ -168,7 +148,6 @@ static void ptp_apply_force_click_deadzone(tp_multi_msg_t *msg, int tracked_inde
 
 static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger_count) {
     int tracked_index = -1;
-    bool was_button_down = ptp_force_click_state.button_down;
     // uint8_t tracked_confidence = 0;
     static uint32_t debug_counter = 0;
     bool should_log_sample = false;
@@ -329,15 +308,7 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         }
     }
 
-    if (!was_button_down && ptp_force_click_state.button_down) {
-        uint16_t cp_dig_scale = ptp_map_haptic_cp_dig_scale(ptp_haptic_click_intensity);
 
-        if (cp_dig_scale != UINT16_MAX) {
-            cs40l25_surface_trigger_scaled(FORCE_CLICK_HAPTIC_WAVEFORM,
-                                           cp_dig_scale,
-                                           FORCE_CLICK_HAPTIC_DURATION_MS);
-        }
-    }
 }
 
 void update_simulated_scan_time(tp_multi_msg_t *msg) {
@@ -357,6 +328,8 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 void i2c_queue_task(void *arg) {
 
     uint8_t tp_packet[64];
+    int previous_format = -1;
+    uint8_t previous_mode = current_tp_mode;
 
     while (1) {
 
@@ -369,6 +342,13 @@ void i2c_queue_task(void *arg) {
             // for(int i=0; i<64; i++) printf("%02x ", tp_packet[i]);
             // printf("\n");
 
+            int format = tp_packet[0] == 0x40;
+            if ((previous_format != -1 && previous_format != format) || previous_mode != current_tp_mode) {
+                cs40l25_surface_cancel_click();
+                ptp_reset_force_click(&tp_msg);
+            }
+            previous_format = format;
+            previous_mode = current_tp_mode;
             if (tp_packet[0] == 0x40) {
                 int active_finger_count = 0;
 
@@ -528,6 +508,16 @@ void i2c_queue_task(void *arg) {
                 // }
 
                 ptp_update_force_click_button(&tp_msg, active_finger_count);
+                // Observe the final state even when force-click processing returned early.
+                // USB/BLE simulated mouse observes its final gesture/drag button below
+                // in parse_ptp_simulated_mouse_report. 2.4G keeps the existing packet path.
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                if (current_tp_mode != MOUSE_MODE || current_mode == _2_4_MODE)
+#endif
+                {
+                    cs40l25_surface_button_update(tp_msg.button_mask != 0,
+                                                   ptp_haptic_click_intensity_get());
+                }
                 tp_msg.actual_count = (active_finger_count > 0) ? active_finger_count : 1;
                 xQueueOverwrite(tp_queue, &tp_msg);
                 // ESP_DRAM_LOGI(TAG, "%d %d %d %d",watchdog_x, watchdog_y, watchdog_tip_switch, global_scan_time);
@@ -547,6 +537,8 @@ void i2c_queue_task(void *arg) {
                     mouse_msg.y = (int8_t)tp_packet[4];
                 #endif
                 mouse_msg.buttons = tp_packet[3];
+                cs40l25_surface_button_update((mouse_msg.buttons & 0x03U) != 0,
+                                               ptp_haptic_click_intensity_get());
 
                 xQueueOverwrite(mouse_queue, &mouse_msg);
             }

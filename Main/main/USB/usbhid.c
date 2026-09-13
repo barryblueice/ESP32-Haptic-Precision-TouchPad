@@ -40,8 +40,6 @@
 #define REPORTID_FUNCTION_SWITCH        0x06
 #define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
 #define REPORTID_HAPTIC_INTENSITY       0x41
-#define REPORTID_HAPTIC_WAVEFORM_LIST   0x42
-#define REPORTID_HAPTIC_MANUAL_TRIGGER  0x43
 #define REPORTID_HAPTIC_FEATURE         0x0C
 
 #define TPD_REPORT_ID 0x01
@@ -161,10 +159,6 @@ static void usb_ptp_enqueue_report(const ptp_report_t *report) {
     usb_ptp_kick_tx();
 }
 
-static uint16_t read_le16(uint8_t const *buffer) {
-    return (uint16_t)buffer[0] | ((uint16_t)buffer[1] << 8);
-}
-
 void tud_hid_report_complete_cb(uint8_t instance, uint8_t const* report, uint16_t len) {
     (void)report;
     (void)len;
@@ -215,25 +209,11 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             return 1;
         }
         if (report_id == REPORTID_HAPTIC_INTENSITY) {
-            buffer[0] = ptp_haptic_click_intensity;
+            if (buffer == NULL || reqlen < 1) return 0;
+            buffer[0] = ptp_haptic_click_intensity_get();
             return 1;
         }
-        if (report_id == REPORTID_HAPTIC_WAVEFORM_LIST) {
-            uint16_t *waveforms = (uint16_t *)&buffer[0];
-            waveforms[0] = 4097; // Instance 3
-            waveforms[1] = 4098; // Instance 4
-            waveforms[2] = 4099; // Instance 5
-            waveforms[3] = 4100; // Instance 6
-            waveforms[4] = 4101; // Instance 7
 
-            buffer[10] = 20; // Instance 3 duration
-            buffer[11] = 20;
-            buffer[12] = 20;
-            buffer[13] = 20;
-            buffer[14] = 20;
-
-            return 15;
-        }
     }
     return 0;
 }
@@ -253,7 +233,6 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
             case REPORTID_FEATURE:
             case REPORTID_BUTTON_PRESS_THRESHOLD:
             case REPORTID_HAPTIC_INTENSITY:
-            case REPORTID_HAPTIC_MANUAL_TRIGGER:
                 effective_report_id = buffer[0];
                 payload = &buffer[1];
                 payload_size = bufsize - 1;
@@ -287,44 +266,12 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_INTENSITY) {
-        uint8_t intensity = ptp_haptic_click_intensity_clamp(payload[0]);
-
-        ptp_haptic_click_intensity_set(intensity, true);
-
-        ESP_LOGI(TAG,
-                 "Haptic click SET_FEATURE: instance=%u raw=0x%02X enabled=%s intensity=%u duration_ms=%" PRIu32,
-                 instance,
-                 payload[0],
-                 ptp_haptic_click_intensity > 0 ? "true" : "false",
-                 ptp_haptic_click_intensity,
-                 ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity));
+        esp_err_t err = ptp_haptic_click_intensity_set_report(payload, payload_size, true);
+        if (err != ESP_OK) ESP_LOGW(TAG, "Rejected Surface strength: %s", esp_err_to_name(err));
     }
 
-    if (report_type == HID_REPORT_TYPE_OUTPUT && effective_report_id == REPORTID_HAPTIC_MANUAL_TRIGGER) {
-        uint8_t waveform = (payload_size >= 1) ? payload[0] : 0;
-        uint8_t intensity = (payload_size >= 2) ? payload[1] : 0;
-        uint8_t repeat_count = (payload_size >= 3) ? payload[2] : 0;
-        uint16_t retrigger_period_ms = (payload_size >= 5) ? read_le16(&payload[3]) : 0;
-        uint16_t cutoff_time_ms = (payload_size >= 7) ? read_le16(&payload[5]) : 0;
-
-        ESP_LOGI(TAG,
-                 "Haptic signal OUTPUT: instance=%u waveform=%u intensity=%u repeat=%u retrigger_ms=%u cutoff_ms=%u len=%u",
-                 instance,
-                 waveform,
-                 intensity,
-                 repeat_count,
-                 retrigger_period_ms,
-                 cutoff_time_ms,
-                 payload_size);
-
-        cs40l25_surface_trigger_manual(waveform,
-                                       intensity,
-                                       repeat_count,
-                                       retrigger_period_ms,
-                                       cutoff_time_ms);
-    }
-
-    if (buffer[0] == REPORTID_DFU_CMD) {
+    if (report_id == REPORTID_DFU_CMD ||
+        (report_id == 0 && buffer[0] == REPORTID_DFU_CMD)) {
         enter_dfu_mode();
     }
 }

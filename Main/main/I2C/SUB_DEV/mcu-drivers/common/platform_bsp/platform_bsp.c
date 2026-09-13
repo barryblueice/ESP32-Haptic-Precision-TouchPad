@@ -327,8 +327,10 @@ uint32_t bsp_register_pb_cb(uint32_t pb_id, bsp_app_callback_t cb, void *cb_arg)
 
 void bsp_notification_callback(uint32_t event_flags, void *arg)
 {
-    (void)event_flags;
     (void)arg;
+    if (app_cb != NULL) {
+        app_cb(event_flags, app_cb_arg);
+    }
 }
 
 uint32_t bsp_register_gpio_cb(uint32_t gpio_id, bsp_callback_t cb, void *cb_arg)

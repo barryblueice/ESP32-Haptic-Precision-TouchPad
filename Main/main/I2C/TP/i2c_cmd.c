@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "sdkconfig.h"
 
@@ -139,6 +140,7 @@ void tp_hw_reset(void) {
 }
 
 esp_err_t touchpad_mode_set(bool is_ptp_mode) {
+    cs40l25_surface_cancel_click();
 
     #if CONFIG_PTP_SIMULATED_MOUSE_MODE
         is_ptp_mode = true;

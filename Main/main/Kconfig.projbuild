@@ -1,5 +1,12 @@
 menu "TouchPad Configuration"
 
+    config SURFACE_HAPTIC_TEST_MODE
+        bool "Run standalone Surface haptic test instead of normal touchpad"
+        default n
+        help
+            Test settings 0,25,63,75,100 with press/release events every 2 seconds.
+            Normal touchpad tasks are not started in this mode.
+
     menu "USB Descriptor Options"
 
         config TOUCHPAD_MANUFACTURER_STRING

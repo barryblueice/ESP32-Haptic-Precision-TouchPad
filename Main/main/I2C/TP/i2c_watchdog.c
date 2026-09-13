@@ -3,6 +3,7 @@
 #include "esp_log.h"
 
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "SYS/hid_msg.h"
 
@@ -40,6 +41,7 @@ void watchdog_timeout_callback(void* arg) {
 
         release_msg.actual_count = 1;
         release_msg.button_mask = 0;
+        cs40l25_surface_button_update(false, ptp_haptic_click_intensity_get());
 
         if (tp_queue != NULL) {
             xQueueOverwrite(tp_queue, &release_msg);

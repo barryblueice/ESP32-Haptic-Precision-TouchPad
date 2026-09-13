@@ -6,6 +6,7 @@
 
 #include "SYS/hid_msg.h"
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #define MAX_TOUCH_CONTACTS 5
 #define HID_AXIS_MIN (-127)
@@ -440,10 +441,13 @@ static void handle_dual_finger_scroll(const tp_multi_msg_t *msg,
 bool ptp_simulated_mouse_click_needs_release(void) {
     bool needs_release = m_state.click_release_pending;
     m_state.click_release_pending = false;
+    if (needs_release) {
+        cs40l25_surface_button_update(false, ptp_haptic_click_intensity_get());
+    }
     return needs_release;
 }
 
-void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg,
+static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
                                       mouse_hid_report_t *out_report) {
     out_report->buttons = msg->button_mask & 0x07;
     out_report->x = 0;
@@ -516,6 +520,12 @@ void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg,
         reset_scroll_state();
         handle_tap_release(msg, out_report);
     }
+}
+
+void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_report_t *out_report) {
+    parse_simulated_mouse_buttons(msg, out_report);
+    // Includes early returns, tap clicks and held double-tap drags.
+    cs40l25_surface_button_update(out_report->buttons != 0, ptp_haptic_click_intensity_get());
 }
 
 #endif
