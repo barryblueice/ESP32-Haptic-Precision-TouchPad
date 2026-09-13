@@ -12,6 +12,7 @@
 #include "mcu-drivers/common/platform_bsp/platform_bsp.h"
 #include "mcu-drivers/cs40l25/bsp/surface_fw_metadata.h"
 #include "mcu-drivers/cs40l25/cs40l25_spec.h"
+#include "mcu-drivers/cs40l25/cs40l25_syscfg_regs.h"
 #include "mcu-drivers/cs40l25/cs40l25.h"
 #include "mcu-drivers/fw_img/cs40l25_fw_img.h"
 
@@ -68,6 +69,19 @@ static bool read_reg(uint32_t reg, uint32_t *value)
     uint8_t data[4];
     CHECK_ESP(i2c_master_transmit_receive(dev_haptic_motor_handle, address, 4, data, 4, IO_TIMEOUT_MS));
     *value = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) | ((uint32_t)data[2] << 8) | data[3];
+    return true;
+}
+
+static bool check_vbst(const char *phase)
+{
+    uint32_t value;
+    if (!read_reg(BOOST_VBST_CTL_1_REG, &value)) return false;
+    ESP_LOGI(TAG, "%s VBST parameter=11000 mV target=0x%02X actual=0x%08" PRIX32
+             " external_boost=true", phase, (unsigned int)CS40L25_SURFACE_VBST_CTL, value);
+    if ((value & 0xFFU) != CS40L25_SURFACE_VBST_CTL) {
+        ESP_LOGE(TAG, "%s VBST parameter mismatch", phase);
+        return false;
+    }
     return true;
 }
 
@@ -155,7 +169,7 @@ bool surface_haptic_hw_initialize(void)
     if (!changed || !check_wave_count()) return false;
     CHECK_BSP(bsp_dut_update_haptic_config(0));
     CHECK_BSP(bsp_dut_enable_haptic_processing(true));
-    return true;
+    return check_vbst("initialize");
 }
 
 bool surface_haptic_hw_wake(void)
@@ -167,7 +181,7 @@ bool surface_haptic_hw_wake(void)
     // Idle standby need not advance heartbeat; activity is checked on next playback.
     CHECK_BSP(bsp_dut_has_processed(&changed));
     CHECK_BSP(surface_haptic_hw_process());
-    return true;
+    return check_vbst("wake");
 }
 
 bool surface_haptic_hw_power_off(void)
@@ -178,6 +192,17 @@ bool surface_haptic_hw_power_off(void)
 
 void surface_haptic_hw_diagnostics(uint8_t waveform)
 {
+    if (chip_identified) {
+        const uint32_t regs[] = {BOOST_VBST_CTL_1_REG, BOOST_VBST_CTL_2_REG,
+                                 MSM_BLOCK_ENABLES_REG, MSM_GLOBAL_ENABLES_REG};
+        for (unsigned int i = 0; i < sizeof(regs) / sizeof(regs[0]); ++i) {
+            uint32_t value;
+            if (read_reg(regs[i], &value)) {
+                ESP_LOGE(TAG, "Boost diagnostic reg=0x%08" PRIX32 " value=0x%08" PRIX32,
+                         regs[i], value);
+            }
+        }
+    }
     if (firmware_loaded) {
         bsp_dut_dump_trigger_diagnostics(waveform, 0);
     } else if (chip_identified) {

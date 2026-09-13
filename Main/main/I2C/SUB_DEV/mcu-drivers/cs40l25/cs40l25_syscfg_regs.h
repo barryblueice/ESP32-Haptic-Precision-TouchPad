@@ -41,7 +41,10 @@ extern "C" {
 /***********************************************************************************************************************
  * LITERALS & CONSTANTS
  **********************************************************************************************************************/
-#define CS40L25_SYSCFG_REGS_TOTAL (32)
+// Surface SAM VBST parameter: 2550 + (0xAA - 1) * 50 = 11000 mV.
+// This does not enable internal boost or specify actuator output amplitude.
+#define CS40L25_SURFACE_VBST_CTL (0xAAU)
+#define CS40L25_SYSCFG_REGS_TOTAL (34)
 
 /***********************************************************************************************************************
  * ENUMS, STRUCTS, UNIONS, TYPEDEFS
@@ -57,4 +60,3 @@ extern uint32_t cs40l25_syscfg_regs[];
 #endif
 
 #endif // CS40L25_SYSCFG_REGS_H
-

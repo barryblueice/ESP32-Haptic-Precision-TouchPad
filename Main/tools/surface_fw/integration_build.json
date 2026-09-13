@@ -4,7 +4,7 @@
   "test_mode": false,
   "idf_path": "D:/Espressif/v6.0/esp-idf",
   "python": "C:/Espressif/tools/python/v6.0/venv/Scripts/python.exe",
-  "compiler": "D:/Espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc.exe",
+  "compiler": "C:/Espressif/tools/xtensa-esp-elf/esp-15.2.0_20251204/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc.exe",
   "ninja": "C:/Espressif/tools/ninja/1.12.1/ninja.exe",
   "command": "ninja -C build",
   "incremental_build_passed": true,
@@ -13,17 +13,17 @@
   "flashed": false,
   "integration_board_test": false,
   "app_partition_bytes": 1536000,
-  "app_free_bytes": 177296,
+  "app_free_bytes": 176768,
   "artifacts": [
     {
       "path": "build/ESP32_HAPTIC_PRECISION_TOUCHPAD.bin",
-      "size_bytes": 1358704,
-      "sha256": "5a851e7e203fc7aa58d42d00c56d2238e79c7ad8c2c5d5f8a8bed8ba091b431a"
+      "size_bytes": 1359232,
+      "sha256": "68b4946c25e1b1932bb46cd92d6e6817dd6761c4c499d2fe391d807fe793e838"
     },
     {
       "path": "build/ESP32_HAPTIC_PRECISION_TOUCHPAD.elf",
-      "size_bytes": 13662060,
-      "sha256": "c9341212acb08dd67ab2c72c4c3ca06a91fbb3cc1283629894e547c0b3f923a2"
+      "size_bytes": 13663632,
+      "sha256": "8cd88f0b223a48beca97191cb8e82402c0606fc84ef054a3eaae249b2eb95a05"
     },
     {
       "path": "build/bootloader/bootloader.bin",
@@ -72,5 +72,17 @@
     "startup_default_vref_issue_resolved": false,
     "board_measured": false
   },
-  "latest_offline_checks_passed": 51
+  "latest_offline_checks_passed": 65,
+  "cs40l25_vbst_configuration": {
+    "register": "0x00003800",
+    "code": "0xAA",
+    "parameter_mv": 11000,
+    "external_boost": true,
+    "wseq_restore": true,
+    "initialize_and_wake_readback": true,
+    "board_measured": false
+  },
+  "incremental_build_steps": 14,
+  "cmake_automatically_regenerated": true,
+  "syntax_only_checks_scope": "Retained results from the previous integration; unchanged BLE/test entry branches were not recompiled separately for the VBST change."
 }

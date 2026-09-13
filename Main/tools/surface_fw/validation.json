@@ -110,6 +110,34 @@
     "production_function_bodies": true,
     "coverage": "pressure debounce/hold/release, no finger, multi-finger, tracked contact, simulated tap/right/middle click and drag"
   },
+  "boost_configuration": {
+    "register": "0x00003800",
+    "code": "0xAA",
+    "parameter_mv": 11000,
+    "external_boost": true,
+    "board_measured": false
+  },
+  "boost_host_tests": {
+    "passed": 14,
+    "scenarios": [
+      "initialize_11v",
+      "wake_11v",
+      "initialize_read_failure",
+      "initialize_mismatch",
+      "wake_read_failure",
+      "wake_mismatch",
+      "syscfg_write_failure",
+      "wseq_restore_11v",
+      "wseq_entry_failure",
+      "wseq_terminator_failure",
+      "hibernate_command_failure",
+      "wseq_missing_symbol",
+      "diagnostic_registers",
+      "vbst_reserved_bits"
+    ],
+    "actual_c_boot_wseq_and_hw": true,
+    "hardware": "recording stub; no board"
+  },
   "standalone_board_test": "previous five-setting test passed, user reported",
   "integration_board_test": "not performed; no flashing"
 }
