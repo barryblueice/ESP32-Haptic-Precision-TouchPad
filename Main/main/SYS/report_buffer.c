@@ -27,8 +27,9 @@ static bool same_state(const input_report_t *a, const input_report_t *c)
 {
     if (a->mode != c->mode) return false;
     if (a->mode == MOUSE_MODE) return a->data.mouse.buttons == c->data.mouse.buttons;
-    if (a->data.ptp.buttons != c->data.ptp.buttons) return false;
-    for (unsigned i = 0; i < 5; ++i)
+    if (a->data.ptp.buttons != c->data.ptp.buttons ||
+        a->data.ptp.contact_count != c->data.ptp.contact_count) return false;
+    for (unsigned i = 0; i < a->data.ptp.contact_count && i < 5; ++i)
         if (a->data.ptp.fingers[i].tip_conf_id != c->data.ptp.fingers[i].tip_conf_id) return false;
     return true;
 }
@@ -102,7 +103,7 @@ bool report_buffer_take(report_buffer_t *b, uint32_t now, input_report_t *out)
         *out = (input_report_t){.mode = (b->release_mask & 1) ? MOUSE_MODE : PTP_MODE,
             .generation = b->generation, .time_ms = now, .release = true};
         if (out->mode == PTP_MODE) {
-            out->data.ptp.contact_count = 1;
+            out->data.ptp.contact_count = 5;
             for (unsigned i = 0; i < 5; ++i) out->data.ptp.fingers[i].tip_conf_id = (i << 2) | 1;
         }
         return true;

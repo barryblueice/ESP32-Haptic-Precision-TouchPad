@@ -8,6 +8,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def run():
              source('main/SYS/report_buffer.h'), source('main/SYS/report_buffer.c'),
              source('main/SYS/input_pipeline.h'), source('tools/input_pipeline/host_runtime.h'),
              source('main/SYS/input_pipeline.c')]
+    parts += ['#define SENSITIVITY 2.0f', source('main/I2C/TP/tp_report_handle.c')]
     usb = source('main/USB/usbhid.c')
     parts += [source('tools/input_pipeline/host_transports.h'),
               usb[usb.index('static portMUX_TYPE usb_tx_lock'):usb.index('uint16_t tud_hid_get_report_cb')],
@@ -58,9 +60,11 @@ def run():
                      source('main/I2C/TP/tp_coordinates.h').replace('tp_rotate_coordinates', f'rotate_{index}'))
     parts.append(source('tools/input_pipeline/host_cases.c'))
     code = '\n'.join(parts).replace('while (true)', 'while (test_steps-- > 0)')
-    with tempfile.TemporaryDirectory(prefix='touchpad-input-') as temp:
+    temp_root = ROOT / 'build/input_validation'
+    temp_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='touchpad-input-', dir=temp_root) as temp:
         temp = Path(temp)
-        assert temp.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve())
+        assert temp.resolve().is_relative_to(temp_root.resolve())
         c, dll = temp / 'test.c', temp / 'test.dll'
         c.write_text(code, encoding='utf-8')
         host_paths = os.pathsep.join(p for p in os.environ.get('PATH', '').split(os.pathsep) if 'esp-clang' not in p.lower())
@@ -70,11 +74,13 @@ def run():
         command = [clang, '-std=c11', '-O1', '-fno-builtin',
                    '-Werror=implicit-function-declaration', '-shared', '-nostdlib', '-fuse-ld=lld',
                    '-Wl,/noentry', '-Wl,/nodefaultlib', str(c), '-o', str(dll)]
-        subprocess.run(command, check=True, capture_output=True, text=True)
+        print(f'Compiling host cases with {clang}', flush=True)
+        subprocess.run(command, check=True, capture_output=True, text=True, timeout=60)
         library = ctypes.CDLL(str(dll))
         cases = re.findall(r'EXPORT int (test_\w+)\(void\)', parts[-1])
         try:
             for name in cases:
+                print(f'Running {name}', flush=True)
                 result = getattr(library, name)()
                 if result:
                     context = code.splitlines()[max(0, result - 2):result + 1]
@@ -89,7 +95,11 @@ def run():
 
 if __name__ == '__main__':
     try:
-        run()
+        if '--worker' in sys.argv:
+            run()
+        else:
+            subprocess.run([sys.executable, '-B', '-u', str(Path(__file__).resolve()), '--worker'],
+                           check=True, timeout=180)
     except subprocess.CalledProcessError as error:
         print(error.stdout or '')
         print(error.stderr or '')

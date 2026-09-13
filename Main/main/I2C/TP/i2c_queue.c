@@ -329,6 +329,7 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 
 static void reset_input_state(void)
 {
+    ptp_report_reset();
     ptp_force_click_state = (ptp_force_click_state_t){0};
     memset(touch_state, 0, sizeof(touch_state));
     memset(tap_frozen, 0, sizeof(tap_frozen));
