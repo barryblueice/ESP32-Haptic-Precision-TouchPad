@@ -5,17 +5,8 @@
 #include "tusb.h"
 
 #include "sdkconfig.h"
+#include "protocol.h"
 
-#define REPORTID_HAPTIC_TOUCHPAD        0x01
-#define REPORTID_LEGACY_TOUCHPAD        0x02
-#define REPORTID_MOUSE                  0x03  // 示例中通常是这样排列的
-#define REPORTID_MAX_COUNT              0x04  // Device Capabilities
-#define REPORTID_HAPTIC_PTPHQA          0x05  // 认证相关 (一般返回全0即可)
-#define REPORTID_LEGACY_PTPHQA          0x06  // 认证相关 (一般返回全0即可)
-#define REPORTID_HAPTIC_FEATURE         0x06  // Input Mode
-#define REPORTID_LEGACY_FEATURE         0x07  // Input Mode
-#define REPORTID_FUNCTION_SWITCH        0x08
-#define REPORTID_BUTTON_PRESS_THRESHOLD 0x40
 
 #define EPNUM_GENERIC_IN      0x81
 #define HAPTIC_EPNUM_TP_IN    0x82
@@ -889,25 +880,10 @@ const uint8_t haptic_ptp_hid_report_descriptor[] = {
     0xC0
 };
 
-// enum {
-//     ITF_NUM_HID,
-//     ITF_NUM_TOTAL
-// };
-
-// uint8_t const mouse_desc_configuration[] = {
-//     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-//     TUD_HID_DESCRIPTOR(ITF_NUM_HID, 4, HID_ITF_PROTOCOL_NONE, sizeof(mouse_hid_report_descriptor), 0x81, 64, 1)
-// };
-
-// uint8_t const ptp_desc_configuration[] = {
-//     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, TUD_CONFIG_DESC_LEN + TUD_HID_DESC_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
-//     TUD_HID_DESCRIPTOR(ITF_NUM_HID, 4, HID_ITF_PROTOCOL_NONE, sizeof(ptp_hid_report_descriptor), 0x81, 64, 1)
-// };
-
 uint8_t const desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, 4, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_HID_DESCRIPTOR(0, 0, false, sizeof(generic_hid_report_descriptor), EPNUM_GENERIC_IN, 64, 10),
-    TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(haptic_ptp_hid_report_descriptor), HAPTIC_EPNUM_TP_IN, 64, 10),
-    TUD_HID_DESCRIPTOR(2, 0, HID_ITF_PROTOCOL_NONE, sizeof(legacy_ptp_hid_report_descriptor), LEGACY_EPNUM_TP_IN, 64, 10),
-    TUD_HID_DESCRIPTOR(3, 0, HID_ITF_PROTOCOL_MOUSE, sizeof(mouse_hid_report_descriptor), EPNUM_MOUSE_IN, 8, 10)
+    TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(haptic_ptp_hid_report_descriptor), HAPTIC_EPNUM_TP_IN, 64, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS),
+    TUD_HID_DESCRIPTOR(2, 0, HID_ITF_PROTOCOL_NONE, sizeof(legacy_ptp_hid_report_descriptor), LEGACY_EPNUM_TP_IN, 64, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS),
+    TUD_HID_DESCRIPTOR(3, 0, HID_ITF_PROTOCOL_MOUSE, sizeof(mouse_hid_report_descriptor), EPNUM_MOUSE_IN, 8, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS)
 };

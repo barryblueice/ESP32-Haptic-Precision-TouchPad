@@ -61,16 +61,18 @@ esp_err_t nvs_mode_read(uint8_t* mode) {
 esp_err_t nvs_mode_init(void) {
     esp_err_t ret = nvs_flash_init();
     if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
+        ret = nvs_flash_erase();
+        if (ret != ESP_OK) return ret;
         ret = nvs_flash_init();
     }
+    if (ret != ESP_OK) return ret;
     
     uint8_t mode = 0;
 
     ret = nvs_mode_read(&mode);
     if (ret == ESP_ERR_NVS_NOT_FOUND) {
         ESP_LOGI(TAG, "NVS key not found, pre-storing default mode 0x00");
-        nvs_mode_write(0x00);
+        ret = nvs_mode_write(0x00);
     }
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "NVS init failed (%d)", ret);

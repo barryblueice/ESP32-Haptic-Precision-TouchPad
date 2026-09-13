@@ -1,16 +1,20 @@
 idf_component_register(
     SRCS "main.c"
+        "protocol.c"
+        "input/report_buffer.c"
+        "input/input_pipeline.c"
         "usb/usbhid.c"
         "usb/usb_descriptor.c"
         "nvs/ptp_nvs.c"
-        "wireless/wifi_quene.c"
+        "wireless/wifi_receive.c"
         "wireless/heartbeat.c"
         "wireless/broadcast.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES esp_driver_gpio
-        esp_driver_i2c
         esp_tinyusb
         esp_timer
         esp_wifi
+        esp_event
+        esp_netif
         nvs_flash
     )

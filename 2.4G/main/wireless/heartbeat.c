@@ -1,21 +1,24 @@
-#include "wireless/wireless.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
+#include "wireless.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
-#include "esp_timer.h"
-#include "esp_now.h"
-#include "sdkconfig.h"
 
-uint32_t last_seen_timestamp = 0;
+static portMUX_TYPE heartbeat_lock = portMUX_INITIALIZER_UNLOCKED;
+static TickType_t last_seen_timestamp;
 
-void monitor_link_task(void *arg) {
-    while(1) {
-        if ((xTaskGetTickCount() - last_seen_timestamp) > pdMS_TO_TICKS(5000)) {
-            gpio_set_level(GPIO_NUM_9, 1);
-        } else {
-            gpio_set_level(GPIO_NUM_9, 0);
-        }
+void wireless_heartbeat_seen(TickType_t tick)
+{
+    taskENTER_CRITICAL(&heartbeat_lock);
+    last_seen_timestamp = tick;
+    taskEXIT_CRITICAL(&heartbeat_lock);
+}
+void monitor_link_task(void *arg)
+{
+    (void)arg;
+    while (true) {
+        taskENTER_CRITICAL(&heartbeat_lock);
+        TickType_t last = last_seen_timestamp;
+        taskEXIT_CRITICAL(&heartbeat_lock);
+        /* Deliberately preserve the original GPIO9 startup/heartbeat behavior. */
+        gpio_set_level(GPIO_NUM_9, (TickType_t)(xTaskGetTickCount() - last) > pdMS_TO_TICKS(5000));
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
