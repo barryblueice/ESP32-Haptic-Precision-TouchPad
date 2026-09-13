@@ -120,4 +120,5 @@
 # 相关的衍生计划:
 
  - [ESP32 Precision TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad) - 上一代关于ELAN & Goodix TouchPad破解的项目。
+ - [FluentGesture](https://github.com/barryblueice/FluentGesture) - 专用于精确式触摸板的手势自定义桌面端APP。
  - [R-SODIUM Precision TouchPad Configurator](https://github.com/barryblueice/R-SODIUM-Precision-TouchPad-Configurator) - R-SODIUM触摸板产品系列的GUI设置软件。
