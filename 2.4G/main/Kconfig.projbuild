@@ -1,6 +1,12 @@
 menu "TouchPad Configuration"
 
     menu "USB Descriptor Options"
+        config TOUCHPAD_USB_INPUT_INTERVAL_MS
+            int "USB input polling interval (ms)"
+            range 1 10
+            default 1
+            help
+                Polling interval for mouse and both touchpad input endpoints.
 
         config TOUCHPAD_MANUFACTURER_STRING
             string "TouchPad Manufacturer"

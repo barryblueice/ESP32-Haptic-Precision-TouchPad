@@ -1,0 +1,55 @@
+{
+  "time_utc": "2026-09-13T12:44:50.350330+00:00",
+  "flashed": false,
+  "board_validation": "not performed",
+  "checks": {
+    "host": {
+      "passed": true,
+      "count": 22,
+      "cases": [
+        "check_wire_compatibility",
+        "check_mouse_edges_and_accumulation",
+        "check_ptp_edges_and_latest_coordinates",
+        "check_contact_count_and_id_edges",
+        "check_queue_overflow_and_neutral_gate",
+        "check_expiry_boundaries_and_wrap",
+        "check_accumulator_overflow_and_ring_wrap",
+        "check_release_ids_and_old_ack",
+        "check_ptp_subtype_switch",
+        "check_usb_busy_submit_and_completion",
+        "check_usb_failed_transfer_and_stale_callbacks",
+        "check_usb_mode_switch_in_flight",
+        "check_usb_detach_suspend_resume",
+        "check_usb_bus_reset_reconfigure",
+        "check_get_report_bounds_and_interface_collision",
+        "check_set_report_routing_and_dfu",
+        "check_radio_serialization_and_retry",
+        "check_receive_validation_fifo_overflow",
+        "check_heartbeat_is_not_neutral_and_gpio_unchanged",
+        "check_link_loss_recovery",
+        "check_nvs_first_boot_and_errors",
+        "check_initialization_resource_failures"
+      ],
+      "clang": "D:\\Swift\\Toolchains\\6.0.0+Asserts\\usr\\bin\\clang.EXE"
+    },
+    "build": true,
+    "descriptor_variants": 4,
+    "variant_config_unchanged": true
+  },
+  "idf_path": "D:\\Espressif\\v6.0\\esp-idf",
+  "python": "C:\\Espressif\\tools\\python\\v6.0\\venv\\Scripts\\python.exe",
+  "artifacts": [
+    {
+      "path": "build\\ESP32-Haptic-2.4G-Receiver.bin",
+      "bytes": 792000,
+      "sha256": "22d91e6ea78f6748c9959eb1d1de566a8c14c48195f3a2bed3b8c04dfc09c927"
+    },
+    {
+      "path": "build\\ESP32-Haptic-2.4G-Receiver.elf",
+      "bytes": 8497472,
+      "sha256": "f94db42d8347994177fbf1aff82b3b0fa96243bc6030f6551c7cfaebe3465573"
+    }
+  ],
+  "passed": true,
+  "source_sha256": "350d3677dba445413061110f239b58cfb7c96f5c7ed4ce56c49eed192d489c36"
+}
