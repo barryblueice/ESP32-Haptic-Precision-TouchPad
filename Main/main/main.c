@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include "sdkconfig.h"
 #include <string.h>
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
@@ -28,6 +29,11 @@
 
 #define TAG "SurfaceTouch"
 
+#if CONFIG_SURFACE_HAPTIC_TEST_MODE
+void surface_haptic_test_start(void);
+void app_main(void) { surface_haptic_test_start(); }
+#else
+
 void app_main(void) {
 
     esp_reset_reason_t reason = esp_reset_reason();
@@ -39,6 +45,7 @@ void app_main(void) {
     led_queue = xQueueCreate(10, sizeof(led_msg_t));
 
     main_queue_set = xQueueCreateSet(1 + 1);
+    ESP_ERROR_CHECK(tp_queue && mouse_queue && tp_data_queue && led_queue && main_queue_set ? ESP_OK : ESP_ERR_NO_MEM);
     xQueueAddToSet(mouse_queue, main_queue_set);
     xQueueAddToSet(tp_queue, main_queue_set);
 
@@ -60,22 +67,14 @@ void app_main(void) {
 
     gpio_init();
 
-    irq_func_btn_init();
-
-    touchpad_init();
-
-    nvs_init();
+    ESP_ERROR_CHECK(nvs_init());
 
     click_thresholds_load_from_nvs();
     ptp_button_press_threshold_load_from_nvs();
     ptp_haptic_click_intensity_load_from_nvs();
 
-    cs40l25_surface_init();
-
-    sub_dev_init();
-
     esp_err_t nvs_err = nvs_read_int("current_mode", &current_mode);
-    if (nvs_err != ESP_OK) {
+    if (nvs_err != ESP_OK || current_mode < WIRED_MODE || current_mode > BLE_MODE) {
         ESP_LOGE(TAG, "Failed to initialize NVS, storing default mode.");
         nvs_write_int("current_mode", WIRED_MODE);
         current_mode = WIRED_MODE;
@@ -83,13 +82,11 @@ void app_main(void) {
         ESP_LOGI(TAG, "Current mode loaded from NVS: %d", current_mode);
     }
 
+    irq_func_btn_init();
+    touchpad_init(); // I2C0 registration and the touchpad's GPIO33 reset precede haptics.
+    sub_dev_init();  // Register I2C1 devices before the haptic worker can use MP28167.
+    cs40l25_surface_init();
     irq_int_init();
-
-    uint8_t packet[4];
-
-    i2c_master_receive(dev_haptic_motor_handle, packet, 4, 100);
-
-    ESP_LOG_BUFFER_HEX(TAG, packet, sizeof(packet));
 
     switch (current_mode) {
 
@@ -130,3 +127,5 @@ void app_main(void) {
     }
 
 }
+
+#endif

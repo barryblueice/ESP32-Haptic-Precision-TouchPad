@@ -1,365 +1,165 @@
-#include "I2C/SUB_DEV/cs40l25_surface.h"
-
+#include "cs40l25_surface.h"
+#include "surface_haptic_hw.h"
+#include "surface_haptic_settings.h"
+#include "mcu-drivers/cs40l25/bsp/bsp_dut.h"
 #include <inttypes.h>
-
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/portmacro.h"
-#include "freertos/queue.h"
 #include "freertos/task.h"
 
-#include "I2C/SUB_DEV/mcu-drivers/common/platform_bsp/platform_bsp.h"
-#include "I2C/SUB_DEV/mcu-drivers/cs40l25/bsp/bsp_dut.h"
-#include "SYS/hid_msg.h"
+#define TAG "SURFACE_HAPTIC"
+static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
+static surface_haptic_runtime_t runtime;
+static bool started, sleep_requested;
 
-#define TAG "CS40L25_SURFACE"
+static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 
-#define HAPTIC_BOOT_SETTLE_MS 100
-#define HAPTIC_INIT_DELAY_MS  250
-#define HAPTIC_CLICK_WAVEFORM  4
-#define HAPTIC_MANUAL_DEFAULT_DURATION_MS 50
-#define HAPTIC_DEFAULT_GAP_MS 50
-#define HAPTIC_ROM_TEST_SETTLE_MS 500
-
-typedef enum {
-    HAPTIC_CMD_CLICK = 0,
-    HAPTIC_CMD_MANUAL_TRIGGER,
-    HAPTIC_CMD_SCALED_TRIGGER,
-} haptic_command_type_t;
-
-typedef struct {
-    haptic_command_type_t type;
-    uint8_t waveform;
-    uint16_t intensity;
-    uint8_t repeat_count;
-    uint16_t retrigger_period_ms;
-    uint16_t duration_ms;
-} haptic_command_t;
-
-static QueueHandle_t s_haptic_queue = NULL;
-static TaskHandle_t s_haptic_task = NULL;
-static bool s_haptic_ready = false;
-static portMUX_TYPE s_haptic_sleep_lock = portMUX_INITIALIZER_UNLOCKED;
-static bool s_haptic_modern_sleep = false;
-
-static bool haptic_step_ok(const char *step, uint32_t ret)
+surface_haptic_state_t cs40l25_surface_get_state(void)
 {
-    if (ret != BSP_STATUS_OK) {
-        ESP_LOGE(TAG, "%s failed: 0x%08" PRIX32, step, ret);
-        bsp_dut_dump_diagnostics();
-        return false;
-    }
+    taskENTER_CRITICAL(&lock);
+    surface_haptic_state_t state = runtime.state;
+    taskEXIT_CRITICAL(&lock);
+    return state;
+}
+bool cs40l25_surface_is_ready(void) { return cs40l25_surface_get_state() == SURFACE_READY; }
 
-    ESP_LOGI(TAG, "%s ok", step);
-    return true;
+bool cs40l25_surface_is_modern_sleep(void)
+{
+    taskENTER_CRITICAL(&lock);
+    bool sleeping = sleep_requested;
+    taskEXIT_CRITICAL(&lock);
+    return sleeping;
 }
 
-static void haptic_pump_driver_events(uint32_t duration_ms)
+void cs40l25_surface_button_update(bool down, uint8_t setting)
 {
-    uint32_t slices = duration_ms / 10U;
-
-    if (slices == 0U) {
-        slices = 1U;
-    }
-
-    for (uint32_t i = 0; i < slices; i++) {
-        (void)bsp_dut_process();
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
+    uint32_t now = now_ms();
+    taskENTER_CRITICAL(&lock);
+    surface_runtime_button(&runtime, down, setting, now);
+    taskEXIT_CRITICAL(&lock);
 }
 
-static void cs40l25_surface_run_rom_test(void)
+void cs40l25_surface_cancel_click(void)
 {
-    uint32_t ret;
-
-    ESP_LOGW(TAG, "try ROM/BHM power-on buzz before RAM firmware boot");
-
-    ret = bsp_dut_trigger_haptic(BSP_DUT_TRIGGER_HAPTIC_POWER_ON, 0);
-    if (ret == BSP_STATUS_OK) {
-        ESP_LOGI(TAG, "ROM/BHM trigger test complete");
-    } else {
-        ESP_LOGE(TAG, "ROM/BHM trigger test failed: 0x%08" PRIX32, ret);
-    }
-
-    haptic_pump_driver_events(HAPTIC_ROM_TEST_SETTLE_MS);
-}
-
-static bool cs40l25_surface_bringup(void)
-{
-    if (!haptic_step_ok("bsp_initialize", bsp_initialize(NULL, NULL))) {
-        return false;
-    }
-
-    if (!haptic_step_ok("bsp_dut_initialize", bsp_dut_initialize())) {
-        return false;
-    }
-
-    (void)haptic_step_ok("bsp_dut_enable_vamp(true)", bsp_dut_enable_vamp(true));
-
-    // The current BSP maps the CS40L25 reset line to TP_RESET_GPIO.
-    // In the integrated firmware that GPIO belongs to the touchpad, so
-    // issuing bsp_dut_reset() here destabilizes touch tracking.
-    ESP_LOGW(TAG, "skip bsp_dut_reset in integrated build: reset GPIO is shared with touchpad");
-
-    cs40l25_surface_run_rom_test();
-
-    if (!haptic_step_ok("bsp_dut_boot(false)", bsp_dut_boot(false))) {
-        return false;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(HAPTIC_BOOT_SETTLE_MS));
-
-    if (!haptic_step_ok("bsp_dut_power_up", bsp_dut_power_up())) {
-        return false;
-    }
-
-    haptic_pump_driver_events(100);
-
-    if (!haptic_step_ok("bsp_dut_update_haptic_config(0)", bsp_dut_update_haptic_config(0))) {
-        return false;
-    }
-
-    if (!haptic_step_ok("bsp_dut_enable_haptic_processing(true)", bsp_dut_enable_haptic_processing(true))) {
-        return false;
-    }
-
-    return true;
-}
-
-static void cs40l25_surface_handle_click(void)
-{
-    uint32_t duration_ms = ptp_haptic_click_duration_ms_from_intensity(ptp_haptic_click_intensity);
-    uint32_t ret;
-
-    if (duration_ms == 0U) {
-        // ESP_LOGI(TAG, "skip click haptic: intensity=%u", ptp_haptic_click_intensity);
-        return;
-    }
-
-    if (!s_haptic_ready || cs40l25_surface_is_modern_sleep()) {
-        ESP_LOGW(TAG, "skip click haptic: CS40L25 not ready");
-        return;
-    }
-
-    ret = bsp_dut_trigger_haptic(HAPTIC_CLICK_WAVEFORM, duration_ms);
-    if (ret != BSP_STATUS_OK) {
-        ESP_LOGE(TAG,
-                 "click trigger failed: intensity=%u waveform=%u duration_ms=%" PRIu32 " ret=0x%08" PRIX32,
-                 ptp_haptic_click_intensity,
-                 HAPTIC_CLICK_WAVEFORM,
-                 duration_ms,
-                 ret);
-        bsp_dut_dump_trigger_diagnostics(HAPTIC_CLICK_WAVEFORM, duration_ms);
-    }
-}
-
-static void cs40l25_surface_handle_manual(const haptic_command_t *cmd)
-{
-    uint8_t total_triggers;
-    uint16_t gap_ms;
-
-    if (!s_haptic_ready || cs40l25_surface_is_modern_sleep() || (cmd->waveform == 0U) || (cmd->intensity == 0U)) {
-        return;
-    }
-
-    total_triggers = (uint8_t)(cmd->repeat_count + 1U);
-    gap_ms = (cmd->retrigger_period_ms > 0U) ? cmd->retrigger_period_ms : HAPTIC_DEFAULT_GAP_MS;
-
-    for (uint8_t i = 0; i < total_triggers; i++) {
-        uint32_t ret = bsp_dut_trigger_haptic(cmd->waveform, cmd->duration_ms);
-        if (ret != BSP_STATUS_OK) {
-            ESP_LOGE(TAG,
-                     "manual trigger failed: waveform=%u intensity=%u ret=0x%08" PRIX32,
-                     cmd->waveform,
-                     cmd->intensity,
-                     ret);
-            bsp_dut_dump_trigger_diagnostics(cmd->waveform, cmd->duration_ms);
-            break;
-        }
-
-        if ((i + 1U) < total_triggers) {
-            haptic_pump_driver_events(gap_ms);
-        }
-    }
-}
-
-static void cs40l25_surface_handle_scaled(const haptic_command_t *cmd)
-{
-    uint16_t cp_dig_scale = cmd->intensity;
-    uint32_t ret;
-
-    if (!s_haptic_ready || cs40l25_surface_is_modern_sleep() || (cmd->waveform == 0U)) {
-        return;
-    }
-
-    if (cp_dig_scale > 0x03FFU) {
-        cp_dig_scale = 0x03FFU;
-    }
-
-    ret = bsp_dut_apply_haptic_mapping(cmd->waveform,
-                                       cmd->waveform,
-                                       cp_dig_scale,
-                                       cp_dig_scale,
-                                       false);
-    if (ret != BSP_STATUS_OK) {
-        ESP_LOGE(TAG,
-                 "scaled mapping failed: waveform=%u cp_dig_scale=%u (0x%03X) ret=0x%08" PRIX32,
-                 cmd->waveform,
-                 (unsigned int)cp_dig_scale,
-                 (unsigned int)cp_dig_scale,
-                 ret);
-        bsp_dut_dump_trigger_diagnostics(cmd->waveform, cmd->duration_ms);
-        return;
-    }
-
-    ret = bsp_dut_trigger_haptic(cmd->waveform, cmd->duration_ms);
-    if (ret != BSP_STATUS_OK) {
-        ESP_LOGE(TAG,
-                 "scaled trigger failed: waveform=%u cp_dig_scale=%u (0x%03X) duration_ms=%u ret=0x%08" PRIX32,
-                 cmd->waveform,
-                 (unsigned int)cp_dig_scale,
-                 (unsigned int)cp_dig_scale,
-                 (unsigned int)cmd->duration_ms,
-                 ret);
-        bsp_dut_dump_trigger_diagnostics(cmd->waveform, cmd->duration_ms);
-    }
-}
-
-static void cs40l25_surface_task(void *arg)
-{
-    haptic_command_t cmd;
-
-    (void)arg;
-
-    vTaskDelay(pdMS_TO_TICKS(HAPTIC_INIT_DELAY_MS));
-    s_haptic_ready = cs40l25_surface_bringup();
-
-    while (1) {
-        if (cs40l25_surface_is_modern_sleep()) {
-            vTaskDelay(pdMS_TO_TICKS(20));
-            continue;
-        }
-
-        if (xQueueReceive(s_haptic_queue, &cmd, pdMS_TO_TICKS(10)) == pdPASS) {
-            switch (cmd.type) {
-                case HAPTIC_CMD_CLICK:
-                    cs40l25_surface_handle_click();
-                    break;
-
-                case HAPTIC_CMD_MANUAL_TRIGGER:
-                    cs40l25_surface_handle_manual(&cmd);
-                    break;
-
-                case HAPTIC_CMD_SCALED_TRIGGER:
-                    cs40l25_surface_handle_scaled(&cmd);
-                    break;
-
-                default:
-                    break;
-            }
-        }
-
-        if (s_haptic_ready && !cs40l25_surface_is_modern_sleep()) {
-            (void)bsp_dut_process();
-        }
-    }
-}
-
-void cs40l25_surface_init(void)
-{
-    if (s_haptic_task != NULL) {
-        return;
-    }
-
-    s_haptic_queue = xQueueCreate(8, sizeof(haptic_command_t));
-    if (s_haptic_queue == NULL) {
-        ESP_LOGE(TAG, "failed to create haptic command queue");
-        return;
-    }
-
-    xTaskCreatePinnedToCore(cs40l25_surface_task, "cs40l25_surface_task", 8192, NULL, 8, &s_haptic_task, 1);
-}
-
-void cs40l25_surface_trigger_click(void)
-{
-    haptic_command_t cmd = {
-        .type = HAPTIC_CMD_CLICK,
-    };
-
-    if ((s_haptic_queue == NULL) || cs40l25_surface_is_modern_sleep()) {
-        return;
-    }
-
-    (void)xQueueSendToBack(s_haptic_queue, &cmd, 0);
-}
-
-void cs40l25_surface_trigger_manual(uint8_t waveform,
-                                    uint8_t intensity,
-                                    uint8_t repeat_count,
-                                    uint16_t retrigger_period_ms,
-                                    uint16_t cutoff_time_ms)
-{
-    haptic_command_t cmd = {
-        .type = HAPTIC_CMD_MANUAL_TRIGGER,
-        .waveform = waveform,
-        .intensity = intensity,
-        .repeat_count = repeat_count,
-        .retrigger_period_ms = retrigger_period_ms,
-        .duration_ms = HAPTIC_MANUAL_DEFAULT_DURATION_MS,
-    };
-
-    if (cutoff_time_ms > 0U && cutoff_time_ms < 1000U) {
-        cmd.duration_ms = cutoff_time_ms;
-    }
-
-    if ((s_haptic_queue == NULL) || cs40l25_surface_is_modern_sleep()) {
-        return;
-    }
-
-    (void)xQueueSendToBack(s_haptic_queue, &cmd, 0);
-}
-
-void cs40l25_surface_trigger_scaled(uint8_t waveform,
-                                    uint16_t cp_dig_scale,
-                                    uint16_t duration_ms)
-{
-    haptic_command_t cmd = {
-        .type = HAPTIC_CMD_SCALED_TRIGGER,
-        .waveform = waveform,
-        .intensity = (cp_dig_scale > 0x03FFU) ? 0x03FFU : cp_dig_scale,
-        .duration_ms = duration_ms,
-    };
-
-    if ((s_haptic_queue == NULL) || cs40l25_surface_is_modern_sleep()) {
-        return;
-    }
-
-    (void)xQueueSendToBack(s_haptic_queue, &cmd, 0);
-}
-
-bool cs40l25_surface_is_ready(void)
-{
-    return s_haptic_ready;
+    taskENTER_CRITICAL(&lock);
+    surface_runtime_cancel(&runtime);
+    taskEXIT_CRITICAL(&lock);
 }
 
 void cs40l25_surface_set_modern_sleep(bool sleep_active)
 {
-    taskENTER_CRITICAL(&s_haptic_sleep_lock);
-    s_haptic_modern_sleep = sleep_active;
-    taskEXIT_CRITICAL(&s_haptic_sleep_lock);
-
-    if (sleep_active && (s_haptic_queue != NULL)) {
-        xQueueReset(s_haptic_queue);
+    taskENTER_CRITICAL(&lock);
+    if (runtime.state != SURFACE_FAULT && sleep_requested != sleep_active) {
+        sleep_requested = sleep_active;
+        // Stop admission immediately; only the worker changes the power pin.
+        surface_runtime_state(&runtime, sleep_active ? SURFACE_SLEEPING : SURFACE_WAKING);
     }
+    taskEXIT_CRITICAL(&lock);
 }
 
-bool cs40l25_surface_is_modern_sleep(void)
+static void fault(const char *stage, uint8_t waveform)
 {
-    bool sleep_active;
+    taskENTER_CRITICAL(&lock);
+    surface_runtime_state(&runtime, SURFACE_FAULT);
+    taskEXIT_CRITICAL(&lock);
+    ESP_LOGE(TAG, "FAULT at %s; haptics disabled until reset, touch reporting continues", stage);
+    surface_haptic_hw_diagnostics(waveform);
+    (void)surface_haptic_hw_power_off();
+}
 
-    taskENTER_CRITICAL(&s_haptic_sleep_lock);
-    sleep_active = s_haptic_modern_sleep;
-    taskEXIT_CRITICAL(&s_haptic_sleep_lock);
+static void worker(void *arg)
+{
+    (void)arg;
+    if (!surface_haptic_hw_initialize()) {
+        fault("initialization", 0);
+        vTaskDelete(NULL);
+        return;
+    }
+    taskENTER_CRITICAL(&lock);
+    surface_runtime_state(&runtime, sleep_requested ? SURFACE_SLEEPING : SURFACE_READY);
+    taskEXIT_CRITICAL(&lock);
+    bool powered = true, heartbeat_pending = false;
+    uint32_t heartbeat_start = 0, drops_seen = 0;
+    uint8_t last_waveform = 0;
+    ESP_LOGI(TAG, "Initialized: Surface settings 0..100, MBOX1 PRESS/RELEASE");
+    while (true) {
+        taskENTER_CRITICAL(&lock);
+        bool want_sleep = sleep_requested;
+        taskEXIT_CRITICAL(&lock);
+        if (want_sleep) {
+            if (powered) {
+                if (!surface_haptic_hw_power_off()) { fault("sleep power off", last_waveform); break; }
+                powered = false;
+                heartbeat_pending = false;
+                ESP_LOGI(TAG, "SLEEP: boost off");
+            }
+        } else {
+            if (!powered) {
+                if (!surface_haptic_hw_wake()) { fault("wake", last_waveform); break; }
+                powered = true;
+                ESP_LOGI(TAG, "WAKE: power and DSP checked");
+            }
+            uint32_t now = now_ms();
+            taskENTER_CRITICAL(&lock);
+            // A sleep request arriving during wake wins over READY.
+            if (!sleep_requested) surface_runtime_state(&runtime, SURFACE_READY);
+            surface_haptic_event_t event;
+            bool have_event = surface_runtime_pop(&runtime, now, &event);
+            uint32_t drops = runtime.dropped;
+            taskEXIT_CRITICAL(&lock);
+            if (drops != drops_seen) {
+                ESP_LOGW(TAG, "Dropped stale/full haptic queue; cancelled click (count=%" PRIu32 ")", drops);
+                drops_seen = drops;
+            }
+            if (have_event) {
+                if (!heartbeat_pending) {
+                    bool changed;
+                    if (bsp_dut_has_processed(&changed) != BSP_STATUS_OK) {
+                        fault("heartbeat baseline", last_waveform); break;
+                    }
+                }
+                uint8_t live_setting = ptp_haptic_click_intensity_get();
+                uint32_t dispatch_time = now_ms();
+                taskENTER_CRITICAL(&lock);
+                if (live_setting == 0 || (uint32_t)(dispatch_time - event.time_ms) > SURFACE_EVENT_MAX_AGE_MS) {
+                    surface_runtime_cancel(&runtime);
+                }
+                bool current = surface_runtime_current(&runtime, &event);
+                taskEXIT_CRITICAL(&lock);
+                if (current) {
+                    last_waveform = event.release ? event.pair.release_index : event.pair.press_index;
+                    if (!heartbeat_pending) heartbeat_start = now_ms();
+                    uint32_t status = surface_haptic_play_event(&event.pair, event.release);
+                    ESP_LOGD(TAG, "setting=%u %s index=%u result=%" PRIu32,
+                             event.setting, event.release ? "RELEASE" : "PRESS", last_waveform, status);
+                    if (status != BSP_STATUS_OK) { fault("playback", last_waveform); break; }
+                    heartbeat_pending = true;
+                }
+            }
+            if (surface_haptic_hw_process() != BSP_STATUS_OK) { fault("driver processing", last_waveform); break; }
+            if (heartbeat_pending) {
+                bool changed;
+                if (bsp_dut_has_processed(&changed) != BSP_STATUS_OK) { fault("heartbeat read", last_waveform); break; }
+                if (changed) heartbeat_pending = false;
+                else if ((uint32_t)(now_ms() - heartbeat_start) >= 2000U) {
+                    fault("heartbeat timeout", last_waveform); break;
+                }
+            }
+        }
+        TickType_t ticks = pdMS_TO_TICKS(10);
+        vTaskDelay(ticks ? ticks : 1);
+    }
+    vTaskDelete(NULL);
+}
 
-    return sleep_active;
+void cs40l25_surface_init(void)
+{
+    taskENTER_CRITICAL(&lock);
+    bool create = !started;
+    started = true;
+    taskEXIT_CRITICAL(&lock);
+    if (create && xTaskCreatePinnedToCore(worker, "surface_haptic", 8192, NULL, 8, NULL, 1) != pdPASS) {
+        fault("task allocation", 0);
+    }
 }

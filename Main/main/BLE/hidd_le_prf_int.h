@@ -25,7 +25,7 @@
 #define HID_MAX_APPS                 1
 
 // Number of HID reports defined in the service
-#define HID_NUM_REPORTS          9
+#define HID_NUM_REPORTS          7
 
 // HID Report IDs for the service
 #define HID_RPT_ID_PTP_IN        1   //Vendor defined input report ID
@@ -37,7 +37,6 @@
 #define HIDD_APP_ID			0x1812//ATT_SVC_HID
 
 #define BATTRAY_APP_ID       0x180f
-
 
 #define ATT_SVC_HID          0x1812
 
@@ -60,7 +59,6 @@
 
 /// Boot Report Notification Configuration Bit Mask
 #define HIDD_LE_REPORT_NTF_CFG_MASK           (0x20)
-
 
 /* HID information flags */
 #define HID_FLAGS_REMOTE_WAKE           0x01      // RemoteWake
@@ -87,7 +85,6 @@
 #define HID_REPORT_TYPE_INPUT       1
 #define HID_REPORT_TYPE_OUTPUT      2
 #define HID_REPORT_TYPE_FEATURE     3
-
 
 /// HID Service Attributes Indexes
 enum {
@@ -135,21 +132,6 @@ enum {
         HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_VAL,
         HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_REP_REF,
 
-        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_CHAR,
-        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL,
-        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_REP_REF,
-
-        HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_CHAR,
-        HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_VAL,
-        HIDD_LE_IDX_REPORT_HAPTIC_WAVEFORM_REP_REF,
-
-        HIDD_LE_IDX_REPORT_HAPTIC_MANUAL_TRIGGER_CHAR,
-        HIDD_LE_IDX_REPORT_HAPTIC_MANUAL_TRIGGER_VAL,
-        HIDD_LE_IDX_REPORT_HAPTIC_MANUAL_TRIGGER_REP_REF,
-
-        HIDD_LE_IDX_BOOT_PTP_IN_REPORT_CHAR,
-        HIDD_LE_IDX_BOOT_PTP_IN_REPORT_VAL,
-        HIDD_LE_IDX_BOOT_PTP_IN_REPORT_NTF_CFG,
     #else
         HIDD_LE_IDX_REPORT_MOUSE_IN_CHAR,
         HIDD_LE_IDX_REPORT_MOUSE_IN_VAL,
@@ -161,6 +143,9 @@ enum {
         HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_NTF_CFG,
     #endif
 
+        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_CHAR,
+        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL,
+        HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_REP_REF,
 
     // Report
     HIDD_LE_IDX_REPORT_CHAR,
@@ -169,7 +154,6 @@ enum {
 
     HIDD_LE_IDX_NB,
 };
-
 
 /// Attribute Table Indexes
 enum {
@@ -259,7 +243,6 @@ typedef struct {
     uint8_t report_char_cfg[HIDD_LE_NB_REPORT_INST_MAX];
 } hidd_feature_t;
 
-
 typedef struct {
     bool                        in_use;
     bool                        congest;
@@ -279,7 +262,6 @@ typedef struct {
     uint8_t     type;             // Report type
     uint8_t     mode;             // Protocol mode (report or boot)
 } hidRptMap_t;
-
 
 typedef struct {
     /// hidd profile id
@@ -316,7 +298,6 @@ typedef struct {
     uint8_t flags;
 }hids_hid_info_t;
 
-
 /* service engine control block */
 typedef struct {
     hidd_clcb_t                  hidd_clcb[HID_MAX_APPS];          /* connection link*/
@@ -332,7 +313,6 @@ typedef struct {
 extern hidd_le_env_t hidd_le_env;
 extern uint8_t hidProtocolMode;
 
-
 void hidd_clcb_alloc (uint16_t conn_id, esp_bd_addr_t bda);
 
 bool hidd_clcb_dealloc (uint16_t conn_id);
@@ -344,6 +324,5 @@ void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t *value
 void hidd_get_attr_value(uint16_t handle, uint16_t *length, uint8_t **value);
 
 esp_err_t hidd_register_cb(void);
-
 
 #endif  ///__HID_DEVICE_LE_PRF__

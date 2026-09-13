@@ -66,14 +66,7 @@ void sub_dev_init(void) {
     ESP_LOGI(TAG, "battery voltage: %.3f V", max17048_get_battery_voltage());
     bq24195_dump_charge_config();
 
-    float current_vref = mp28167_get_vref_mv();
-    ESP_LOGI(TAG, "Current VREF in chip: %.2f mV", current_vref);
-
     xTaskCreatePinnedToCore(charging_state_monitor_task, "charging_state_monitor_task", 4096, NULL, 5, NULL, 1);
 
-    float mp28167_vref = mp28167_get_vref_mv();
-    if ((mp28167_vref < 839.6f) || (mp28167_vref > 840.4f)) {
-        ESP_LOGW(TAG, "Unexpected Vref %.2f mV, setting Vref to 840mV", mp28167_vref);
-        mp28167_set_vref_mv(840);
-    }
+    // VREF and boost are owned exclusively by the Surface haptic worker.
 }

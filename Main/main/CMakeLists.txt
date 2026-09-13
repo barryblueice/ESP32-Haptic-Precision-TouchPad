@@ -1,5 +1,6 @@
 set(srcs
     "main.c"
+    "surface_haptic_test.c"
 
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
@@ -9,6 +10,10 @@ set(srcs
     "I2C/TP/ptp_simulated_mouse_gesture.c"
 
     "I2C/SUB_DEV/cs40l25_surface.c"
+    "I2C/SUB_DEV/surface_haptic_policy.c"
+    "I2C/SUB_DEV/surface_haptic_runtime.c"
+    "I2C/SUB_DEV/surface_haptic_hw.c"
+    "I2C/SUB_DEV/surface_haptic_settings.c"
     "I2C/SUB_DEV/sub_i2c_init.c"
     "I2C/SUB_DEV/BQ24195_MAX17048_handle.c"
     "I2C/SUB_DEV/MP28167_handle.c"

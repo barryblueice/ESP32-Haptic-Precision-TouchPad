@@ -1,21 +1,13 @@
 #ifndef CS40L25_SURFACE_H
 #define CS40L25_SURFACE_H
-
-#include <stdbool.h>
-#include <stdint.h>
+#include "surface_haptic_runtime.h"
 
 void cs40l25_surface_init(void);
-void cs40l25_surface_trigger_click(void);
-void cs40l25_surface_trigger_manual(uint8_t waveform,
-                                    uint8_t intensity,
-                                    uint8_t repeat_count,
-                                    uint16_t retrigger_period_ms,
-                                    uint16_t cutoff_time_ms);
-void cs40l25_surface_trigger_scaled(uint8_t waveform,
-                                    uint16_t cp_dig_scale,
-                                    uint16_t duration_ms);
+/* Nonblocking task-context APIs; producers never access the bus. */
+void cs40l25_surface_button_update(bool down, uint8_t setting);
+void cs40l25_surface_cancel_click(void);
 void cs40l25_surface_set_modern_sleep(bool sleep_active);
 bool cs40l25_surface_is_modern_sleep(void);
 bool cs40l25_surface_is_ready(void);
-
+surface_haptic_state_t cs40l25_surface_get_state(void);
 #endif

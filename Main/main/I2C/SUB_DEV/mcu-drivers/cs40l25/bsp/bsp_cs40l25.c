@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "esp_log.h"
+#include "surface_fw_metadata.h"
 #include "I2C/SUB_DEV/mcu-drivers/common/platform_bsp/platform_bsp.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25.h"
 #include "I2C/SUB_DEV/mcu-drivers/cs40l25/cs40l25_ext.h"
@@ -42,7 +43,6 @@
 #define CS40L25_EVENT_TIMEOUT_DURATION_MS   (50)
 #define CS40L25_RELEASE_MAX_DURATION_MS     (15)
 #define CS40L25_EVENT_TIMEOUT_BUFFER_MS     (5)
-#define CS40L25_SURFACE_VIBEGEN_WAVES       (28)
 #define CS40L25_GPI_RELEASE_TO_VAMP_DISABLE_MS  (CS40L25_EVENT_TIMEOUT_DURATION_MS + \
                                                  CS40L25_RELEASE_MAX_DURATION_MS + \
                                                  CS40L25_EVENT_TIMEOUT_BUFFER_MS)
@@ -221,25 +221,19 @@ static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
              duration_ms,
              cs40l25_driver.state);
 
-    if (regmap_read_fw_control(cp,
-                               cs40l25_driver.fw_info,
-                               CS40L25_SYM_VIBEGEN_ENABLE,
+    if (regmap_read(cp, SURFACE_VIBEGEN_ENABLE_REG,
                                &vibegen_enable) == REGMAP_STATUS_OK)
     {
         ESP_LOGE(TAG, "VIBEGEN_ENABLE=0x%08" PRIX32, vibegen_enable);
     }
 
-    if (regmap_read_fw_control(cp,
-                               cs40l25_driver.fw_info,
-                               CS40L25_SYM_VIBEGEN_NUMBEROFWAVES,
+    if (regmap_read(cp, SURFACE_VIBEGEN_NUM_WAVES_REG,
                                &num_waves) == REGMAP_STATUS_OK)
     {
         ESP_LOGE(TAG, "VIBEGEN_NUMBEROFWAVES=0x%08" PRIX32 " (%" PRIu32 ")", num_waves, num_waves);
     }
 
-    if (regmap_read_fw_control(cp,
-                               cs40l25_driver.fw_info,
-                               CS40L25_SYM_VIBEGEN_STATUS,
+    if (regmap_read(cp, SURFACE_VIBEGEN_STATUS_REG,
                                &vibegen_status) == REGMAP_STATUS_OK)
     {
         ESP_LOGE(TAG, "VIBEGEN_STATUS=0x%08" PRIX32, vibegen_status);
@@ -272,25 +266,30 @@ static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
     }
 }
 
+uint32_t bsp_dut_get_num_waves(uint32_t *count)
+{
+    if (count == NULL || cs40l25_driver.fw_info == NULL ||
+        cs40l25_driver.fw_info->header.fw_id != SURFACE_FW_ID ||
+        cs40l25_driver.fw_info->header.fw_version != SURFACE_FW_REVISION)
+    {
+        return BSP_STATUS_FAIL;
+    }
+    return regmap_read(REGMAP_GET_CP(&cs40l25_driver), SURFACE_VIBEGEN_NUM_WAVES_REG, count)
+           == REGMAP_STATUS_OK ? BSP_STATUS_OK : BSP_STATUS_FAIL;
+}
+
 static uint32_t bsp_surface_prepare_vibegen(void)
 {
     regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
     uint32_t ret;
 
-    ret = regmap_write_fw_control(cp, cs40l25_driver.fw_info, CS40L25_SYM_VIBEGEN_ENABLE, 1);
+    ret = regmap_write(cp, SURFACE_VIBEGEN_ENABLE_REG, 1);
     if (ret)
     {
         return BSP_STATUS_FAIL;
     }
 
-    ret = regmap_write_fw_control(cp,
-                                  cs40l25_driver.fw_info,
-                                  CS40L25_SYM_VIBEGEN_NUMBEROFWAVES,
-                                  CS40L25_SURFACE_VIBEGEN_WAVES);
-    if (ret)
-    {
-        return BSP_STATUS_FAIL;
-    }
+    // NUMBEROFWAVES is reported by the DSP; never overwrite it with a guessed count.
 
     ret = regmap_write_fw_control(cp, cs40l25_driver.fw_info, CS40L25_SYM_VIBEGEN_COMPENSATION_ENABLE, 0);
     if (ret)

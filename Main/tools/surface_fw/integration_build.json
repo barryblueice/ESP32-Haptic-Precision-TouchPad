@@ -1,0 +1,63 @@
+{
+  "date": "2026-09-13",
+  "mode": "normal touchpad",
+  "test_mode": false,
+  "idf_path": "D:/Espressif/v6.0/esp-idf",
+  "python": "C:/Espressif/tools/python/v6.0/venv/Scripts/python.exe",
+  "compiler": "D:/Espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin/xtensa-esp32s3-elf-gcc.exe",
+  "ninja": "C:/Espressif/tools/ninja/1.12.1/ninja.exe",
+  "command": "ninja -C build",
+  "incremental_build_passed": true,
+  "clean_performed": false,
+  "mode_switch_builds": false,
+  "flashed": false,
+  "integration_board_test": false,
+  "app_partition_bytes": 1536000,
+  "app_free_bytes": 177296,
+  "artifacts": [
+    {
+      "path": "build/ESP32_HAPTIC_PRECISION_TOUCHPAD.bin",
+      "size_bytes": 1358704,
+      "sha256": "107f9f615395a2bf26f3dfefefde6913d1b1d786b48663d10ffc2e9c1d1b6368"
+    },
+    {
+      "path": "build/ESP32_HAPTIC_PRECISION_TOUCHPAD.elf",
+      "size_bytes": 13662060,
+      "sha256": "726b9639cfcb99ad19d7b1e5900382edb81db5b8d4d14bdbccb567e30bd08677"
+    },
+    {
+      "path": "build/bootloader/bootloader.bin",
+      "size_bytes": 21056,
+      "sha256": "679ed648ad587f3d854e17dd35bbd648b4bc0bc3a64dc6d4648abb4e7b3db7ff"
+    },
+    {
+      "path": "build/partition_table/partition-table.bin",
+      "size_bytes": 3072,
+      "sha256": "5295e8c42d6fb5f95e4e8a185932c6191d27cfc5078322475347e40e71af815a"
+    }
+  ],
+  "syntax_only_checks": [
+    {
+      "source": "main/BLE/ble_hid_device_le_prf.c",
+      "define": "CONFIG_BLE_ENABLE_PTP_MODE",
+      "passed": true
+    },
+    {
+      "source": "main/BLE/blehid.c",
+      "define": "CONFIG_BLE_ENABLE_PTP_MODE",
+      "passed": true
+    },
+    {
+      "source": "main/surface_haptic_test.c",
+      "define": "CONFIG_SURFACE_HAPTIC_TEST_MODE",
+      "passed": true
+    },
+    {
+      "source": "main/main.c",
+      "define": "CONFIG_SURFACE_HAPTIC_TEST_MODE",
+      "passed": true
+    }
+  ],
+  "restore_source": "f858a7cf24c61f19d712ee2720838c63b0c7e8f4",
+  "restore_verified_before_edits": true
+}
