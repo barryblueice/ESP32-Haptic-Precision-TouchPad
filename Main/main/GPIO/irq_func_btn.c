@@ -72,17 +72,19 @@ static void IRAM_ATTR gpio_isr_handler(void* arg) {
 }
 
 void irq_func_btn_init(void) {
-    xTaskCreatePinnedToCore(button_handler_task, "button_handler_task", 4096, NULL, 10, &button_task_handle, 1);
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(button_handler_task, "button_handler_task", 4096, NULL, 10, &button_task_handle, 1) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     gpio_config_t io_conf = {
         .pin_bit_mask = (1ULL << BOOT_BUTTON_GPIO),
         .mode = GPIO_MODE_INPUT,
-        .intr_type = GPIO_INTR_NEGEDGE,
+        .intr_type = GPIO_INTR_DISABLE,
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
-    gpio_config(&io_conf);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
 
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(BOOT_BUTTON_GPIO, gpio_isr_handler, NULL);
+    ESP_ERROR_CHECK(gpio_install_isr_service(0));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(BOOT_BUTTON_GPIO, gpio_isr_handler, NULL));
+    ESP_ERROR_CHECK(gpio_set_intr_type(BOOT_BUTTON_GPIO, GPIO_INTR_NEGEDGE));
+    ESP_ERROR_CHECK(gpio_intr_enable(BOOT_BUTTON_GPIO));
 }

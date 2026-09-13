@@ -26,14 +26,14 @@ void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t *p_report) {
     return;
 }
 
-void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
+esp_err_t hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
                                     uint8_t id, uint8_t type, uint8_t length, uint8_t *data) {
     hid_report_map_t *p_rpt;
 
     if ((p_rpt = hid_dev_rpt_by_id(id, type)) != NULL) {
 
-        esp_ble_gatts_send_indicate(gatts_if, conn_id, p_rpt->handle, length, data, false);
+        return esp_ble_gatts_send_indicate(gatts_if, conn_id, p_rpt->handle, length, data, false);
     }
 
-    return;
+    return ESP_ERR_NOT_FOUND;
 }

@@ -1,0 +1,70 @@
+{
+  "time_utc": "2026-09-13T12:14:42.545799+00:00",
+  "idf_path": "D:\\Espressif\\v6.0\\esp-idf",
+  "python": "C:\\Espressif\\tools\\python\\v6.0\\venv\\Scripts\\python.exe",
+  "compiler": "C:\\Espressif\\tools\\xtensa-esp-elf\\esp-15.2.0_20251204\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
+  "ninja": "C:/Espressif/tools/ninja/1.12.1/ninja.exe",
+  "activation_script": "C:\\Espressif\\tools\\Microsoft.v6.0.PowerShell_profile.ps1",
+  "esp_rom_elf_dir": "C:\\Espressif\\tools\\esp-rom-elfs\\20241011",
+  "host_clang": "D:\\Swift\\Toolchains\\6.0.0+Asserts\\usr\\bin\\clang.EXE",
+  "clean_performed": false,
+  "full_variant_builds": false,
+  "flashed": false,
+  "board_validation": "not performed",
+  "checks": {
+    "surface_regression": {
+      "passed": true,
+      "log": "build\\input_validation\\surface_regression.log"
+    },
+    "input_regression": {
+      "passed": true,
+      "log": "build\\input_validation\\input_regression.log"
+    },
+    "incremental_build": {
+      "passed": true,
+      "log": "build\\input_validation\\incremental_build.log"
+    },
+    "variant_syntax": {
+      "passed": true,
+      "log": "build\\input_validation\\variant_syntax.log"
+    }
+  },
+  "sdkconfig_unchanged": true,
+  "existing_surface_checks": 65,
+  "input_scenarios": 33,
+  "variant_syntax": {
+    "original_mouse": {
+      "syntax_only": true,
+      "source_count": 17,
+      "passed": true
+    },
+    "ble_ptp_flipped": {
+      "syntax_only": true,
+      "source_count": 17,
+      "passed": true
+    },
+    "standalone_portrait": {
+      "syntax_only": true,
+      "source_count": 17,
+      "passed": true
+    },
+    "portrait_flipped": {
+      "syntax_only": true,
+      "source_count": 17,
+      "passed": true
+    }
+  },
+  "artifacts": [
+    {
+      "path": "build\\ESP32_HAPTIC_PRECISION_TOUCHPAD.bin",
+      "bytes": 1365072,
+      "sha256": "7b05e0291441f63c694e2c039b83f8de7c328302b04f89a58eb6077486bcbe66"
+    },
+    {
+      "path": "build\\ESP32_HAPTIC_PRECISION_TOUCHPAD.elf",
+      "bytes": 13702140,
+      "sha256": "f3065e8542545e2a17261c4306f318422521d311a9043bbdc15cbdb2223743df"
+    }
+  ],
+  "source_sha256": "b8d3c4c4efaa4874140c05b169a880ac3dc802cd1be102844fb111168d6cb683"
+}

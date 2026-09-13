@@ -66,7 +66,8 @@ void sub_dev_init(void) {
     ESP_LOGI(TAG, "battery voltage: %.3f V", max17048_get_battery_voltage());
     bq24195_dump_charge_config();
 
-    xTaskCreatePinnedToCore(charging_state_monitor_task, "charging_state_monitor_task", 4096, NULL, 5, NULL, 1);
+    if (xTaskCreatePinnedToCore(charging_state_monitor_task, "charging_state_monitor_task", 4096, NULL, 5, NULL, 1) != pdPASS)
+        ESP_LOGW(TAG, "Charging monitor disabled: task allocation failed");
 
     // VREF and boost are owned exclusively by the Surface haptic worker.
 }

@@ -40,6 +40,8 @@ set(srcs
 
     "SYS/hid_msg.c"
     "SYS/rtos_queue.c"
+    "SYS/report_buffer.c"
+    "SYS/input_pipeline.c"
 
     "GPIO/irq_func_btn.c"
     "GPIO/irq_tp_int.c"

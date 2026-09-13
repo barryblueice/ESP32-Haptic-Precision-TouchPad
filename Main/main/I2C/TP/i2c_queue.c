@@ -1,4 +1,5 @@
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/TP/tp_coordinates.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -11,6 +12,7 @@
 #include "freertos/task.h"
 
 #include "SYS/rtos_queue.h"
+#include "SYS/input_pipeline.h"
 #include "SYS/hid_msg.h"
 
 #include "I2C/I2C_handle.h"
@@ -325,9 +327,35 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
     last_frame_time = now;
 }
 
+static void reset_input_state(void)
+{
+    ptp_force_click_state = (ptp_force_click_state_t){0};
+    memset(touch_state, 0, sizeof(touch_state));
+    memset(tap_frozen, 0, sizeof(tap_frozen));
+    memset(raw_x_history, 0, sizeof(raw_x_history));
+    memset(raw_y_history, 0, sizeof(raw_y_history));
+    memset(last_raw_x, 0, sizeof(last_raw_x));
+    memset(last_raw_y, 0, sizeof(last_raw_y));
+    memset(origin_x, 0, sizeof(origin_x));
+    memset(origin_y, 0, sizeof(origin_y));
+    memset(slot_filter_x, 0, sizeof(slot_filter_x));
+    memset(slot_filter_y, 0, sizeof(slot_filter_y));
+    memset(history_x, 0, sizeof(history_x));
+    memset(history_y, 0, sizeof(history_y));
+    memset(last_confidence, 0, sizeof(last_confidence));
+    memset(consecutive_errors, 0, sizeof(consecutive_errors));
+    memset(slot_active, 0, sizeof(slot_active));
+    last_frame_time = 0;
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+    ptp_simulated_mouse_reset();
+#endif
+}
+
 void i2c_queue_task(void *arg) {
 
-    uint8_t tp_packet[64];
+    input_register_parser();
+    input_frame_t frame;
+    uint32_t generation = input_generation();
     int previous_format = -1;
     uint8_t previous_mode = current_tp_mode;
 
@@ -336,7 +364,36 @@ void i2c_queue_task(void *arg) {
         tp_multi_msg_t tp_msg = {0};
         mouse_msg_t mouse_msg = {0};
 
-        if (xQueueReceive(tp_data_queue, tp_packet, portMAX_DELAY) == pdPASS) {
+        if (input_apply_mode_request()) continue;
+        if (generation != input_generation()) {
+            generation = input_generation();
+            reset_input_state();
+            previous_format = -1;
+            previous_mode = current_tp_mode;
+        }
+        if (!input_next_frame(&frame)) {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            continue;
+        }
+        /* A reset may have raced with dequeuing the next captured frame. */
+        if (generation != frame.generation) {
+            generation = frame.generation;
+            reset_input_state();
+            previous_format = -1;
+            previous_mode = current_tp_mode;
+        }
+        if ((uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
+            input_recover();
+            continue;
+        }
+        uint8_t *tp_packet = frame.bytes;
+        bool all_up = (tp_packet[3] & 7U) == 0;
+        if (tp_packet[0] == 0x40) {
+            all_up = true;
+            for (unsigned i = 0; i < 5; ++i) if (tp_packet[4 + i * 8] & 1U) all_up = false;
+        }
+        if (!input_observe(frame.generation, all_up)) continue;
+        {
 
             // printf("Raw Data: ");
             // for(int i=0; i<64; i++) printf("%02x ", tp_packet[i]);
@@ -344,8 +401,8 @@ void i2c_queue_task(void *arg) {
 
             int format = tp_packet[0] == 0x40;
             if ((previous_format != -1 && previous_format != format) || previous_mode != current_tp_mode) {
-                cs40l25_surface_cancel_click();
-                ptp_reset_force_click(&tp_msg);
+                input_recover();
+                continue;
             }
             previous_format = format;
             previous_mode = current_tp_mode;
@@ -358,23 +415,9 @@ void i2c_queue_task(void *arg) {
                     int offset = 4 + (id * 8);
                     uint8_t finger_status = tp_packet[offset];
 
-                    #if CONFIG_TP_ROTATION_LANDSCAPE
-                    uint16_t rx = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
-                    uint16_t ry_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
-                    uint16_t ry = 1532 - (ry_raw > 1533 ? 1533 : ry_raw);
-                    #elif CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
-                    uint16_t rx_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
-                    uint16_t rx = 2302 - (rx_raw > 2303 ? 2303 : rx_raw);
-                    uint16_t ry = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
-                    #elif CONFIG_TP_ROTATION_PORTRAIT
-                    uint16_t ry_raw = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
-                    uint16_t ry = 2302 - (ry_raw > 2303 ? 2303 : ry_raw);
-                    uint16_t rx_raw = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
-                    uint16_t rx = 1532 - (rx_raw > 1533 ? 1533 : rx_raw);
-                    #elif CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
-                    uint16_t ry = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
-                    uint16_t rx = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
-                    #endif
+                    uint16_t rx, ry;
+                    tp_rotate_coordinates(tp_packet[offset + 1] | (tp_packet[offset + 2] << 8),
+                                          tp_packet[offset + 3] | (tp_packet[offset + 4] << 8), &rx, &ry);
                     uint8_t pressure_z = tp_packet[offset + 5];
                     uint8_t major = tp_packet[offset + 6];
                     uint8_t minor = tp_packet[offset + 7];
@@ -508,19 +551,21 @@ void i2c_queue_task(void *arg) {
                 // }
 
                 ptp_update_force_click_button(&tp_msg, active_finger_count);
-                // Observe the final state even when force-click processing returned early.
-                // USB/BLE simulated mouse observes its final gesture/drag button below
-                // in parse_ptp_simulated_mouse_report. 2.4G keeps the existing packet path.
+                tp_msg.actual_count = active_finger_count > 0 ? active_finger_count : 1;
+                input_report_t report = {.mode = input_mode(), .time_ms = frame.time_ms};
+                bool tap = false;
+                if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                if (current_tp_mode != MOUSE_MODE || current_mode == _2_4_MODE)
+                    parse_ptp_simulated_mouse_report(&tp_msg, &report.data.mouse);
+                    tap = ptp_simulated_mouse_click_needs_release();
+#else
+                    continue;
 #endif
-                {
-                    cs40l25_surface_button_update(tp_msg.button_mask != 0,
-                                                   ptp_haptic_click_intensity_get());
+                } else {
+                    cs40l25_surface_button_update(tp_msg.button_mask != 0, ptp_haptic_click_intensity_get());
+                    parse_ptp_report(&tp_msg, &report.data.ptp);
                 }
-                tp_msg.actual_count = (active_finger_count > 0) ? active_finger_count : 1;
-                xQueueOverwrite(tp_queue, &tp_msg);
-                // ESP_DRAM_LOGI(TAG, "%d %d %d %d",watchdog_x, watchdog_y, watchdog_tip_switch, global_scan_time);
+                input_publish(frame.generation, &report, tap);
 
             } else {
                 #if CONFIG_TP_ROTATION_LANDSCAPE
@@ -540,7 +585,9 @@ void i2c_queue_task(void *arg) {
                 cs40l25_surface_button_update((mouse_msg.buttons & 0x03U) != 0,
                                                ptp_haptic_click_intensity_get());
 
-                xQueueOverwrite(mouse_queue, &mouse_msg);
+                input_report_t report = {.mode = MOUSE_MODE, .time_ms = frame.time_ms};
+                parse_mouse_report(&mouse_msg, &report.data.mouse);
+                input_publish(frame.generation, &report, false);
             }
         }
     }

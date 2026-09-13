@@ -1,3 +1,4 @@
+#include "SYS/input_pipeline.h"
 #include "BLE/hidd_le_prf_int.h"
 #include "esp_gatt_common_api.h"
 #include <inttypes.h>
@@ -275,6 +276,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_CONNECT_EVT: {
 
             ble_hid_is_connected = true;
+            ble_input_connection(true, param->connect.conn_id);
 
             led_send_command(GPIO_LED_3, LED_CMD_STOP, 100, 1000, 0, false);
 
@@ -294,6 +296,7 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_DISCONNECT_EVT: {
 
             ble_hid_is_connected = false;
+            ble_input_connection(false, param->disconnect.conn_id);
 
             led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 
@@ -303,9 +306,23 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             hidd_clcb_dealloc(param->disconnect.conn_id);
             break;
         }
+        case ESP_GATTS_CONGEST_EVT:
+            ble_input_congestion(param->congest.conn_id, param->congest.congested);
+            break;
         case ESP_GATTS_CLOSE_EVT:
             break;
         case ESP_GATTS_WRITE_EVT: {
+#if CONFIG_BLE_ENABLE_PTP_MODE
+            uint16_t input_ccc = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_IN_CCC];
+#else
+            uint16_t input_ccc = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MOUSE_IN_CCC];
+#endif
+            if (param->write.handle == input_ccc && !param->write.is_prep &&
+                param->write.offset == 0 && param->write.len == 2) {
+                ble_input_subscription(param->write.conn_id,
+                    param->write.value[0] == 1 && param->write.value[1] == 0);
+            }
+
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL]) {
                     esp_gatt_status_t status = ESP_GATT_OK;
                     if (param->write.is_prep) status = ESP_GATT_REQ_NOT_SUPPORTED;
@@ -325,26 +342,11 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
                     esp_ble_gatts_send_response(gatts_if, param->write.conn_id, param->write.trans_id, ESP_GATT_OK, NULL);
                 }
 
-                if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_IN_CCC]) {
-                    uint16_t value = param->write.value[0] | (param->write.value[1] << 8);
-                    if (value == 0x0001) {
-                        ESP_LOGI("HID_DEV", "PTP Notification Enabled!");
-                    } else if (value == 0x0000) {
-                        ESP_LOGI("HID_DEV", "PTP Notification Disabled!");
-                    }
-                }
-
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_PTP_FEATURE_VAL] &&
-                    param->write.len >= 1) {
+                    !param->write.is_prep && param->write.offset == 0 && param->write.len == 1) {
                     ptp_input_mode_data[0] = param->write.value[0];
-
-                    if (ptp_input_mode_data[0] == 0x03) {
-                        current_tp_mode = PTP_MODE;
-                        touchpad_mode_set(true);
-                    } else {
-                        current_tp_mode = MOUSE_MODE;
-                        touchpad_mode_set(false);
-                    }
+                    /* This build advertises PTP only; mouse is a separate build. */
+                    if (ptp_input_mode_data[0] == 0x03) input_request_mode(PTP_MODE);
                 }
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_FUNCTION_SWITCH_VAL] &&

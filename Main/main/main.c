@@ -15,6 +15,7 @@
 
 #include "SYS/rtos_queue.h"
 #include "SYS/hid_msg.h"
+#include "SYS/input_pipeline.h"
 
 #include "USB/usbhid.h"
 
@@ -36,34 +37,9 @@ void app_main(void) { surface_haptic_test_start(); }
 
 void app_main(void) {
 
-    esp_reset_reason_t reason = esp_reset_reason();
-
-    tp_queue = xQueueCreate(1, sizeof(tp_multi_msg_t));
-    mouse_queue = xQueueCreate(1, sizeof(mouse_msg_t));
-    tp_data_queue = xQueueCreate(1, 64);
-
+    input_pipeline_init();
     led_queue = xQueueCreate(10, sizeof(led_msg_t));
-
-    main_queue_set = xQueueCreateSet(1 + 1);
-    ESP_ERROR_CHECK(tp_queue && mouse_queue && tp_data_queue && led_queue && main_queue_set ? ESP_OK : ESP_ERR_NO_MEM);
-    xQueueAddToSet(mouse_queue, main_queue_set);
-    xQueueAddToSet(tp_queue, main_queue_set);
-
-    switch (reason) {
-        case ESP_RST_SW:
-        case ESP_RST_PANIC:
-        case ESP_RST_INT_WDT:
-        case ESP_RST_TASK_WDT:
-        case ESP_RST_WDT:
-        case ESP_RST_DEEPSLEEP:
-            ESP_LOGW(TAG, "RST Reason: %d, reset queue",reason);
-            xQueueReset(tp_queue);
-            xQueueReset(mouse_queue);
-            break;
-        default:
-            ESP_LOGW(TAG, "RST Reason: %d, will not reset queue",reason);
-            break;
-    }
+    ESP_ERROR_CHECK(led_queue ? ESP_OK : ESP_ERR_NO_MEM);
 
     gpio_init();
 
@@ -86,7 +62,7 @@ void app_main(void) {
     touchpad_init(); // I2C0 registration and the touchpad's GPIO33 reset precede haptics.
     sub_dev_init();  // Register I2C1 devices before the haptic worker can use MP28167.
     cs40l25_surface_init();
-    irq_int_init();
+
 
     switch (current_mode) {
 
@@ -96,7 +72,7 @@ void app_main(void) {
 
             ESP_LOGW(TAG, "Starting in 2.4G Mode...");
             wireless_wifi_init();
-            xTaskCreatePinnedToCore(wifi_send_task, "wifi_send_task", 4096, NULL, 12, NULL, 0);
+            ESP_ERROR_CHECK(xTaskCreatePinnedToCore(wifi_send_task, "wifi_send_task", 4096, NULL, 12, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
             break;
 
         case BLE_MODE:
@@ -104,7 +80,7 @@ void app_main(void) {
             ESP_LOGW(TAG, "Starting in BLE Mode...");
             hidd_le_prepare_gatt_table();
             ble_bluedroid_init();
-            xTaskCreatePinnedToCore(ble_hid_task, "ble_hid_task", 4096, NULL, 12, NULL, 0);
+            ESP_ERROR_CHECK(xTaskCreatePinnedToCore(ble_hid_task, "ble_hid_task", 4096, NULL, 12, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
             break;
 
         default:
@@ -112,19 +88,13 @@ void app_main(void) {
             led_send_command(GPIO_LED_3, LED_CMD_BLINK, 2000, 2000, 1, false);
 
             ESP_LOGW(TAG, "Starting in USB Wired Mode...");
-            usb_event_group = xEventGroupCreate();
-            xTaskCreatePinnedToCore(usb_mount_task, "usb_mount_task", 4096, NULL, 11, NULL, 0);
             usbhid_init();
-            xTaskCreatePinnedToCore(usbhid_task, "usbhid_task", 4096, NULL, 13, NULL, 0);
-
-            while (1) {
-                tud_task();
-                vTaskDelay(1);
-            }
+            ESP_ERROR_CHECK(xTaskCreatePinnedToCore(usbhid_task, "usbhid_task", 4096, NULL, 13, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
             break;
 
     }
+    irq_int_init();
 
 }
 

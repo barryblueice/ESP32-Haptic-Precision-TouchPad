@@ -6,9 +6,6 @@
 #include "freertos/queue.h"
 #include "esp_timer.h"
 
-extern QueueHandle_t tp_queue;
-extern QueueHandle_t mouse_queue;
-extern QueueSetHandle_t main_queue_set;
 extern QueueHandle_t tp_data_queue;
 
 #endif

@@ -1,0 +1,22 @@
+{
+  "original_mouse": {
+    "syntax_only": true,
+    "source_count": 17,
+    "passed": true
+  },
+  "ble_ptp_flipped": {
+    "syntax_only": true,
+    "source_count": 17,
+    "passed": true
+  },
+  "standalone_portrait": {
+    "syntax_only": true,
+    "source_count": 17,
+    "passed": true
+  },
+  "portrait_flipped": {
+    "syntax_only": true,
+    "source_count": 17,
+    "passed": true
+  }
+}

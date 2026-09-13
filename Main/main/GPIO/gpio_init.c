@@ -16,7 +16,7 @@ void gpio_init(void) {
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
-    gpio_config(&io_conf);
+    ESP_ERROR_CHECK(gpio_config(&io_conf));
 
     gpio_config_t mp28167_io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
@@ -25,11 +25,11 @@ void gpio_init(void) {
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
-    gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_OFF);
-    gpio_config(&mp28167_io_conf);
+    ESP_ERROR_CHECK(gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_OFF));
+    ESP_ERROR_CHECK(gpio_config(&mp28167_io_conf));
 
     // led_all_handle(LED_OFF);
-    gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_OFF);
+    ESP_ERROR_CHECK(gpio_set_level(GPIO_HAPTIC_BUCK_BOOST_EN, EN_OFF));
 
     gpio_config_t vbus_det_conf = {
         .pin_bit_mask = (1ULL << VBUS_DET_GPIO),
@@ -38,6 +38,6 @@ void gpio_init(void) {
         .pull_up_en = GPIO_PULLUP_DISABLE,
         .pull_down_en = GPIO_PULLDOWN_DISABLE,
     };
-    gpio_config(&vbus_det_conf);
+    ESP_ERROR_CHECK(gpio_config(&vbus_det_conf));
 
 }

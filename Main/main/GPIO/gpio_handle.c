@@ -104,5 +104,6 @@ BaseType_t led_send_command(gpio_num_t pin, led_mode_t mode, uint32_t interval_m
         xTimerChangePeriod(ctx->timer, pdMS_TO_TICKS(interval_ms), 0);
     }
 
+    if (ctx->timer == NULL) return pdFAIL;
     return xTimerStart(ctx->timer, 0);
 }

@@ -21,6 +21,7 @@
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "SYS/hid_msg.h"
+#include "SYS/input_pipeline.h"
 
 #include "USB/usbhid.h"
 
@@ -99,98 +100,41 @@ uint8_t const *tud_hid_descriptor_report_cb(uint8_t instance) {
 }
 
 static uint8_t ptp_input_mode = 0x00;
-static portMUX_TYPE usb_ptp_tx_lock = portMUX_INITIALIZER_UNLOCKED;
-static ptp_report_t usb_pending_ptp_report = {0};
-static ptp_report_t usb_in_flight_ptp_report = {0};
-static bool usb_has_pending_ptp_report = false;
-static bool usb_ptp_report_in_flight = false;
+static portMUX_TYPE usb_tx_lock = portMUX_INITIALIZER_UNLOCKED;
+static input_report_t usb_flight[3];
+static bool usb_busy[3];
 
-static void usb_ptp_clear_tx(void) {
-    taskENTER_CRITICAL(&usb_ptp_tx_lock);
-    usb_has_pending_ptp_report = false;
-    usb_ptp_report_in_flight = false;
-    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
-}
-
-static void usb_ptp_kick_tx(void) {
-    ptp_report_t report = {0};
-    bool should_send = false;
-
-    if (current_tp_mode != PTP_MODE) {
-        usb_ptp_clear_tx();
-        return;
-    }
-
-    if (!tud_mounted()) {
-        return;
-    }
-
-    taskENTER_CRITICAL(&usb_ptp_tx_lock);
-    if (!usb_ptp_report_in_flight && usb_has_pending_ptp_report) {
-        report = usb_pending_ptp_report;
-        usb_in_flight_ptp_report = report;
-        usb_has_pending_ptp_report = false;
-        usb_ptp_report_in_flight = true;
-        should_send = true;
-    }
-    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
-
-    if (!should_send) {
-        return;
-    }
-
-    if (!tud_hid_n_report(1, REPORTID_TOUCHPAD, &report, sizeof(report))) {
-        taskENTER_CRITICAL(&usb_ptp_tx_lock);
-        usb_ptp_report_in_flight = false;
-        if (!usb_has_pending_ptp_report) {
-            usb_pending_ptp_report = report;
-            usb_has_pending_ptp_report = true;
+static void usb_complete(uint8_t instance, bool success)
+{
+    if (instance < 1 || instance > 2) return;
+    taskENTER_CRITICAL(&usb_tx_lock);
+    bool busy = usb_busy[instance];
+    input_report_t report = usb_flight[instance];
+    usb_busy[instance] = false;
+    taskEXIT_CRITICAL(&usb_tx_lock);
+    if (busy) {
+        if (success) input_report_ack(&report);
+        else {
+            input_submit_failed();
+            if (input_report_current(&report)) input_recover();
         }
-        taskEXIT_CRITICAL(&usb_ptp_tx_lock);
     }
+    input_wake_sender();
 }
 
-static void usb_ptp_enqueue_report(const ptp_report_t *report) {
-    taskENTER_CRITICAL(&usb_ptp_tx_lock);
-    usb_pending_ptp_report = *report;
-    usb_has_pending_ptp_report = true;
-    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
-
-    usb_ptp_kick_tx();
+void tud_hid_report_complete_cb(uint8_t instance, uint8_t const *report, uint16_t len)
+{
+    (void)report; (void)len;
+    usb_complete(instance, true);
 }
-
-void tud_hid_report_complete_cb(uint8_t instance, uint8_t const* report, uint16_t len) {
-    (void)report;
-    (void)len;
-
-    if (instance != 1) {
-        return;
-    }
-
-    taskENTER_CRITICAL(&usb_ptp_tx_lock);
-    usb_ptp_report_in_flight = false;
-    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
-}
-
-void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t report_type, uint8_t const* report, uint16_t xferred_bytes) {
-    (void)report_type;
-    (void)report;
-    (void)xferred_bytes;
-
-    if (instance != 1) {
-        return;
-    }
-
-    taskENTER_CRITICAL(&usb_ptp_tx_lock);
-    usb_ptp_report_in_flight = false;
-    if (!usb_has_pending_ptp_report) {
-        usb_pending_ptp_report = usb_in_flight_ptp_report;
-        usb_has_pending_ptp_report = true;
-    }
-    taskEXIT_CRITICAL(&usb_ptp_tx_lock);
+void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t type, uint8_t const *report, uint16_t len)
+{
+    (void)type; (void)report; (void)len;
+    usb_complete(instance, false);
 }
 
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
+    if (buffer == NULL || reqlen == 0) return 0;
     if (report_type == HID_REPORT_TYPE_FEATURE) {
         if (report_id == REPORTID_FEATURE) {
             buffer[0] = 0x03;
@@ -201,8 +145,9 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             return 1;
         }
         if (report_id == REPORTID_PTPHQA) {
-            memset(buffer, 0, 256);
-            return 256;
+            uint16_t count = reqlen < 256 ? reqlen : 256;
+            memset(buffer, 0, count);
+            return count;
         }
         if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
             buffer[0] = ptp_button_press_threshold;
@@ -251,6 +196,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_FEATURE) {
         if (payload_size >= 1) {
             ptp_input_mode = payload[0];
+            input_request_mode(ptp_input_mode == 0x03 ? PTP_MODE : MOUSE_MODE);
             ESP_LOGI(TAG, "PTP input mode SET_FEATURE: instance=%u mode=0x%02X", instance, ptp_input_mode);
         }
     }
@@ -275,76 +221,31 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
         enter_dfu_mode();
     }
 }
-#define USB_CONNECTED BIT0
-
-EventGroupHandle_t usb_event_group;
-
-static uint8_t last_ptp_input_mode = 0xFF;
-
-void usb_mount_task(void *arg) {
-    while (1) {
-
-        xEventGroupWaitBits(
-            usb_event_group,
-            USB_CONNECTED,
-            pdTRUE,
-            pdTRUE,
-            portMAX_DELAY
-        );
-
-        ptp_input_mode = 0x00;
-        last_ptp_input_mode = 0xFF;
-
-        while (tud_mounted()) {
-
-            if (ptp_input_mode != last_ptp_input_mode) {
-
-                switch (ptp_input_mode) {
-
-                    case 0x03:
-                        ESP_LOGI(TAG, "Mode 0x03 detected: Activating PTP");
-                        current_tp_mode = PTP_MODE;
-                        touchpad_mode_set(true);
-                        // activate_ptp();
-                        break;
-
-                    default:
-                        ESP_LOGW(TAG, "Mode 0x%02X detected: Activating Default Mouse Mode", ptp_input_mode);
-                        usb_ptp_clear_tx();
-                        current_tp_mode = MOUSE_MODE;
-                        touchpad_mode_set(false);
-                        break;
-                    }
-
-                last_ptp_input_mode = ptp_input_mode;
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(100));
-        }
-    }
-}
-
-static void tinyusb_event_cb(tinyusb_event_t *event, void *arg) {
+static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
+{
+    (void)arg;
     switch (event->id) {
-
-        case TINYUSB_EVENT_ATTACHED:
-            xEventGroupSetBits(usb_event_group, USB_CONNECTED);
-            break;
-
-        case TINYUSB_EVENT_DETACHED:
-            xEventGroupClearBits(usb_event_group, USB_CONNECTED);
-            usb_ptp_clear_tx();
-            ptp_input_mode = 0x00;
-            break;
-
-        case TINYUSB_EVENT_SUSPENDED:
-            break;
-
-        case TINYUSB_EVENT_RESUMED:
-            break;
-
-        default:
-            break;
+    case TINYUSB_EVENT_ATTACHED:
+        input_set_link(3);
+        ptp_input_mode = 0;
+        input_request_mode(MOUSE_MODE);
+        break;
+    case TINYUSB_EVENT_DETACHED:
+        input_set_link(0);
+        /* The stack has closed the endpoints; no transfer survives detach. */
+        taskENTER_CRITICAL(&usb_tx_lock);
+        usb_busy[1] = usb_busy[2] = false;
+        taskEXIT_CRITICAL(&usb_tx_lock);
+        ptp_input_mode = 0;
+        break;
+    case TINYUSB_EVENT_SUSPENDED:
+        input_set_link(0);
+        break;
+    case TINYUSB_EVENT_RESUMED:
+        input_set_link(3);
+        break;
+    default:
+        break;
     }
 }
 
@@ -359,91 +260,40 @@ void usbhid_init(void) {
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
 }
 
-void usbhid_task(void *arg) {
-    tp_multi_msg_t tp_msg;
-    mouse_msg_t mouse_msg;
-#if CONFIG_PTP_SIMULATED_MOUSE_MODE
-    mouse_hid_report_t pending_tap_report = {0};
-    bool tap_press_pending = false;
-    bool tap_release_pending = false;
-#endif
-
-    while (1) {
-        usb_ptp_kick_tx();
-
-#if CONFIG_PTP_SIMULATED_MOUSE_MODE
-        /*
-         * A HID endpoint cannot normally accept press and release reports in
-         * the same loop iteration. Preserve both halves of a tap across USB
-         * frames so a busy endpoint cannot leave the host button stuck down.
-         */
-        if (tap_press_pending && tud_hid_n_ready(2)) {
-            tud_hid_n_report(2,
-                             REPORTID_MOUSE,
-                             &pending_tap_report,
-                             sizeof(pending_tap_report));
-            tap_press_pending = false;
-            tap_release_pending = true;
-        } else if (tap_release_pending && tud_hid_n_ready(2)) {
-            mouse_hid_report_t release_report = {0};
-            tud_hid_n_report(2,
-                             REPORTID_MOUSE,
-                             &release_report,
-                             sizeof(release_report));
-            tap_release_pending = false;
-        }
-#endif
-
-        QueueSetMemberHandle_t xActivatedMember = xQueueSelectFromSet(main_queue_set, 1);
-
-        if (xActivatedMember == mouse_queue) {
-            if (xQueueReceive(mouse_queue, &mouse_msg, 0)) {
-                mouse_hid_report_t report = {0};
-
-                parse_mouse_report(&mouse_msg, &report);
-
-                if (tud_hid_n_ready(2)) {
-                    tud_hid_n_report(2, REPORTID_MOUSE, &report, sizeof(report));
+void usbhid_task(void *arg)
+{
+    (void)arg;
+    input_register_sender();
+    input_report_t pending;
+    bool have_pending = false;
+    while (true) {
+        input_log_stats();
+        if (have_pending && !input_report_current(&pending)) have_pending = false;
+        taskENTER_CRITICAL(&usb_tx_lock);
+        bool busy = usb_busy[1] || usb_busy[2];
+        taskEXIT_CRITICAL(&usb_tx_lock);
+        if (!have_pending && !busy) have_pending = input_take_report(&pending);
+        if (have_pending && tud_mounted() && !tud_suspended()) {
+            uint8_t instance = pending.mode == PTP_MODE ? 1 : 2;
+            if (tud_hid_n_ready(instance) && input_report_current(&pending)) {
+                taskENTER_CRITICAL(&usb_tx_lock);
+                usb_flight[instance] = pending;
+                usb_busy[instance] = true;
+                taskEXIT_CRITICAL(&usb_tx_lock);
+                bool accepted = pending.mode == PTP_MODE ?
+                    tud_hid_n_report(instance, REPORTID_TOUCHPAD, &pending.data.ptp, sizeof(ptp_report_t)) :
+                    tud_hid_n_report(instance, REPORTID_MOUSE, &pending.data.mouse, sizeof(mouse_hid_report_t));
+                if (accepted) have_pending = false;
+                else {
+                    taskENTER_CRITICAL(&usb_tx_lock);
+                    usb_busy[instance] = false;
+                    taskEXIT_CRITICAL(&usb_tx_lock);
+                    input_submit_failed();
+                    vTaskDelay(1);
                 }
             }
         }
-        else if (xActivatedMember == tp_queue) {
-            if (xQueueReceive(tp_queue, &tp_msg, 0)) {
-                if (current_tp_mode == MOUSE_MODE) {
-                    #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                        mouse_hid_report_t report = {0};
-
-                        parse_ptp_simulated_mouse_report(&tp_msg, &report);
-
-                        if (ptp_simulated_mouse_click_needs_release()) {
-                            if (tud_hid_n_ready(2)) {
-                                tud_hid_n_report(2,
-                                                 REPORTID_MOUSE,
-                                                 &report,
-                                                 sizeof(report));
-                                tap_release_pending = true;
-                            } else {
-                                pending_tap_report = report;
-                                tap_press_pending = true;
-                            }
-                        } else if (!tap_press_pending &&
-                                   !tap_release_pending &&
-                                   tud_hid_n_ready(2)) {
-                            tud_hid_n_report(2,
-                                             REPORTID_MOUSE,
-                                             &report,
-                                             sizeof(report));
-                        }
-
-                    #endif
-                } else {
-                    ptp_report_t report = {0};
-
-                    parse_ptp_report(&tp_msg, &report);
-
-                    usb_ptp_enqueue_report(&report);
-                }
-            }
-        }
+        /* New input and completion callbacks wake this task immediately. */
+        ulTaskNotifyTake(pdTRUE, (have_pending || busy) ? 1 : portMAX_DELAY);
     }
 }
