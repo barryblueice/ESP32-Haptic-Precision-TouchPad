@@ -18,12 +18,12 @@
     {
       "path": "build/ESP32_HAPTIC_PRECISION_TOUCHPAD.bin",
       "size_bytes": 1358704,
-      "sha256": "107f9f615395a2bf26f3dfefefde6913d1b1d786b48663d10ffc2e9c1d1b6368"
+      "sha256": "5a851e7e203fc7aa58d42d00c56d2238e79c7ad8c2c5d5f8a8bed8ba091b431a"
     },
     {
       "path": "build/ESP32_HAPTIC_PRECISION_TOUCHPAD.elf",
       "size_bytes": 13662060,
-      "sha256": "726b9639cfcb99ad19d7b1e5900382edb81db5b8d4d14bdbccb567e30bd08677"
+      "sha256": "c9341212acb08dd67ab2c72c4c3ca06a91fbb3cc1283629894e547c0b3f923a2"
     },
     {
       "path": "build/bootloader/bootloader.bin",
@@ -59,5 +59,18 @@
     }
   ],
   "restore_source": "f858a7cf24c61f19d712ee2720838c63b0c7e8f4",
-  "restore_verified_before_edits": true
+  "restore_verified_before_edits": true,
+  "voltage_configuration": {
+    "part": "MP28167GQ-A-Z",
+    "target_output_v": 13.2,
+    "vref_raw": 652,
+    "vref_mv": 521.6,
+    "nominal_output_v": 13.19648,
+    "upper_resistor_ohms": 243000,
+    "lower_resistor_ohms": 10000,
+    "fb_series_resistor_ohms": 1000,
+    "startup_default_vref_issue_resolved": false,
+    "board_measured": false
+  },
+  "latest_offline_checks_passed": 51
 }
