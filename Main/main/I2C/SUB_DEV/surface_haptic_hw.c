@@ -17,6 +17,9 @@
 
 #define TAG "SURFACE_HW"
 #define IO_TIMEOUT_MS 100
+// MP28167GQ-A-Z: 652 * 0.8 mV = 521.6 mV VREF.
+// 243k/10k divider gives 13.19648 V nominal; the FB branch has a series 1k.
+#define MP28167_TARGET_VREF_RAW 652U
 #define CHECK_ESP(call) do { esp_err_t e_ = (call); if (e_ != ESP_OK) { \
     ESP_LOGE(TAG, "%s: %s", #call, esp_err_to_name(e_)); return false; } } while (0)
 #define CHECK_BSP(call) do { uint32_t s_ = (call); if (s_ != BSP_STATUS_OK) { \
@@ -85,9 +88,9 @@ static bool prepare_power(void)
     CHECK_ESP(i2c_master_probe(sub_bus_handle, MP28167_ADDR, IO_TIMEOUT_MS));
     uint16_t raw;
     if (!read_vref(&raw)) return false;
-    if (raw != 1050U) { // 840 mV reference / 0.8 mV per step, not measured VAMP.
-        const uint8_t writes[][2] = {{MP28167_REG_VREF_L, 1050U & 7U},
-                                    {MP28167_REG_VREF_H, 1050U >> 3},
+    if (raw != MP28167_TARGET_VREF_RAW) {
+        const uint8_t writes[][2] = {{MP28167_REG_VREF_L, MP28167_TARGET_VREF_RAW & 7U},
+                                    {MP28167_REG_VREF_H, MP28167_TARGET_VREF_RAW >> 3},
                                     {MP28167_REG_VREF_GO, 1}};
         for (unsigned int i = 0; i < 3; ++i) {
             CHECK_ESP(i2c_master_transmit(sub_dev_mp28167_handle, writes[i], 2, IO_TIMEOUT_MS));
@@ -96,7 +99,7 @@ static bool prepare_power(void)
         if (!read_vref(&raw)) return false;
     }
     ESP_LOGI(TAG, "VREF reference=%.1f mV", (double)raw * 0.8);
-    return raw == 1050U;
+    return raw == MP28167_TARGET_VREF_RAW;
 }
 
 static bool identify(void)
