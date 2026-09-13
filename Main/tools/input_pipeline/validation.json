@@ -1,5 +1,5 @@
 {
-  "time_utc": "2026-09-13T12:14:42.545799+00:00",
+  "time_utc": "2026-09-13T13:40:56.634086+00:00",
   "idf_path": "D:\\Espressif\\v6.0\\esp-idf",
   "python": "C:\\Espressif\\tools\\python\\v6.0\\venv\\Scripts\\python.exe",
   "compiler": "C:\\Espressif\\tools\\xtensa-esp-elf\\esp-15.2.0_20251204\\xtensa-esp-elf\\bin\\xtensa-esp32s3-elf-gcc.exe",
@@ -31,7 +31,7 @@
   },
   "sdkconfig_unchanged": true,
   "existing_surface_checks": 65,
-  "input_scenarios": 33,
+  "input_scenarios": 41,
   "variant_syntax": {
     "original_mouse": {
       "syntax_only": true,
@@ -57,14 +57,14 @@
   "artifacts": [
     {
       "path": "build\\ESP32_HAPTIC_PRECISION_TOUCHPAD.bin",
-      "bytes": 1365072,
-      "sha256": "7b05e0291441f63c694e2c039b83f8de7c328302b04f89a58eb6077486bcbe66"
+      "bytes": 1365264,
+      "sha256": "2867c18f214e45414ce338819d01750a98c51cef311fe29c0e6804dfbf9f27d3"
     },
     {
       "path": "build\\ESP32_HAPTIC_PRECISION_TOUCHPAD.elf",
-      "bytes": 13702140,
-      "sha256": "f3065e8542545e2a17261c4306f318422521d311a9043bbdc15cbdb2223743df"
+      "bytes": 13703876,
+      "sha256": "13a20c81462e0bcb0d4c1c8627bd2384c8d68d4a70eccc43462b3970213d40d7"
     }
   ],
-  "source_sha256": "b8d3c4c4efaa4874140c05b169a880ac3dc802cd1be102844fb111168d6cb683"
+  "source_sha256": "c118ee5b2e753d5b56a3df43fcdb0c0f62b3e67878afcf9c602ea9e913eb5e18"
 }

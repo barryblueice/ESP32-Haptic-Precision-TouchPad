@@ -70,13 +70,18 @@ def main():
     for name, command in steps:
         print(f'Running {name}...', flush=True)
         selected_env = host_env if name in ['surface_regression', 'input_regression'] else env
-        completed = subprocess.run(command, cwd=ROOT, env=selected_env, capture_output=True)
+        try:
+            completed = subprocess.run(command, cwd=ROOT, env=selected_env, capture_output=True,
+                                       timeout=600 if name == 'incremental_build' else 180)
+        except subprocess.TimeoutExpired as error:
+            completed = subprocess.CompletedProcess(command, 124, error.stdout or b'',
+                (error.stderr or b'') + b'\nVerification step timed out.\n')
         log = logs / f'{name}.log'
         log.write_bytes(completed.stdout + completed.stderr)
         result['checks'][name] = {'passed': completed.returncode == 0, 'log': str(log.relative_to(ROOT))}
         if completed.returncode:
             result['failed_step'] = name
-            (HERE / 'validation.json').write_text(json.dumps(result, indent=2) + '\n')
+            (HERE / 'validation.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8', newline='\n')
             print((completed.stdout + completed.stderr).decode(errors='replace')[-10000:])
             return completed.returncode
         print(f'{name}: passed', flush=True)
@@ -96,7 +101,7 @@ def main():
             fingerprint.update(file.relative_to(ROOT).as_posix().encode())
             fingerprint.update(file.read_bytes())
     result['source_sha256'] = fingerprint.hexdigest()
-    (HERE / 'validation.json').write_text(json.dumps(result, indent=2) + '\n')
+    (HERE / 'validation.json').write_text(json.dumps(result, indent=2) + '\n', encoding='utf-8', newline='\n')
     print(f'All checks passed; {result["input_scenarios"]} input scenarios; sdkconfig unchanged={result["sdkconfig_unchanged"]}')
     return 0
 

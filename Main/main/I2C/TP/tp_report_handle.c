@@ -3,6 +3,7 @@
 #include "esp_log.h"
 
 #include "sdkconfig.h"
+#include <string.h>
 
 #define TAG "TP_REPORT"
 
@@ -24,26 +25,39 @@ void parse_mouse_report(const mouse_msg_t *msg, mouse_hid_report_t *report) {
     #endif
 }
 
-void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report) {
+/* Owned by the input parser. Hardware slots have stable IDs 0 through 4. */
+static uint8_t ptp_active_mask;
+static finger_t ptp_last_contact[5];
 
-    // uint8_t packet[4];
+void ptp_report_reset(void)
+{
+    ptp_active_mask = 0;
+    memset(ptp_last_contact, 0, sizeof(ptp_last_contact));
+}
 
-    // i2c_master_receive(dev_haptic_motor_handle, packet, 4, 100);
-
-    // ESP_LOG_BUFFER_HEX(TAG, packet, sizeof(packet));
-
-    report->scan_time = msg->scan_time;
-    report->contact_count = msg->actual_count;
-    report->buttons = (msg->button_mask > 0) ? 0x01 : 0x00;
-
-    for (int i = 0; i < 5; i++) {
-        report->fingers[i].x = msg->fingers[i].x;
-        report->fingers[i].y = msg->fingers[i].y;
-        report->fingers[i].pressure_z = msg->fingers[i].tip_switch ? msg->fingers[i].pressure_z : 0;
-
-        uint8_t base_id = (msg->fingers[i].tip_switch << 1) | (msg->fingers[i].confidence & 0x01);
-
-        report->fingers[i].tip_conf_id = (i << 2) | base_id;
+void parse_ptp_report(const tp_multi_msg_t *msg, ptp_report_t *report)
+{
+    *report = (ptp_report_t){.scan_time = msg->scan_time,
+        .buttons = msg->button_mask ? 1 : 0};
+    uint8_t active_mask = 0;
+    for (unsigned id = 0; id < 5; ++id) {
+        const tp_finger_t *contact = &msg->fingers[id];
+        uint8_t bit = 1U << id;
+        finger_t finger;
+        if (contact->tip_switch) {
+            active_mask |= bit;
+            finger = (finger_t){.tip_conf_id = (id << 2) | 2 | (contact->confidence & 1U),
+                .x = contact->x, .y = contact->y, .pressure_z = contact->pressure_z};
+            ptp_last_contact[id] = finger;
+        } else if (ptp_active_mask & bit) {
+            /* Count the lift once, retaining the last reported position/confidence. */
+            finger = ptp_last_contact[id];
+            finger.tip_conf_id &= ~2U;
+            finger.pressure_z = 0;
+        } else {
+            continue;
+        }
+        report->fingers[report->contact_count++] = finger;
     }
-
+    ptp_active_mask = active_mask;
 }
