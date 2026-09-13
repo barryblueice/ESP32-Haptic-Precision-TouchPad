@@ -98,7 +98,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
  Also, Windows Setting for PTP is unavailable under BLE mode.
  - Under BLE mode, PTP/Mouse Mode switching is unavailable, so BLE Mouse Mode will be default currently.
- - Due to a firmware issue with the CS40L25, the vibration feedback when pressed could be strange.
+ - ~~Due to a firmware issue with the CS40L25, the vibration feedback when pressed could be strange.~~ <br>Vibration feedback has already fixed through reverse-engineering firmware & control logic by Surface SAM and CS40L25 firmware.
 
 # Current Support System (already tested):
 
