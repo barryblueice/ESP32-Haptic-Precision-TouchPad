@@ -83,6 +83,48 @@ EXPORT int test_configuration_migration_and_boot(void)
     device_config_get(&c); CHECK(c.bytes[0]==63 && stores==0 && disk[4]==99);
     return 0;
 }
+EXPORT int test_legacy_controls_are_vendor_features(void)
+{
+    /* Windows selects its optional haptic/force controls by usage, whereas
+     * the legacy configurator discovers these fields by Report ID in the
+     * Touch Pad application collection. Keep that ABI without OS ownership. */
+    unsigned page=0, usage=0, id=0, bits=0, count=0, minimum=0, maximum=0;
+    unsigned depth=0, app_page=0, app_usage=0, found=0;
+    for(unsigned i=0;i<sizeof(ptp_hid_report_descriptor);) {
+        uint8_t tag=ptp_hid_report_descriptor[i];
+        unsigned size=tag&3; if(size==3) size=4;
+        CHECK(i+size<sizeof(ptp_hid_report_descriptor));
+        uint32_t value=0;
+        for(unsigned j=0;j<size;++j) value|=(uint32_t)ptp_hid_report_descriptor[i+1+j]<<(8*j);
+        switch(tag&0xfc) {
+        case 0x04: page=value; break;
+        case 0x08: usage=value; break;
+        case 0x84: id=value; break;
+        case 0x74: bits=value; break;
+        case 0x94: count=value; break;
+        case 0x14: minimum=value; break;
+        case 0x24: maximum=value; break;
+        case 0xa0:
+            if(!depth) { app_page=page; app_usage=usage; }
+            ++depth; break;
+        case 0xc0: CHECK(depth); --depth; break;
+        case 0xb0:
+            CHECK(!(page==0x0d && usage==0xb0));
+            CHECK(!(page==0x0e && usage==0x23));
+            if(id==0x40 || id==0x41) {
+                CHECK(app_page==0x0d && app_usage==5);
+                CHECK(page==0xff00 && usage==id && bits==8 && count==1 && value==2);
+                CHECK(minimum==(id==0x40 ? 1:0) && maximum==(id==0x40 ? 3:100));
+                unsigned mask=id==0x40 ? 1:2; CHECK(!(found&mask)); found|=mask;
+            }
+            break;
+        }
+        if((tag&0x0c)==0) usage=0; /* Local items expire at every Main item. */
+        i+=size+1;
+    }
+    CHECK(!depth && found==3);
+    return 0;
+}
 EXPORT int test_configuration_atomic_storage_failures(void)
 {
     for(int fault=1;fault<=3;++fault) {

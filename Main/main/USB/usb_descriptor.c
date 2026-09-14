@@ -413,12 +413,16 @@ uint8_t ptp_hid_report_descriptor[] = {
     0x75, 0x08,                         // REPORT_SIZE (8)
     0x96, 0x00, 0x01,                   // REPORT_COUNT (0x100 (256))
     0xb1, 0x02,                         // FEATURE (Data,Var,Abs)
-    0x85, REPORTID_BUTTON_PRESS_THRESHOLD, // REPORT_ID (Button Press Threshold)
-    0x05, 0x0D,                         // USAGE_PAGE (Digitizers)
-    0x09, 0xB0,                         // USAGE (Button Press Threshold)
-    0x35, 0x6E,                         // PHYSICAL_MINIMUM (110)
-    0x46, 0xBE, 0x00,                   // PHYSICAL_MAXIMUM (190)
-    0x66, 0x01, 0x01,                   // UNIT (Gram)
+    // Legacy configurator ABI: keep IDs and byte ranges in the PTP collection,
+    // but use vendor usages. Standard Button Press Threshold (0D:B0) and
+    // Haptics Intensity (0E:23) invite Windows to write its own preferences on
+    // reconnect, overwriting the RSTP snapshot just committed before restart.
+    0x85, REPORTID_BUTTON_PRESS_THRESHOLD, // REPORT_ID (Legacy press level)
+    0x06, 0x00, 0xFF,                   // USAGE_PAGE (Vendor Defined)
+    0x09, 0x40,                         // USAGE (Legacy press level)
+    0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
+    0x45, 0x00,                         // PHYSICAL_MAXIMUM (0)
+    0x65, 0x00,                         // UNIT (None)
     0x55, 0x00,                         // UNIT_EXPONENT (0)
     0x15, 0x01,                         // LOGICAL_MINIMUM (1)
     0x25, 0x03,                         // LOGICAL_MAXIMUM (3)
@@ -426,13 +430,10 @@ uint8_t ptp_hid_report_descriptor[] = {
     0x75, 0x08,                         // REPORT_SIZE (8)
     0xB1, 0x02,                         // FEATURE (Data,Var,Abs)
 
-    // Haptic reports under the Touch Pad application collection.
+    // Legacy intensity feature under the same Touch Pad application collection.
     0x85, 0x41,                         // ReportId(65)
-    0x05, 0x0E,                         // UsagePage(Haptics)
-    0x09, 0x01,                         // UsageId(Simple Haptic Controller)
-    0xA1, 0x02,                         // Collection(Logical)
-    0x05, 0x0E,                         // UsagePage(Haptics)
-    0x09, 0x23,                         // UsageId(Intensity)
+    0x06, 0x00, 0xFF,                   // UsagePage(Vendor Defined)
+    0x09, 0x41,                         // UsageId(Legacy intensity)
     0x35, 0x00,                         // PhysicalMinimum(0)
     0x45, 0x00,                         // PhysicalMaximum(0)
     0x65, 0x00,                         // Unit(None)
@@ -442,8 +443,6 @@ uint8_t ptp_hid_report_descriptor[] = {
     0x95, 0x01,                         // ReportCount(1)
     0x75, 0x08,                         // ReportSize(8)
     0xB1, 0x02,                         // Feature(Data,Var,Abs)
-    0xC0,                               // EndCollection
-
     0xC0,                               // END_COLLECTION
 
     //CONFIG TLC
