@@ -261,9 +261,11 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         ptp_input_mode = 0;
         break;
     case TINYUSB_EVENT_SUSPENDED:
+        usb_aux_cancel();
         input_set_link(0);
         break;
     case TINYUSB_EVENT_RESUMED:
+        usb_aux_resume();
         input_set_link(3);
         break;
     default:
@@ -305,14 +307,14 @@ void usbhid_task(void *arg)
             taskENTER_CRITICAL(&usb_tx_lock);
             usb_busy[2] = true; usb_aux_flight = true;
             taskEXIT_CRITICAL(&usb_tx_lock);
-            if ((!usb_aux_buffer.release && usb_aux_buffer.generation != input_generation()) ||
+            if (!usb_aux_report_current(&usb_aux_buffer) ||
                 !tud_hid_n_report(2, usb_aux_buffer.id, usb_aux_buffer.data, usb_aux_buffer.length)) {
                 taskENTER_CRITICAL(&usb_tx_lock); usb_busy[2] = false; usb_aux_flight = false; taskEXIT_CRITICAL(&usb_tx_lock);
                 usb_aux_unsubmitted();
             } else prefer_aux = false;
             aux_busy = true;
         }
-        if (!busy && have_pending && !(pending.mode == MOUSE_MODE && aux_busy) && tud_mounted() && !tud_suspended()) {
+        if (!busy && have_pending && !usb_aux_neutral_pending() && !(pending.mode == MOUSE_MODE && aux_busy) && tud_mounted() && !tud_suspended()) {
             uint8_t instance = pending.mode == PTP_MODE ? 1 : 2;
             if (tud_hid_n_ready(instance) && input_report_current(&pending)) {
                 taskENTER_CRITICAL(&usb_tx_lock);

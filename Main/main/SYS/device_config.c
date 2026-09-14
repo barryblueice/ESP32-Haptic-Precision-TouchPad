@@ -13,7 +13,7 @@ static device_config_t active, pending;
 static portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t writer, applied;
 static bool initialized, pending_apply, pending_restart, halted, saved_restart;
-static uint32_t capabilities = 0x3f;
+static uint32_t capabilities = 0xff;
 
 static esp_err_t store_config(const device_config_t *c)
 {
@@ -100,6 +100,7 @@ uint32_t device_config_capabilities(void)
 {
     taskENTER_CRITICAL(&config_lock); uint32_t c = capabilities; taskEXIT_CRITICAL(&config_lock);
     if (cs40l25_surface_get_state() == SURFACE_FAULT) c &= ~((1U << 0) | (1U << 4));
+    if (!(c & RSTP_CAP_EDGES)) c &= ~(RSTP_CAP_ARROW_KEYS | RSTP_CAP_EDGE_REPEAT);
     return c;
 }
 void device_config_disable(uint32_t caps)
