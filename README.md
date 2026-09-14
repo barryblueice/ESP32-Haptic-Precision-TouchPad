@@ -55,7 +55,7 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 
 ## Hardware
 - [x] PCB Design
-- [ ] Appearance Design (Modeling in SOLIDWORKS)
+- [x] Appearance Design (Modeling in SOLIDWORKS)
 
 ## Software
 
