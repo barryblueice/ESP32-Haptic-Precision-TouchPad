@@ -16,9 +16,11 @@ bool device_config_valid(const device_config_t *c)
     uint32_t timeout = rstp_u32(b + CFG_TIMEOUT);
     if (b[0] > 100 || b[1] < 1 || b[1] > 3 || !b[2] || b[2] > b[3] || b[3] > b[4] ||
         b[5] > 3 || b[6] > 1 || b[7] || timeout < 1000 || timeout > 3600000 || timeout % 1000) return false;
-    for (unsigned i = CFG_EDGES; i < 32; i += 5)
+    for (unsigned i = CFG_EDGES; i < 32; i += 5) {
+        unsigned max_width = i < CFG_EDGES + 10 ? 30 : 15;
         if (b[i] > 1 || b[i+1] > 4 || (b[i] && !b[i+1]) || b[i+2] > 1 ||
-            !b[i+3] || b[i+3] > 15 || !b[i+4] || b[i+4] > 10) return false;
+            !b[i+3] || b[i+3] > max_width || !b[i+4] || b[i+4] > 10) return false;
+    }
     return true;
 }
 bool device_config_supported(const device_config_t *a, const device_config_t *b, uint32_t caps)
