@@ -24,6 +24,9 @@
 #include "SYS/input_pipeline.h"
 
 #include "USB/usbhid.h"
+#include "USB/usb_config.h"
+#include "USB/usb_aux.h"
+#include "SYS/device_config.h"
 
 // #include "wireless/wireless.h"
 
@@ -47,6 +50,7 @@
 #define TPD_REPORT_SIZE_WITHOUT_ID (sizeof(touchpad_report_t) - 1)
 
 #define REPORTID_DFU_CMD  0xFF
+_Static_assert(CFG_TUD_HID_EP_BUFSIZE >= 257, "PTP Feature control buffer must include the Report ID");
 
 void enter_dfu_mode(void) {
 
@@ -103,16 +107,22 @@ static uint8_t ptp_input_mode = 0x00;
 static portMUX_TYPE usb_tx_lock = portMUX_INITIALIZER_UNLOCKED;
 static input_report_t usb_flight[3];
 static bool usb_busy[3];
+static bool usb_aux_flight;
+static usb_aux_report_t usb_aux_buffer;
 
 static void usb_complete(uint8_t instance, bool success)
 {
+    if (instance == 0) { usb_config_complete(success); return; }
     if (instance < 1 || instance > 2) return;
     taskENTER_CRITICAL(&usb_tx_lock);
     bool busy = usb_busy[instance];
     input_report_t report = usb_flight[instance];
+    bool aux = instance == 2 && usb_aux_flight;
+    if (aux) usb_aux_flight = false;
     usb_busy[instance] = false;
     taskEXIT_CRITICAL(&usb_tx_lock);
-    if (busy) {
+    if (busy && aux) { usb_aux_complete(success); if (!success) input_recover(); }
+    else if (busy) {
         if (success) input_report_ack(&report);
         else {
             input_submit_failed();
@@ -135,7 +145,7 @@ void tud_hid_report_failed_cb(uint8_t instance, hid_report_type_t type, uint8_t 
 
 uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t *buffer, uint16_t reqlen) {
     if (buffer == NULL || reqlen == 0) return 0;
-    if (report_type == HID_REPORT_TYPE_FEATURE) {
+    if (instance == 1 && report_type == HID_REPORT_TYPE_FEATURE) {
         if (report_id == REPORTID_FEATURE) {
             buffer[0] = 0x03;
             return 1;
@@ -150,7 +160,7 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
             return count;
         }
         if (report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-            buffer[0] = ptp_button_press_threshold;
+            buffer[0] = device_config_ready() ? device_config_value(CFG_LEVEL) : ptp_button_press_threshold;
             return 1;
         }
         if (report_id == REPORTID_HAPTIC_INTENSITY) {
@@ -164,6 +174,11 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
 }
 
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const *buffer, uint16_t bufsize) {
+    if (instance == 0) {
+        if (report_type == HID_REPORT_TYPE_OUTPUT && report_id == 0) usb_config_receive(buffer, bufsize);
+        return;
+    }
+    if (instance != 1 || report_type != HID_REPORT_TYPE_FEATURE) return;
     if (bufsize == 0 || buffer == NULL) {
         ESP_LOGW(TAG, "SET_REPORT empty: instance=%u report_id=0x%02X type=%u", instance, report_id, report_type);
         return;
@@ -192,9 +207,11 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
         ESP_LOGW(TAG, "SET_REPORT empty payload: instance=%u report_id=0x%02X type=%u", instance, effective_report_id, report_type);
         return;
     }
+    for (unsigned i = 1; i < payload_size; ++i) if (payload[i]) return;
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_FEATURE) {
         if (payload_size >= 1) {
+            if (payload[0] != 0 && payload[0] != 3) return;
             ptp_input_mode = payload[0];
             input_request_mode(ptp_input_mode == 0x03 ? PTP_MODE : MOUSE_MODE);
             ESP_LOGI(TAG, "PTP input mode SET_FEATURE: instance=%u mode=0x%02X", instance, ptp_input_mode);
@@ -202,7 +219,8 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-        ptp_button_press_threshold_set(payload[0], true);
+        if (payload[0] < 1 || payload[0] > 3) return;
+        usb_config_legacy(REPORTID_BUTTON_PRESS_THRESHOLD, payload[0]);
 
         ESP_LOGI(TAG,
                  "Button press threshold SET_FEATURE: instance=%u raw=0x%02X threshold=%u",
@@ -212,13 +230,13 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_INTENSITY) {
-        esp_err_t err = ptp_haptic_click_intensity_set_report(payload, payload_size, true);
-        if (err != ESP_OK) ESP_LOGW(TAG, "Rejected Surface strength: %s", esp_err_to_name(err));
+        if (payload[0] > 100) return;
+        usb_config_legacy(REPORTID_HAPTIC_INTENSITY, payload[0]);
     }
 
     if (report_id == REPORTID_DFU_CMD ||
         (report_id == 0 && buffer[0] == REPORTID_DFU_CMD)) {
-        enter_dfu_mode();
+        usb_config_dfu();
     }
 }
 static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
@@ -226,15 +244,19 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
     (void)arg;
     switch (event->id) {
     case TINYUSB_EVENT_ATTACHED:
+        usb_aux_reset(true);
         input_set_link(3);
         ptp_input_mode = 0;
         input_request_mode(MOUSE_MODE);
         break;
     case TINYUSB_EVENT_DETACHED:
+        usb_config_detach();
+        usb_aux_reset(false);
         input_set_link(0);
         /* The stack has closed the endpoints; no transfer survives detach. */
         taskENTER_CRITICAL(&usb_tx_lock);
         usb_busy[1] = usb_busy[2] = false;
+        usb_aux_flight = false;
         taskEXIT_CRITICAL(&usb_tx_lock);
         ptp_input_mode = 0;
         break;
@@ -250,6 +272,8 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
 }
 
 void usbhid_init(void) {
+    usb_descriptor_init();
+    ESP_ERROR_CHECK(usb_config_init());
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
     tusb_cfg.descriptor.device = &desc_device;
     tusb_cfg.descriptor.full_speed_config = desc_configuration;
@@ -266,14 +290,29 @@ void usbhid_task(void *arg)
     input_register_sender();
     input_report_t pending;
     bool have_pending = false;
+    bool prefer_aux = true;
     while (true) {
         input_log_stats();
+        if (tud_mounted() && !tud_suspended()) usb_config_send();
         if (have_pending && !input_report_current(&pending)) have_pending = false;
         taskENTER_CRITICAL(&usb_tx_lock);
-        bool busy = usb_busy[1] || usb_busy[2];
+        bool busy = usb_busy[1] || (usb_busy[2] && !usb_aux_flight);
+        bool aux_busy = usb_busy[2];
         taskEXIT_CRITICAL(&usb_tx_lock);
         if (!have_pending && !busy) have_pending = input_take_report(&pending);
-        if (have_pending && tud_mounted() && !tud_suspended()) {
+        if (!aux_busy && tud_mounted() && !tud_suspended() && tud_hid_n_ready(2) &&
+            (usb_aux_release_pending() || prefer_aux || !have_pending) && usb_aux_take(&usb_aux_buffer, input_generation(), (uint32_t)(esp_timer_get_time() / 1000))) {
+            taskENTER_CRITICAL(&usb_tx_lock);
+            usb_busy[2] = true; usb_aux_flight = true;
+            taskEXIT_CRITICAL(&usb_tx_lock);
+            if ((!usb_aux_buffer.release && usb_aux_buffer.generation != input_generation()) ||
+                !tud_hid_n_report(2, usb_aux_buffer.id, usb_aux_buffer.data, usb_aux_buffer.length)) {
+                taskENTER_CRITICAL(&usb_tx_lock); usb_busy[2] = false; usb_aux_flight = false; taskEXIT_CRITICAL(&usb_tx_lock);
+                usb_aux_unsubmitted();
+            } else prefer_aux = false;
+            aux_busy = true;
+        }
+        if (!busy && have_pending && !(pending.mode == MOUSE_MODE && aux_busy) && tud_mounted() && !tud_suspended()) {
             uint8_t instance = pending.mode == PTP_MODE ? 1 : 2;
             if (tud_hid_n_ready(instance) && input_report_current(&pending)) {
                 taskENTER_CRITICAL(&usb_tx_lock);
@@ -283,7 +322,7 @@ void usbhid_task(void *arg)
                 bool accepted = pending.mode == PTP_MODE ?
                     tud_hid_n_report(instance, REPORTID_TOUCHPAD, &pending.data.ptp, sizeof(ptp_report_t)) :
                     tud_hid_n_report(instance, REPORTID_MOUSE, &pending.data.mouse, sizeof(mouse_hid_report_t));
-                if (accepted) have_pending = false;
+                if (accepted) { have_pending = false; prefer_aux = true; }
                 else {
                     taskENTER_CRITICAL(&usb_tx_lock);
                     usb_busy[instance] = false;
@@ -294,6 +333,6 @@ void usbhid_task(void *arg)
             }
         }
         /* New input and completion callbacks wake this task immediately. */
-        ulTaskNotifyTake(pdTRUE, (have_pending || busy) ? 1 : portMAX_DELAY);
+        ulTaskNotifyTake(pdTRUE, (have_pending || busy || aux_busy || usb_aux_active() || usb_config_active()) ? 1 : portMAX_DELAY);
     }
 }

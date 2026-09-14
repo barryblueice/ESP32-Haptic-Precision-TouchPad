@@ -42,6 +42,11 @@ set(srcs
     "SYS/rtos_queue.c"
     "SYS/report_buffer.c"
     "SYS/input_pipeline.c"
+    "SYS/rstp_protocol.c"
+    "SYS/device_config.c"
+    "SYS/edge_gesture.c"
+    "USB/usb_config.c"
+    "USB/usb_aux.c"
 
     "GPIO/irq_func_btn.c"
     "GPIO/irq_tp_int.c"

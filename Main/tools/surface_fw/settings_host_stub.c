@@ -1,5 +1,11 @@
 /* Storage faults and legacy/new keys, without an ESP-IDF installation. */
 #include "NVS/nvs_handle.h"
+#include "SYS/device_config.h"
+/* This suite exercises standalone settings; unified transactions have their own suite. */
+bool device_config_ready(void) { return false; }
+uint8_t device_config_value(unsigned offset) { (void)offset; return 0; }
+esp_err_t device_config_set_legacy(unsigned offset, uint8_t value, bool persist)
+{ (void)offset; (void)value; (void)persist; return ESP_FAIL; }
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
 #else

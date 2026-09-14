@@ -16,6 +16,7 @@
 #include "SYS/rtos_queue.h"
 #include "SYS/hid_msg.h"
 #include "SYS/input_pipeline.h"
+#include "SYS/device_config.h"
 
 #include "USB/usbhid.h"
 
@@ -44,6 +45,7 @@ void app_main(void) {
     gpio_init();
 
     ESP_ERROR_CHECK(nvs_init());
+    ESP_ERROR_CHECK(device_config_init());
 
     click_thresholds_load_from_nvs();
     ptp_button_press_threshold_load_from_nvs();
@@ -62,6 +64,7 @@ void app_main(void) {
     touchpad_init(); // I2C0 registration and the touchpad's GPIO33 reset precede haptics.
     sub_dev_init();  // Register I2C1 devices before the haptic worker can use MP28167.
     cs40l25_surface_init();
+    tp_modern_sleep_init();
 
 
     switch (current_mode) {

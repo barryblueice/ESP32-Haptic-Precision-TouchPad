@@ -16,6 +16,8 @@ SOURCES = ['main.c', 'surface_haptic_test.c', 'I2C/TP/i2c_cmd.c', 'I2C/TP/i2c_qu
            'USB/usb_descriptor.c', 'BLE/blehid.c', 'BLE/ble_hid_dev.c',
            'BLE/ble_hid_device_le_prf.c', 'BLE/ble_bluedroid_init.c', 'BLE/ble_hid_descriptor.c',
            'WIFI/wifi_handle.c', 'WIFI/broadcast.c']
+SOURCES += ['SYS/rstp_protocol.c', 'SYS/device_config.c', 'SYS/edge_gesture.c',
+            'USB/usb_config.c', 'USB/usb_aux.c', 'I2C/TP/tp_sleep.c']
 CHOICES = ['TP_ROTATION_LANDSCAPE', 'TP_ROTATION_LANDSCAPE_FLIPPED', 'TP_ROTATION_PORTRAIT',
            'TP_ROTATION_PORTRAIT_FLIPPED', 'ORI_MOUSE_MODE', 'PTP_SIMULATED_MOUSE_MODE',
            'BLE_ENABLE_MOUSE_MODE', 'BLE_ENABLE_PTP_MODE', 'SURFACE_HAPTIC_TEST_MODE']
@@ -71,7 +73,7 @@ def run(report=None):
             results[name] = {'syntax_only': True, 'source_count': len(SOURCES), 'passed': True}
             print(f'{name}: {len(SOURCES)} source files passed (syntax only)')
     if report:
-        Path(report).write_text(json.dumps(results, indent=2) + '\n', encoding='utf-8')
+        Path(report).write_text(json.dumps(results, indent=2) + '\n', encoding='utf-8', newline='\n')
     return results
 
 

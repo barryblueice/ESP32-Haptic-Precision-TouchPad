@@ -1,4 +1,5 @@
 #include "surface_haptic_settings.h"
+#include "SYS/device_config.h"
 #include "cs40l25_surface.h"
 #include "NVS/nvs_handle.h"
 #include "esp_log.h"
@@ -14,6 +15,7 @@ static SemaphoreHandle_t write_lock;
 
 uint8_t ptp_haptic_click_intensity_get(void)
 {
+    if (device_config_ready()) return device_config_value(CFG_INTENSITY);
     taskENTER_CRITICAL(&value_lock);
     uint8_t value = setting;
     taskEXIT_CRITICAL(&value_lock);
@@ -22,6 +24,7 @@ uint8_t ptp_haptic_click_intensity_get(void)
 
 esp_err_t ptp_haptic_click_intensity_set(uint8_t value, bool persist)
 {
+    if (device_config_ready()) return device_config_set_legacy(CFG_INTENSITY, value, persist);
     if (value > 100U) return ESP_ERR_INVALID_ARG;
     // Created during load before connection/input tasks start.
     if (write_lock == NULL || xSemaphoreTake(write_lock, portMAX_DELAY) != pdTRUE) return ESP_ERR_INVALID_STATE;
@@ -47,6 +50,7 @@ esp_err_t ptp_haptic_click_intensity_set_report(const uint8_t *data, size_t leng
 
 void ptp_haptic_click_intensity_load_from_nvs(void)
 {
+    if (device_config_ready()) return;
     if (write_lock == NULL) write_lock = xSemaphoreCreateMutex();
     if (write_lock == NULL) {
         ESP_LOGE(TAG, "Settings mutex allocation failed; default strength=63");

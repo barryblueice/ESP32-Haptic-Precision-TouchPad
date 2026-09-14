@@ -39,6 +39,11 @@ void input_wake_sender(void)
     taskENTER_CRITICAL(&lock); TaskHandle_t task = sender; taskEXIT_CRITICAL(&lock);
     notify(task);
 }
+void input_wake_parser(void)
+{
+    taskENTER_CRITICAL(&lock); TaskHandle_t task = parser; taskEXIT_CRITICAL(&lock);
+    notify(task);
+}
 
 void input_recover(void)
 {
@@ -106,6 +111,18 @@ bool input_observe(uint32_t generation, bool all_up)
     return admitted;
 }
 
+bool input_publish_pair(uint32_t generation, input_report_t *down, input_report_t *up)
+{
+    taskENTER_CRITICAL(&lock);
+    bool ok = generation == reports.generation && !mode_pending && !reports.recovering;
+    if (ok && reports.count <= REPORT_BUFFER_CAPACITY - 2) {
+        ok = report_buffer_push(&reports, down, false) && report_buffer_push(&reports, up, false);
+    } else ok = false;
+    if (!ok && generation == reports.generation) report_buffer_reset(&reports, reports.mode);
+    taskEXIT_CRITICAL(&lock);
+    if (!ok) { cs40l25_surface_cancel_click(); input_wake_parser(); }
+    input_wake_sender(); return ok;
+}
 bool input_publish(uint32_t generation, input_report_t *report, bool tap)
 {
     taskENTER_CRITICAL(&lock);
