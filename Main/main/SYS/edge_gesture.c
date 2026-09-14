@@ -15,6 +15,7 @@ edge_result_t edge_gesture_update(edge_gesture_t *s, const device_config_t *c,
     unsigned count = 0, id = 0;
     for (unsigned i = 0; i < 5; ++i) if (m->fingers[i].tip_switch) { ++count; id = i; }
     if (!count) {
+        result.cancelled = s->state == EDGE_CAPTURED;
         if (s->state == EDGE_CANDIDATE) {
             result.tap = true; result.tap_down = s->start;
             result.tap_down.scan_time = m->scan_time - 1;
@@ -27,6 +28,7 @@ edge_result_t edge_gesture_update(edge_gesture_t *s, const device_config_t *c,
     if (count != 1 || !m->fingers[id].confidence ||
         (s->state != EDGE_IDLE && id != s->id)) {
         result.suppress = s->state == EDGE_CAPTURED;
+        result.cancelled = result.suppress;
         s->state = result.suppress ? EDGE_SUPPRESSED : EDGE_BLOCKED; return result;
     }
     uint16_t x = m->fingers[id].x, y = m->fingers[id].y;
@@ -56,10 +58,13 @@ edge_result_t edge_gesture_update(edge_gesture_t *s, const device_config_t *c,
         int step = c->bytes[CFG_EDGES + e * 5 + 4] * (e < 2 ? xmax : ymax);
         if (abs(delta) * 100 < step) { result.suppress = true; return result; }
         s->state = EDGE_CAPTURED;
+        s->continue_outside = (c->bytes[CFG_EDGE_REPEAT] & (1U << e)) != 0;
     }
     const uint8_t *record = c->bytes + CFG_EDGES + s->edge * 5;
     result.suppress = true;
-    if (!inside(s->edge, record, x, y, xmax, ymax)) { s->state = EDGE_SUPPRESSED; return result; }
+    if (!s->continue_outside && !inside(s->edge, record, x, y, xmax, ymax)) {
+        s->state = EDGE_SUPPRESSED; result.cancelled = true; return result;
+    }
     int pos = s->edge < 2 ? x : y;
     int delta = s->edge < 2 ? pos - s->last : s->last - pos;
     s->last = pos; s->remainder += delta * 100;

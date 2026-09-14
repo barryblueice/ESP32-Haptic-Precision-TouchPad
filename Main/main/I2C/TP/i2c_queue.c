@@ -334,6 +334,7 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 static void reset_input_state(void)
 {
     edge_gesture_reset(&edge_state);
+    usb_aux_cancel();
     ptp_report_reset();
     ptp_force_click_state = (ptp_force_click_state_t){0};
     memset(touch_state, 0, sizeof(touch_state));
@@ -571,6 +572,7 @@ void i2c_queue_task(void *arg) {
                     }
                     edge_result_t edge = edge_gesture_update(&edge_state, &config, &logical,
                         device_config_x_max(), device_config_y_max());
+                    if (edge.cancelled) usb_aux_cancel();
                     if (edge.steps && !usb_aux_steps(edge.action, edge.steps, frame.generation, frame.time_ms)) {
                         input_recover(); continue;
                     }

@@ -15,19 +15,25 @@ bool device_config_valid(const device_config_t *c)
     const uint8_t *b = c->bytes;
     uint32_t timeout = rstp_u32(b + CFG_TIMEOUT);
     if (b[0] > 100 || b[1] < 1 || b[1] > 3 || !b[2] || b[2] > b[3] || b[3] > b[4] ||
-        b[5] > 3 || b[6] > 1 || b[7] || timeout < 1000 || timeout > 3600000 || timeout % 1000) return false;
+        b[5] > 3 || b[6] > 1 || (b[7] & 0xf0) || timeout < 1000 || timeout > 3600000 || timeout % 1000) return false;
     for (unsigned i = CFG_EDGES; i < 32; i += 5) {
         unsigned max_width = i < CFG_EDGES + 10 ? 30 : 15;
-        if (b[i] > 1 || b[i+1] > 4 || (b[i] && !b[i+1]) || b[i+2] > 1 ||
+        if (b[i] > 1 || b[i+1] > 6 || (b[i] && !b[i+1]) || b[i+2] > 1 ||
             !b[i+3] || b[i+3] > max_width || !b[i+4] || b[i+4] > 10) return false;
     }
     return true;
 }
 bool device_config_supported(const device_config_t *a, const device_config_t *b, uint32_t caps)
 {
-    static const uint8_t start[] = {0, 1, 2, 5, 6, 12}, end[] = {1, 2, 5, 6, 12, 32};
+    static const uint8_t start[] = {0, 1, 2, 5, 6, 12}, end[] = {1, 2, 5, 6, 7, 32};
     for (unsigned i = 0; i < 6; ++i)
         if (!(caps & (1U << i)) && memcmp(a->bytes + start[i], b->bytes + start[i], end[i] - start[i])) return false;
+    if (!(caps & (1U << 4)) && memcmp(a->bytes + CFG_TIMEOUT, b->bytes + CFG_TIMEOUT, 4)) return false;
+    if ((caps & (RSTP_CAP_EDGES | RSTP_CAP_EDGE_REPEAT)) != (RSTP_CAP_EDGES | RSTP_CAP_EDGE_REPEAT) &&
+        a->bytes[CFG_EDGE_REPEAT] != b->bytes[CFG_EDGE_REPEAT]) return false;
+    for (unsigned i = CFG_EDGES; i < 32; i += 5)
+        if ((caps & (RSTP_CAP_EDGES | RSTP_CAP_ARROW_KEYS)) != (RSTP_CAP_EDGES | RSTP_CAP_ARROW_KEYS) &&
+            (a->bytes[i+1] >= 5 || b->bytes[i+1] >= 5) && memcmp(a->bytes + i, b->bytes + i, 5)) return false;
     return true;
 }
 bool rstp_decode(const uint8_t *b, size_t n, rstp_request_t *r)
