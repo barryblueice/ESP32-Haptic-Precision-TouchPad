@@ -6,13 +6,12 @@
 
 #define TAG "NVS"
 
-nvs_handle_t handle;
-
 esp_err_t nvs_write_int(const char* key, int32_t value) {
+    nvs_handle_t handle;
     esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
     if (err != ESP_OK) return err;
     err = nvs_set_i32(handle, key, value);
-    nvs_commit(handle);
+    if (err == ESP_OK) err = nvs_commit(handle);
     nvs_close(handle);
     return err;
 }
@@ -31,7 +30,7 @@ esp_err_t nvs_write_str(const char* key, const char* value) {
     esp_err_t err = nvs_open("storage", NVS_READWRITE, &handle);
     if (err != ESP_OK) return err;
     err = nvs_set_str(handle, key, value);
-    nvs_commit(handle);
+    if (err == ESP_OK) err = nvs_commit(handle);
     nvs_close(handle);
     return err;
 }

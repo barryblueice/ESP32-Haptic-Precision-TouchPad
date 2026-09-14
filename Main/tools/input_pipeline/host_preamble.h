@@ -11,6 +11,8 @@ typedef int esp_err_t;
 #define ESP_OK 0
 #define ESP_FAIL -1
 #define ESP_ERR_NO_MEM 0x101
+#define ESP_ERR_INVALID_ARG 0x102
+#define ESP_ERR_INVALID_STATE 0x103
 #define ESP_ERR_NOT_FOUND 0x105
 #define ESP_LOGW(...) ((void)0)
 #define ESP_LOGI(...) ((void)0)
@@ -34,6 +36,11 @@ void *memcpy(void *dest, const void *src, size_t count) {
     unsigned char *d = dest; const unsigned char *s = src;
     while (count--) *d++ = *s++; return dest;
 }
+int memcmp(const void *left, const void *right, size_t count) {
+    const unsigned char *a = left, *b = right;
+    while (count--) { if (*a != *b) return *a - *b; ++a; ++b; } return 0;
+}
+int abs(int v) { return v < 0 ? -v : v; }
 void *memmove(void *dest, const void *src, size_t count) {
     unsigned char *d = dest; const unsigned char *s = src;
     if (d < s) while (count--) *d++ = *s++;

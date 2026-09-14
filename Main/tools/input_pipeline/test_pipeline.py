@@ -18,7 +18,7 @@ ROOT = HERE.parents[1]
 
 def source(path):
     return re.sub(r'^#include[^\n]*\n|^#pragma once[^\n]*\n', '',
-                  (ROOT / path).read_text(), flags=re.M)
+                  (ROOT / path).read_text(encoding='utf-8'), flags=re.M)
 
 
 def function(path, name):
@@ -36,13 +36,16 @@ def run():
     parts = [(HERE / 'host_preamble.h').read_text(), source('main/SYS/hid_msg.h'),
              source('main/SYS/report_buffer.h'), source('main/SYS/report_buffer.c'),
              source('main/SYS/input_pipeline.h'), source('tools/input_pipeline/host_runtime.h'),
-             source('main/SYS/input_pipeline.c')]
+              source('main/SYS/input_pipeline.c'), source('main/SYS/rstp_protocol.h'),
+              source('main/SYS/rstp_protocol.c'), source('main/SYS/edge_gesture.h'),
+              source('main/SYS/edge_gesture.c'), source('main/USB/usb_aux.h'), source('main/USB/usb_aux.c')]
     parts += ['#define SENSITIVITY 2.0f', source('main/I2C/TP/tp_report_handle.c')]
     usb = source('main/USB/usbhid.c')
     parts += [source('tools/input_pipeline/host_transports.h'),
               usb[usb.index('static portMUX_TYPE usb_tx_lock'):usb.index('uint16_t tud_hid_get_report_cb')],
               '\n'.join(re.findall(r'^#define REPORTID_.*$', usb, re.M)),
               function('main/USB/usbhid.c', 'tud_hid_get_report_cb'),
+              function('main/USB/usbhid.c', 'tud_hid_set_report_cb'),
               function('main/USB/usbhid.c', 'tinyusb_event_cb'),
               function('main/USB/usbhid.c', 'usbhid_task'), source('main/BLE/blehid.c'),
               function('main/WIFI/heartbeat.c', 'wireless_make_heartbeat')]
@@ -57,7 +60,11 @@ def run():
     for index, orientation in enumerate(orientations):
         parts.append(''.join(f'#undef CONFIG_TP_ROTATION_{item}\n' for item in orientations) +
                      f'#define CONFIG_TP_ROTATION_{orientation} 1\n' +
-                     source('main/I2C/TP/tp_coordinates.h').replace('tp_rotate_coordinates', f'rotate_{index}'))
+                     source('main/I2C/TP/tp_coordinates.h').replace('tp_rotate_coordinates', f'rotate_{index}')
+                     .replace('device_config_rotation()', str([0, 2, 1, 3][index])))
+    parts += [source('tools/input_pipeline/host_parser.h'), source('main/I2C/TP/tp_coordinates.h'),
+              source('main/I2C/TP/ptp_simulated_mouse_gesture.c'),
+              source('main/I2C/TP/i2c_queue.c').replace('while (1)', 'while (parser_steps-- > 0)')]
     parts.append(source('tools/input_pipeline/host_cases.c'))
     code = '\n'.join(parts).replace('while (true)', 'while (test_steps-- > 0)')
     temp_root = ROOT / 'build/input_validation'
@@ -71,7 +78,7 @@ def run():
         clang = shutil.which('clang', path=host_paths)
         if not clang:
             raise RuntimeError('Native Windows Clang is required for DLL tests')
-        command = [clang, '-std=c11', '-O1', '-fno-builtin',
+        command = [clang, '-std=c11', '-O1', '-fno-builtin', '-fno-math-errno',
                    '-Werror=implicit-function-declaration', '-shared', '-nostdlib', '-fuse-ld=lld',
                    '-Wl,/noentry', '-Wl,/nodefaultlib', str(c), '-o', str(dll)]
         print(f'Compiling host cases with {clang}', flush=True)

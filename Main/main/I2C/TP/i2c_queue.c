@@ -13,6 +13,9 @@
 
 #include "SYS/rtos_queue.h"
 #include "SYS/input_pipeline.h"
+#include "SYS/device_config.h"
+#include "SYS/edge_gesture.h"
+#include "USB/usb_aux.h"
 #include "SYS/hid_msg.h"
 
 #include "I2C/I2C_handle.h"
@@ -73,6 +76,7 @@ static uint16_t last_confidence[5] = {0};
 static uint8_t consecutive_errors[5] = {0};
 
 static bool slot_active[5] = {false};
+static edge_gesture_t edge_state;
 
 typedef struct {
     bool tracking_contact;
@@ -299,7 +303,7 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         if (current_tp_mode == PTP_MODE) {
             msg->button_mask = 0x01;
         } else {
-            msg->button_mask = (msg->fingers[tracked_index].x < CLICK_REGION_SPLIT_X) ? 0x01 : 0x02;
+            msg->button_mask = (msg->fingers[tracked_index].x < device_config_x_max() / 2) ? 0x01 : 0x02;
         }
     } else {
         msg->button_mask = 0x00;
@@ -329,6 +333,7 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 
 static void reset_input_state(void)
 {
+    edge_gesture_reset(&edge_state);
     ptp_report_reset();
     ptp_force_click_state = (ptp_force_click_state_t){0};
     memset(touch_state, 0, sizeof(touch_state));
@@ -364,6 +369,13 @@ void i2c_queue_task(void *arg) {
 
         tp_multi_msg_t tp_msg = {0};
         mouse_msg_t mouse_msg = {0};
+
+        if (device_config_parser_boundary()) {
+            reset_input_state();
+            while (input_next_frame(&frame)) { }
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            continue;
+        }
 
         if (input_apply_mode_request()) continue;
         if (generation != input_generation()) {
@@ -551,6 +563,36 @@ void i2c_queue_task(void *arg) {
                 //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
                 // }
 
+                if (current_mode == WIRED_MODE) {
+                    device_config_t config; device_config_get(&config);
+                    tp_multi_msg_t logical = tp_msg;
+                    for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch) {
+                        logical.fingers[id].x = last_raw_x[id]; logical.fingers[id].y = last_raw_y[id];
+                    }
+                    edge_result_t edge = edge_gesture_update(&edge_state, &config, &logical,
+                        device_config_x_max(), device_config_y_max());
+                    if (edge.steps && !usb_aux_steps(edge.action, edge.steps, frame.generation, frame.time_ms)) {
+                        input_recover(); continue;
+                    }
+                    if (edge.tap) {
+                        input_report_t down = {.mode = input_mode(), .time_ms = frame.time_ms};
+                        input_report_t up = down;
+                        if (down.mode == PTP_MODE) {
+                            parse_ptp_report(&edge.tap_down, &down.data.ptp);
+                            parse_ptp_report(&tp_msg, &up.data.ptp);
+                            input_publish_pair(frame.generation, &down, &up);
+                            continue;
+                        }
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                        edge.tap_down.actual_count = 1;
+                        parse_ptp_simulated_mouse_report(&edge.tap_down, &down.data.mouse);
+#endif
+                    }
+                    if (edge.suppress) {
+                        ptp_reset_force_click(&tp_msg);
+                        memset(tp_msg.fingers, 0, sizeof(tp_msg.fingers)); active_finger_count = 0;
+                    }
+                }
                 ptp_update_force_click_button(&tp_msg, active_finger_count);
                 tp_msg.actual_count = active_finger_count > 0 ? active_finger_count : 1;
                 input_report_t report = {.mode = input_mode(), .time_ms = frame.time_ms};
@@ -569,19 +611,15 @@ void i2c_queue_task(void *arg) {
                 input_publish(frame.generation, &report, tap);
 
             } else {
-                #if CONFIG_TP_ROTATION_LANDSCAPE
-                    mouse_msg.x = (int8_t)tp_packet[4];
-                    mouse_msg.y = (int8_t)tp_packet[5];
-                #elif CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
-                    mouse_msg.x = -(int8_t)tp_packet[4];
-                    mouse_msg.y = -(int8_t)tp_packet[5];
-                #elif CONFIG_TP_ROTATION_PORTRAIT
-                    mouse_msg.x = (int8_t)tp_packet[5];
-                    mouse_msg.y = -(int8_t)tp_packet[4];
-                #elif CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
-                    mouse_msg.x = -(int8_t)tp_packet[5];
-                    mouse_msg.y = (int8_t)tp_packet[4];
-                #endif
+                int dx = (int8_t)tp_packet[4], dy = (int8_t)tp_packet[5], mx, my;
+                switch (device_config_rotation()) {
+                case 1: mx = dy; my = -dx; break;
+                case 2: mx = -dx; my = -dy; break;
+                case 3: mx = -dy; my = dx; break;
+                default: mx = dx; my = dy; break;
+                }
+                mouse_msg.x = mx < -127 ? -127 : mx > 127 ? 127 : mx;
+                mouse_msg.y = my < -127 ? -127 : my > 127 ? 127 : my;
                 mouse_msg.buttons = tp_packet[3];
                 cs40l25_surface_button_update((mouse_msg.buttons & 0x03U) != 0,
                                                ptp_haptic_click_intensity_get());

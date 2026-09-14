@@ -28,17 +28,10 @@ const uint8_t generic_hid_report_descriptor[] = {
     TUD_HID_REPORT_DESC_GENERIC_INOUT(64)
 };
 
-#if CONFIG_TP_ROTATION_LANDSCAPE || CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
-#define LOGICAL_X_MAX   0x26, 0xFA, 0x08
+#define LOGICAL_X_MAX   0x26, 0xFE, 0x08
 #define LOGICAL_Y_MAX   0x26, 0xFC, 0x05
 #define PHYSICAL_X_MAX  0x46, 0x7D, 0x04
 #define PHYSICAL_Y_MAX  0x46, 0xFE, 0x02
-#elif CONFIG_TP_ROTATION_PORTRAIT || CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
-#define LOGICAL_Y_MAX   0x26, 0xFA, 0x08
-#define LOGICAL_X_MAX   0x26, 0xFC, 0x05
-#define PHYSICAL_Y_MAX  0x46, 0x7D, 0x04
-#define PHYSICAL_X_MAX  0x46, 0xFE, 0x02
-#endif
 
 const uint8_t mouse_hid_report_descriptor[] = {
 
@@ -83,9 +76,13 @@ const uint8_t mouse_hid_report_descriptor[] = {
     0xC0,                               // END_COLLECTION (Physical)
     0xC0,                               // END_COLLECTION (Application)
 
+    // Consumer Control: Report ID 7, one 16-bit usage (zero releases).
+    0x05, 0x0c, 0x09, 0x01, 0xa1, 0x01, 0x85, 0x07,
+    0x15, 0x00, 0x26, 0xea, 0x00, 0x19, 0x00, 0x2a, 0xea, 0x00,
+    0x75, 0x10, 0x95, 0x01, 0x81, 0x00, 0xc0,
 };
 
-const uint8_t ptp_hid_report_descriptor[] = {
+uint8_t ptp_hid_report_descriptor[] = {
 
     //TOUCH PAD input TLC
     0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
@@ -500,3 +497,21 @@ uint8_t const desc_configuration[] = {
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(ptp_hid_report_descriptor), EPNUM_TP_IN, 64, 10),
     TUD_HID_DESCRIPTOR(2, 0, HID_ITF_PROTOCOL_MOUSE, sizeof(mouse_hid_report_descriptor), EPNUM_MOUSE_IN, 8, 10)
 };
+
+#include "SYS/device_config.h"
+void usb_descriptor_init(void)
+{
+    /* Once before TinyUSB installation; immutable throughout enumeration. */
+    if (!(device_config_rotation() & 1)) return;
+    for (unsigned i = 0; i < sizeof(ptp_hid_report_descriptor);) {
+        uint8_t tag = ptp_hid_report_descriptor[i];
+        unsigned size = tag & 3; if (size == 3) size = 4;
+        if (size == 2 && i + 2 < sizeof(ptp_hid_report_descriptor) && (tag == 0x26 || tag == 0x46)) {
+            uint16_t v = ptp_hid_report_descriptor[i+1] | ((uint16_t)ptp_hid_report_descriptor[i+2] << 8);
+            if (tag == 0x26) { if (v == 2302) v = 1532; else if (v == 1532) v = 2302; }
+            else { if (v == 1149) v = 766; else if (v == 766) v = 1149; }
+            ptp_hid_report_descriptor[i+1] = v; ptp_hid_report_descriptor[i+2] = v >> 8;
+        }
+        i += size + 1;
+    }
+}

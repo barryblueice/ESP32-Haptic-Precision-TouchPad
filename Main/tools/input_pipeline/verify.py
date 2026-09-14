@@ -64,12 +64,13 @@ def main():
     steps = [
         ('surface_regression', [python, '-B', str(ROOT / 'tools/surface_fw/verify.py'), '--self-test']),
         ('input_regression', [python, '-B', str(HERE / 'test_pipeline.py')]),
-        ('incremental_build', [ninja, '-C', str(ROOT / 'build')]),
+        ('config_regression', [python, '-B', str(HERE / 'test_config.py')]),
+        ('incremental_build', [ninja, '-j', '4', '-C', str(ROOT / 'build')]),
         ('variant_syntax', [python, '-B', str(HERE / 'check_variants.py'), '--report', str(HERE / 'variant_checks.json')]),
     ]
     for name, command in steps:
         print(f'Running {name}...', flush=True)
-        selected_env = host_env if name in ['surface_regression', 'input_regression'] else env
+        selected_env = host_env if name in ['surface_regression', 'input_regression', 'config_regression'] else env
         try:
             completed = subprocess.run(command, cwd=ROOT, env=selected_env, capture_output=True,
                                        timeout=600 if name == 'incremental_build' else 180)
@@ -88,6 +89,7 @@ def main():
     result['sdkconfig_unchanged'] = digest(ROOT / 'sdkconfig') == config_before
     result['existing_surface_checks'] = 65
     result['input_scenarios'] = len(re.findall(r'EXPORT int test_\w+\(void\)', (HERE / 'host_cases.c').read_text()))
+    result['config_scenarios'] = len(re.findall(r'EXPORT int test_\w+\(void\)', (HERE / 'config_cases.c').read_text()))
     result['variant_syntax'] = json.loads((HERE / 'variant_checks.json').read_text())
     result['artifacts'] = []
     for name in ['ESP32_HAPTIC_PRECISION_TOUCHPAD.bin', 'ESP32_HAPTIC_PRECISION_TOUCHPAD.elf']:

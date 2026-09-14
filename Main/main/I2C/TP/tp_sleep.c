@@ -4,9 +4,11 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
+#include "SYS/device_config.h"
 
-#ifdef CONFIG_TP_ENABLE_SLEEP_MODE
 static esp_timer_handle_t timer;
+static bool enabled;
+static uint32_t timeout_ms;
 static portMUX_TYPE sleep_lock = portMUX_INITIALIZER_UNLOCKED;
 static bool active, wake_pending;
 static int64_t last_activity;
@@ -16,7 +18,7 @@ static void sleep_cb(void *arg)
     (void)arg;
     int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&sleep_lock);
-    if (!active && now - last_activity >= (int64_t)CONFIG_TP_SLEEP_MODE_TIME_MS * 1000) {
+    if (enabled && !active && now - last_activity >= (int64_t)timeout_ms * 1000) {
         active = true;
         wake_pending = false;
         cs40l25_surface_set_modern_sleep(true);
@@ -26,18 +28,22 @@ static void sleep_cb(void *arg)
 
 static void restart_timer(void)
 {
-    if (timer == NULL) return;
+    if (timer == NULL || !enabled) return;
     (void)esp_timer_stop(timer);
-    esp_err_t err = esp_timer_start_once(timer, (uint64_t)CONFIG_TP_SLEEP_MODE_TIME_MS * 1000);
+    esp_err_t err = esp_timer_start_once(timer, (uint64_t)timeout_ms * 1000);
     if (err != ESP_OK) ESP_LOGW("TP_SLEEP", "Could not restart idle timer: %s", esp_err_to_name(err));
 }
 
 void tp_modern_sleep_init(void)
 {
-    if (CONFIG_TP_SLEEP_MODE_TIME_MS <= 0 || timer != NULL) return;
+    if (timer != NULL) return;
+    device_config_t config; device_config_get(&config);
+    enabled = config.bytes[CFG_SLEEP] != 0;
+    timeout_ms = rstp_u32(config.bytes + CFG_TIMEOUT);
     const esp_timer_create_args_t args = {.callback = sleep_cb, .name = "tp_modern_sleep"};
     if (esp_timer_create(&args, &timer) != ESP_OK) {
         ESP_LOGW("TP_SLEEP", "Idle sleep disabled: timer allocation failed");
+        device_config_disable(1U << 4);
         return;
     }
     last_activity = esp_timer_get_time();
@@ -74,9 +80,3 @@ bool tp_modern_sleep_is_active(void)
     taskEXIT_CRITICAL(&sleep_lock);
     return result;
 }
-#else
-void tp_modern_sleep_init(void) {}
-void tp_modern_sleep_record_activity(void) {}
-void tp_modern_sleep_signal_activity_from_isr(void) {}
-bool tp_modern_sleep_is_active(void) { return false; }
-#endif

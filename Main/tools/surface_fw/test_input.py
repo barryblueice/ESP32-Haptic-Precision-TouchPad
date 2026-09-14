@@ -47,6 +47,7 @@ int _fltused = 0;
 #define MOUSE_MODE 0
 static uint8_t current_tp_mode = PTP_MODE, ptp_button_press_threshold = 2;
 static uint8_t click_light_weight_threshold = 80, click_midium_weight_threshold = 100, click_strong_weight_threshold = 130;
+static uint16_t device_config_x_max(void) { return 2302; }
 static int abs(int x) { return x < 0 ? -x : x; }
 float sqrtf(float);
 float fabsf(float);

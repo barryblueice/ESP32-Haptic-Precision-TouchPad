@@ -1,5 +1,11 @@
 # 输入链路稳定性与验证
 
+RSTP 接入增加了生产 C 配置事务、协议、方向描述符、休眠、边缘识别和 USB 辅助发送队列测试。
+`test_pipeline.py` 也编译完整解析任务与模拟鼠标手势，验证边缘接管不产生压力点击或光标移动，
+以及候选轻点在 PTP/鼠标模式下成对上报。`test_config.py` 注入 NVS 错误，运行实际配置工作任务、
+USB 响应完成及重启调度，并使用配置器参考向量逐字节对照。统一验证入口包含两组测试。
+详见 [RSTP 固件协议](../../docs/rstp-hid-protocol.md)；场景数和构建哈希以 `validation.json` 为准。
+
 ## 实现约定
 
 `main/SYS/report_buffer.c` 是无 RTOS 依赖的报告状态逻辑；`input_pipeline.c` 提供短临界区保护、

@@ -1,4 +1,5 @@
 #include "hid_msg.h"
+#include "device_config.h"
 
 #include <inttypes.h>
 
@@ -28,6 +29,11 @@ uint8_t ptp_button_press_threshold_clamp(uint8_t threshold)
 void ptp_button_press_threshold_set(uint8_t threshold, bool persist)
 {
     uint8_t sanitized = ptp_button_press_threshold_clamp(threshold);
+    if (device_config_ready()) {
+        esp_err_t err = device_config_set_legacy(CFG_LEVEL, sanitized, persist);
+        if (err != ESP_OK) ESP_LOGW(TAG, "Threshold update rejected: %s", esp_err_to_name(err));
+        return;
+    }
 
     ptp_button_press_threshold = sanitized;
 
@@ -44,6 +50,7 @@ void ptp_button_press_threshold_set(uint8_t threshold, bool persist)
 
 void ptp_button_press_threshold_load_from_nvs(void)
 {
+    if (device_config_ready()) return;
     int32_t value = 0;
     esp_err_t err = nvs_read_int(NVS_KEY_BUTTON_PRESS_THRESHOLD, &value);
 

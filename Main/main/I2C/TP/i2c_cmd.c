@@ -7,6 +7,7 @@
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "sdkconfig.h"
+#include "SYS/device_config.h"
 
 #include "I2C/I2C_handle.h"
 #include "NVS/nvs_handle.h"
@@ -52,6 +53,7 @@ static void load_click_threshold_from_nvs(const char *key, uint8_t *target, uint
 }
 
 void click_thresholds_load_from_nvs(void) {
+    if (device_config_ready()) return;
     load_click_threshold_from_nvs(NVS_KEY_CLICK_LIGHT,
                                  &click_light_weight_threshold,
                                  CLICK_LIGHT_WEIGHT_DEFAULT);

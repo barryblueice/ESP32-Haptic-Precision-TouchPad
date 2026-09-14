@@ -1,3 +1,148 @@
+EXPORT int test_rstp_vectors_and_validation(void)
+{
+    device_config_t c; device_config_defaults(&c);
+    CHECK(device_config_valid(&c)); CHECK(rstp_u32(c.bytes + 8) == 180000);
+    uint8_t frame[64] = {'R','S','T','P',1,1,1,0}; rstp_request_t r;
+    CHECK(rstp_decode(frame, 64, &r) && r.status == RSTP_OK);
+    uint8_t out[64], info[12] = {0x3f,0,0,0,1,0,0,0,0,0,1,0};
+    rstp_response(out, &r, RSTP_OK, info, 12);
+    CHECK(out[8] == 12 && out[12] == 0x3f && out[16] == 1 && out[22] == 1);
+    frame[5] = 3; frame[8] = 32; memcpy(frame + 12, c.bytes, 32); frame[12] = 75;
+    CHECK(rstp_decode(frame, 64, &r) && !r.status && r.config.bytes[0] == 75);
+    rstp_response(out, &r, RSTP_RESTART, NULL, 0);
+    CHECK(out[10] == 7 && out[8] == 0 && out[5] == 3 && out[6] == 1);
+    for (unsigned n = 0; n < 12; ++n) CHECK(!rstp_decode(frame, n, &r));
+    for (unsigned n = 12; n < 64; ++n) CHECK(rstp_decode(frame, n, &r) && r.status == RSTP_LENGTH);
+    CHECK(rstp_decode(frame, 65, &r) && r.status == RSTP_LENGTH);
+    frame[63] = 1; CHECK(rstp_decode(frame, 64, &r) && r.status == RSTP_INVALID); frame[63] = 0;
+    frame[4] = 2; CHECK(rstp_decode(frame, 64, &r) && r.status == RSTP_VERSION); frame[4] = 1;
+    frame[5] = 99; CHECK(rstp_decode(frame, 64, &r) && r.status == RSTP_UNSUPPORTED); frame[5] = 3;
+    frame[6] = 0; CHECK(!rstp_decode(frame, 64, &r)); frame[6] = 1;
+    frame[10] = 1; CHECK(rstp_decode(frame, 64, &r) && r.status == RSTP_INVALID); frame[10] = 0;
+    frame[0] = 0; CHECK(!rstp_decode(frame, 64, &r));
+    return 0;
+}
+EXPORT int test_usb_interface_routing_and_padded_features(void)
+{
+    uint8_t b[257] = {75}; config_receives=legacy_receives=dfu_requests=0;
+    tud_hid_set_report_cb(0,0,HID_REPORT_TYPE_OUTPUT,b,64); CHECK(config_receives==1);
+    tud_hid_set_report_cb(0,0x41,HID_REPORT_TYPE_FEATURE,b,256);
+    tud_hid_set_report_cb(2,0x41,HID_REPORT_TYPE_FEATURE,b,256);
+    tud_hid_set_report_cb(1,0x41,HID_REPORT_TYPE_OUTPUT,b,256);
+    CHECK(!legacy_receives && config_receives==1);
+    tud_hid_set_report_cb(1,0x41,HID_REPORT_TYPE_FEATURE,b,256);
+    CHECK(legacy_receives==1 && legacy_id==0x41 && legacy_setting==75);
+    b[255]=1; tud_hid_set_report_cb(1,0x41,HID_REPORT_TYPE_FEATURE,b,256); CHECK(legacy_receives==1); b[255]=0;
+    b[0]=0x41; b[1]=25; tud_hid_set_report_cb(1,0,HID_REPORT_TYPE_FEATURE,b,257);
+    CHECK(legacy_receives==2 && legacy_setting==25);
+    b[0]=3; b[1]=0; tud_hid_set_report_cb(1,0x40,HID_REPORT_TYPE_FEATURE,b,256);
+    CHECK(legacy_receives==3 && legacy_id==0x40 && legacy_setting==3);
+    b[0]=4; tud_hid_set_report_cb(1,0x40,HID_REPORT_TYPE_FEATURE,b,256); CHECK(legacy_receives==3);
+    uint8_t value=0; CHECK(tud_hid_get_report_cb(0,0x41,HID_REPORT_TYPE_FEATURE,&value,1)==0);
+    CHECK(tud_hid_get_report_cb(2,0x40,HID_REPORT_TYPE_FEATURE,&value,1)==0);
+    return 0;
+}
+EXPORT int test_config_ranges_and_capabilities(void)
+{
+    device_config_t good; device_config_defaults(&good);
+    for (unsigned field = 0; field < 32; ++field) for (unsigned value = 0; value < 256; ++value) {
+        device_config_t c = good; c.bytes[field] = value;
+        bool expected = true;
+        if (field == 0) expected = value <= 100;
+        else if (field == 1) expected = value >= 1 && value <= 3;
+        else if (field == 2) expected = value >= 1 && value <= 100;
+        else if (field == 3) expected = value >= 80 && value <= 130;
+        else if (field == 4) expected = value >= 100;
+        else if (field == 5) expected = value <= 3;
+        else if (field == 6) expected = value <= 1;
+        else if (field == 7) expected = value == 0;
+        else if (field < 12) { uint32_t t = rstp_u32(c.bytes + 8); expected = t >= 1000 && t <= 3600000 && t % 1000 == 0; }
+        else switch ((field - 12) % 5) {
+            case 0: expected = value == 0; break;
+            case 1: expected = value <= 4; break;
+            case 2: expected = value <= 1; break;
+            case 3: expected = value >= 1 && value <= 15; break;
+            case 4: expected = value >= 1 && value <= 10; break;
+        }
+        CHECK(device_config_valid(&c) == expected);
+        CHECK(device_config_supported(&good, &c, 0) == (value == good.bytes[field]));
+        CHECK(device_config_supported(&good, &c, 0x3f));
+    }
+    return 0;
+}
+static tp_multi_msg_t edge_touch(unsigned id, unsigned x, unsigned y)
+{
+    tp_multi_msg_t m = {0}; m.fingers[id] = (tp_finger_t){.x=x,.y=y,.tip_switch=1,.confidence=1,.contact_id=id}; return m;
+}
+EXPORT int test_edges_all_sides_rotations_actions(void)
+{
+    for (unsigned rot = 0; rot < 4; ++rot) for (unsigned e = 0; e < 4; ++e)
+    for (unsigned action = 1; action <= 4; ++action) for (unsigned rev = 0; rev < 2; ++rev) {
+        device_config_t c; device_config_defaults(&c);
+        uint8_t *cfg = c.bytes + 12 + e * 5; cfg[0]=1; cfg[1]=action; cfg[2]=rev;
+        unsigned xmax = rot & 1 ? 1532 : 2302, ymax = rot & 1 ? 2302 : 1532;
+        unsigned x = e == 2 ? 0 : e == 3 ? xmax : xmax/2;
+        unsigned y = e == 0 ? 0 : e == 1 ? ymax : ymax/2;
+        edge_gesture_t state = {0}; tp_multi_msg_t m = edge_touch(4,x,y);
+        edge_result_t result = edge_gesture_update(&state,&c,&m,xmax,ymax);
+        CHECK(result.suppress && !result.steps);
+        unsigned delta = ((e < 2 ? xmax : ymax) * 2 + 99) / 100;
+        if (e < 2) m.fingers[4].x += delta; else m.fingers[4].y -= delta;
+        result = edge_gesture_update(&state,&c,&m,xmax,ymax);
+        CHECK(result.suppress && result.steps == (rev ? -1 : 1) && result.action == action);
+        result = edge_gesture_update(&state,&c,&m,xmax,ymax); CHECK(!result.steps);
+        if (e < 2) m.fingers[4].x -= delta; else m.fingers[4].y += delta;
+        result = edge_gesture_update(&state,&c,&m,xmax,ymax); CHECK(result.steps == (rev ? 1 : -1));
+        m = (tp_multi_msg_t){0}; result = edge_gesture_update(&state,&c,&m,xmax,ymax);
+        CHECK(!result.tap && !result.suppress);
+    }
+    return 0;
+}
+EXPORT int test_edge_candidates_corners_and_cancellation(void)
+{
+    device_config_t c; device_config_defaults(&c); c.bytes[12]=c.bytes[22]=1; c.bytes[13]=c.bytes[23]=2;
+    edge_gesture_t state = {0}; tp_multi_msg_t m = edge_touch(1,0,0);
+    CHECK(edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    m.fingers[1].x=40; m.fingers[1].y=20;
+    CHECK(!edge_gesture_update(&state,&c,&m,2000,1000).steps); // Normalized tie.
+    m.fingers[1].x=41;
+    CHECK(edge_gesture_update(&state,&c,&m,2000,1000).steps == 1);
+    m.fingers[2]=m.fingers[1];
+    CHECK(edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    m.fingers[2].tip_switch=0;
+    CHECK(edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    m=(tp_multi_msg_t){0}; CHECK(!edge_gesture_update(&state,&c,&m,2000,1000).tap);
+    m=edge_touch(1,500,0); edge_gesture_update(&state,&c,&m,2000,1000);
+    m=(tp_multi_msg_t){0}; edge_result_t tap=edge_gesture_update(&state,&c,&m,2000,1000);
+    CHECK(tap.tap && tap.tap_down.fingers[1].tip_switch);
+    m=edge_touch(1,500,500); CHECK(!edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    m.fingers[1].y=0; CHECK(!edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    edge_gesture_reset(&state); edge_gesture_update(&state,&c,&m,2000,1000);
+    m.fingers[1].y=100; CHECK(!edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    m.fingers[1].y=0; CHECK(!edge_gesture_update(&state,&c,&m,2000,1000).suppress);
+    return 0;
+}
+EXPORT int test_aux_release_survives_failure_expiry_and_generation(void)
+{
+    usb_aux_report_t r; usb_aux_reset(false);
+    CHECK(usb_aux_steps(2,2,1,0)); CHECK(usb_aux_take(&r,1,0) && r.id==7 && r.data[0]==0xe9);
+    usb_aux_unsubmitted(); CHECK(usb_aux_take(&r,1,0) && r.data[0]==0xe9);
+    usb_aux_complete(true);
+    CHECK(usb_aux_take(&r,2,200) && r.id==7 && r.data[0]==0); // Release survives expiry/reset.
+    usb_aux_complete(false); CHECK(usb_aux_take(&r,2,201) && !r.data[0]); usb_aux_complete(true);
+    CHECK(!usb_aux_take(&r,2,201));
+    CHECK(usb_aux_steps(1,-1,2,201)); CHECK(usb_aux_take(&r,2,201) && r.data[0]==0x70);
+    usb_aux_complete(false); CHECK(usb_aux_take(&r,2,202) && !r.data[0]); usb_aux_complete(true);
+    CHECK(!usb_aux_take(&r,2,202));
+    CHECK(usb_aux_steps(3,2,2,202)); CHECK(usb_aux_take(&r,2,202) && r.id==2 && r.data[3]==1);
+    usb_aux_complete(true); CHECK(usb_aux_take(&r,2,202) && r.data[3]==1); usb_aux_complete(true);
+    CHECK(!usb_aux_take(&r,2,202));
+    CHECK(usb_aux_steps(4,-1,2,202)); CHECK(usb_aux_take(&r,2,202) && r.data[4]==255);
+    usb_aux_complete(false); CHECK(!usb_aux_take(&r,2,202));
+    usb_aux_reset(false); for (unsigned i=0;i<32;++i) CHECK(usb_aux_steps(2,1,3,202));
+    CHECK(!usb_aux_steps(2,1,3,202)); CHECK(!usb_aux_take(&r,3,202));
+    return 0;
+}
 static void reset_test(uint8_t mode)
 {
     ptp_report_reset();
@@ -8,6 +153,7 @@ static void reset_test(uint8_t mode)
     clock_ms = 0; wait_hook = NULL; mode_hook = NULL;
     attempts = sent_count = submit_errors = 0; test_steps = 0;
     usb_ready = mounted = true; usb_busy[1] = usb_busy[2] = false;
+    usb_aux_reset(false); usb_aux_flight = false;
     send_done = false; connected = subscribed = congested = false;
     memset(sent, 0, sizeof(sent)); memset(wifi_packets, 0, sizeof(wifi_packets));
     input_pipeline_init(); input_register_parser(); input_register_sender();
@@ -18,6 +164,91 @@ static void activate(uint8_t mode)
     input_report_t r;
     while (input_take_report(&r)) input_report_ack(&r);
     input_observe(input_generation(), true);
+}
+static void parser_frame(unsigned mask, unsigned x, unsigned y, unsigned pressure)
+{
+    uint8_t bytes[64]={0x40};
+    for(unsigned id=0;id<5;++id) if(mask & (1U<<id)) {
+        unsigned o=4+id*8; bytes[o]=1;
+        bytes[o+1]=x; bytes[o+2]=x>>8;
+        unsigned raw_y=1532-y; bytes[o+3]=raw_y; bytes[o+4]=raw_y>>8;
+        bytes[o+5]=pressure; bytes[o+6]=bytes[o+7]=1;
+    }
+    clock_ms+=10; input_capture(bytes,true,input_generation(),clock_ms);
+    parser_steps=1; i2c_queue_task(NULL);
+}
+static void aux_sender_hook(void)
+{
+    for(unsigned instance=1;instance<3;++instance) if(usb_busy[instance]) usb_complete(instance,true);
+}
+EXPORT int test_usb_sender_ptp_with_aux_and_submit_retry(void)
+{
+    activate(PTP_MODE); uint32_t generation=input_generation();
+    CHECK(usb_aux_steps(2,2,generation,clock_ms)); CHECK(usb_aux_steps(4,-2,generation,clock_ms));
+    submit_errors=1; wait_hook=aux_sender_hook; test_steps=10; usbhid_task(NULL);
+    unsigned presses=0,releases=0; int pan=0;
+    for(unsigned i=0;i<sent_count;++i) {
+        CHECK(sent_instances[i]==2);
+        if(sent_ids[i]==7) { if(sent[i].data.mouse.buttons==0xe9) ++presses; else { CHECK(!sent[i].data.mouse.buttons); ++releases; } }
+        else { CHECK(sent_ids[i]==2 && !sent[i].data.mouse.buttons && !sent[i].data.mouse.x && !sent[i].data.mouse.y); pan+=sent[i].data.mouse.pan; }
+    }
+    CHECK(presses==2 && releases==2 && pan==-2 && !usb_aux_active());
+    CHECK(input_mode()==PTP_MODE && attempts==sent_count+1);
+    return 0;
+}
+EXPORT int test_usb_ptp_and_consumer_have_independent_flight(void)
+{
+    activate(PTP_MODE);
+    input_report_t contact={.mode=PTP_MODE,.time_ms=clock_ms}; contact.data.ptp.contact_count=1;
+    contact.data.ptp.fingers[0]=(finger_t){.tip_conf_id=3,.x=400,.y=300};
+    CHECK(input_publish(input_generation(),&contact,false));
+    CHECK(usb_aux_steps(2,1,input_generation(),clock_ms));
+    test_steps=1; usbhid_task(NULL); CHECK(usb_busy[1] && usb_busy[2] && usb_aux_flight);
+    CHECK(sent_count==2 && sent_ids[0]==7 && sent_ids[1]==1);
+    usb_complete(1,true); CHECK(!usb_busy[1] && usb_busy[2]);
+    usb_complete(2,true); CHECK(usb_aux_release_pending());
+    test_steps=1; usbhid_task(NULL); CHECK(sent_ids[2]==7 && !sent[2].data.mouse.buttons);
+    usb_complete(2,true); CHECK(!usb_aux_active()); return 0;
+}
+EXPORT int test_real_parser_edge_excludes_pressure_and_pointer(void)
+{
+    for(unsigned mode=0;mode<2;++mode) {
+        activate(mode); reset_input_state(); device_config_defaults(&parser_config);
+        parser_config.bytes[12]=1; parser_config.bytes[13]=3;
+        haptic_button=false; haptic_presses=0;
+        parser_frame(1,600,0,255); parser_frame(1,700,0,255); parser_frame(1,800,0,255);
+        input_report_t report;
+        while(input_take_report(&report)) {
+            if(mode==PTP_MODE) CHECK(report.data.ptp.contact_count==0 && !report.data.ptp.buttons);
+            else CHECK(!report.data.mouse.x && !report.data.mouse.y && !report.data.mouse.buttons && !report.data.mouse.wheel);
+            input_report_ack(&report);
+        }
+        CHECK(haptic_presses==0 && !ptp_force_click_state.button_down);
+        usb_aux_report_t aux; int steps=0;
+        while(usb_aux_take(&aux,input_generation(),clock_ms)) { CHECK(aux.id==2 && aux.data[3]==1); ++steps; usb_aux_complete(true); }
+        CHECK(steps==4);
+        parser_frame(3,850,0,255); parser_frame(1,900,0,255);
+        CHECK(!usb_aux_take(&aux,input_generation(),clock_ms));
+        parser_frame(0,0,0,0); CHECK(!haptic_presses);
+    }
+    return 0;
+}
+EXPORT int test_real_parser_candidate_taps_both_modes(void)
+{
+    for(unsigned mode=0;mode<2;++mode) {
+        activate(mode); reset_input_state(); device_config_defaults(&parser_config);
+        parser_config.bytes[12]=1; parser_config.bytes[13]=2;
+        parser_frame(2,600,0,0); parser_frame(0,0,0,0);
+        input_report_t report; unsigned down=0,up=0;
+        while(input_take_report(&report)) {
+            if(mode==PTP_MODE) {
+                if(report.data.ptp.contact_count) { if(report.data.ptp.fingers[0].tip_conf_id&2) ++down; else ++up; }
+            } else { if(report.data.mouse.buttons) ++down; else if(down) ++up; }
+            input_report_ack(&report);
+        }
+        CHECK(down==1 && up==1 && !usb_aux_active());
+    }
+    return 0;
 }
 static bool mouse(int buttons, int x, bool tap)
 {
