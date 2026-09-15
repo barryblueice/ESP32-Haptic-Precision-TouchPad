@@ -20,16 +20,32 @@
 static TaskHandle_t tp_task_handle = NULL;
 static uint8_t s_tp_packet[64];
 
-void tp_i2c_int_task(void *pvParameters) {
-    while (1) {
-        if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY)) {
-            tp_modern_sleep_record_activity();
-
-            uint32_t generation = input_generation();
-            uint32_t time_ms = (uint32_t)(esp_timer_get_time() / 1000);
-            esp_err_t err = i2c_master_receive(dev_handle, s_tp_packet, sizeof(s_tp_packet), 100);
-            input_capture(s_tp_packet, err == ESP_OK, generation, time_ms);
+static void tp_drain_pending(void)
+{
+    /* INT is active-low. Notifications can coalesce, and an asserted line
+     * produces no new falling edge until all queued reports are read. */
+    for (unsigned reads = 0; reads < 8 && gpio_get_level(TP_INT_GPIO) == 0; ++reads) {
+        tp_modern_sleep_record_activity();
+        uint32_t generation = input_generation();
+        uint32_t time_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        esp_err_t err = i2c_master_receive(dev_handle, s_tp_packet, sizeof(s_tp_packet), 100);
+        input_capture(s_tp_packet, err == ESP_OK, generation, time_ms);
+        if (err != ESP_OK) {
+            vTaskDelay(pdMS_TO_TICKS(10));
+            break;
         }
+    }
+    if (gpio_get_level(TP_INT_GPIO) == 0) {
+        /* Bound each batch so a held-low or busy controller cannot starve tasks. */
+        vTaskDelay(1);
+        xTaskNotifyGive(tp_task_handle);
+    }
+}
+
+void tp_i2c_int_task(void *pvParameters) {
+    (void)pvParameters;
+    while (1) {
+        if (ulTaskNotifyTake(pdTRUE, portMAX_DELAY)) tp_drain_pending();
     }
 }
 
@@ -70,4 +86,7 @@ void irq_int_init(void) {
     ESP_ERROR_CHECK(gpio_isr_handler_add(TP_INT_GPIO, gpio_isr_handler, NULL));
     ESP_ERROR_CHECK(gpio_set_intr_type(TP_INT_GPIO, GPIO_INTR_NEGEDGE));
     ESP_ERROR_CHECK(gpio_intr_enable(TP_INT_GPIO));
+    bool pending = gpio_get_level(TP_INT_GPIO) == 0;
+    if (pending) xTaskNotifyGive(tp_task_handle);
+    ESP_LOGI(TAG, "Touch reader enabled, pending=%u", (unsigned)pending);
 }

@@ -176,19 +176,28 @@ void input_get_stats(input_stats_t *stats)
 void input_log_stats(void)
 {
     /* Called only by the selected sender. No per-frame logging. */
-    static uint32_t last_log, last_errors;
+    static uint32_t last_log, last_errors, last_gate = UINT32_MAX;
     uint32_t now = now_ms();
     if (now - last_log < 5000U) return;
     last_log = now;
-    input_stats_t stats;
-    input_get_stats(&stats);
+    taskENTER_CRITICAL(&lock);
+    input_stats_t stats = reports.stats;
+    uint8_t link = ready_mask, mode = reports.mode, releases = reports.release_mask;
+    bool recovering = reports.recovering, all_up = reports.all_up, changing = mode_pending;
+    taskEXIT_CRITICAL(&lock);
+    uint32_t gate = link | ((uint32_t)mode << 8) | ((uint32_t)releases << 16) |
+        ((uint32_t)recovering << 24) | ((uint32_t)all_up << 25) | ((uint32_t)changing << 26);
     uint32_t errors = stats.raw_overflows + stats.read_failures + stats.submit_failures + stats.recoveries;
-    if (errors == last_errors) return;
+    if (errors == last_errors && gate == last_gate) return;
     last_errors = errors;
+    last_gate = gate;
     ESP_LOGW("INPUT", "recover=%" PRIu32 " raw_full=%" PRIu32 " read_fail=%" PRIu32
-        " send_fail=%" PRIu32 " merged=%" PRIu32 " peak=%" PRIu32 " wait_ms=%" PRIu32,
+        " send_fail=%" PRIu32 " merged=%" PRIu32 " peak=%" PRIu32 " wait_ms=%" PRIu32
+        " link=%u mode=%u recovering=%u all_up=%u releases=%u mode_pending=%u",
         stats.recoveries, stats.raw_overflows, stats.read_failures, stats.submit_failures,
-        stats.merged, stats.peak, stats.longest_wait_ms);
+        stats.merged, stats.peak, stats.longest_wait_ms,
+        (unsigned)link, (unsigned)mode, (unsigned)recovering, (unsigned)all_up,
+        (unsigned)releases, (unsigned)changing);
 }
 
 void input_request_mode(uint8_t mode)

@@ -65,6 +65,8 @@ void app_main(void) {
     sub_dev_init();  // Register I2C1 devices before the haptic worker can use MP28167.
     cs40l25_surface_init();
     tp_modern_sleep_init();
+    /* Drain controller reports while the host connection is being initialized. */
+    irq_int_init();
 
 
     switch (current_mode) {
@@ -97,8 +99,6 @@ void app_main(void) {
             break;
 
     }
-    irq_int_init();
-
 }
 
 #endif

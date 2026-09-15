@@ -110,6 +110,7 @@ From Main, with native Windows clang available (not esp-clang):
 python tests/run_host_tests.py --clang $env:HOST_CLANG
 python tests/run_ble_tests.py $env:HOST_CLANG
 python tests/run_receiver_tests.py $env:HOST_CLANG
+python tests/run_input_irq_tests.py $env:HOST_CLANG
 ```
 
 The receiver's existing `tools/receiver/host_checks.py` also invokes the expanded
@@ -130,6 +131,30 @@ commit failure, queued releases, receiver synchronization and BLE backpressure.
 The core suite also checks initial confidence recovery, contact replacement and
 array reordering, and a physical-circle grid against an independent integer oracle
 for all four corners, radii 1–30%, and both surface orientations.
+Five touch IRQ scenarios cover a pending signal before interrupt enable, idle and
+duplicate wakes, coalesced reports, an enable-time edge race, and bounded batches
+with read-error retry.
+
+### Startup input diagnostics
+
+The touch IRQ reader starts after haptic initialization and before transport
+initialization. It checks the active-low INT line after enabling the interrupt
+and drains pending reports in bounded batches. This avoids waiting for another
+falling edge when INT was already low or several notifications were coalesced.
+It does not synthesize an all-up report from an idle GPIO level.
+
+`SURFACE_HAPTIC: Initialized` only confirms haptic initialization. The later
+`IRQ_TP_INT: Touch reader enabled, pending=...` confirms touch capture startup;
+host readiness still depends on USB enumeration or wireless connection.
+
+The periodic `INPUT` statistics now include `link`, `mode`, `recovering`,
+`all_up`, `releases`, and `mode_pending`. `recover` is a cumulative reset count,
+including normal initialization and connection changes. `recovering=1 all_up=0`
+means no all-up sample has been observed since reset; nonzero `releases` means
+host release completion is outstanding. `link=0` means the host input path is not
+ready. Logging does not release the gate. Physical idle alone does not imply that
+an all-up report has been read. Hardware startup/reconnect acceptance remains
+required, including starting with and without a finger held on the surface.
 The protocol fixture follows the configurator document with corner reversal bytes
 cleared to reflect the removed option: point
 conversion mask `0x5` plus sleep gives byte 6 `0x0b`.
