@@ -21,6 +21,11 @@ and must be zero. Nonzero reserved bytes are rejected. Edge reversal is unchange
 The first confident single contact inside an enabled corner immediately emits
 the selected action, without a pressure click. The origin and point settings
 are fixed for that contact. Moving into another corner does not select it.
+Initial untrusted samples wait for the same contact's first trusted, in-bounds
+position. A trusted origin outside the points stays ordinary input for that
+contact. Identity uses `contact_id`, not the array slot. Multiple contacts or an
+identity change while waiting stop selection until lift; confidence loss after
+claiming a point cancels it until lift.
 The physical radius accepts 1–30% of the short side (default 5%); the existing descriptor
 dimensions (1149 × 766 units, logical range 2302 × 1532) normalize the axes.
 Portrait swaps both dimensions. Out-of-range raw positions cannot trigger a
@@ -117,11 +122,14 @@ Main build. It reads the existing compile commands, recompiles seven project
 objects, replaces those members in a copy of libmain, and links against the
 cached SDK libraries. Its test image is under `build/validation/ble-ptp`.
 
-Automated validation covers 16 core scenarios, 25 receiver scenarios (including
+Automated validation covers 19 core scenarios, 25 receiver scenarios (including
 22 existing regressions) and 4 BLE scenarios. These contain the 32 sleep/mask
 combinations, 64 start-point/mask combinations, all 12 corner bindings, physical
 circle boundaries, rotations, handoff, repetition, cancellation, migration and
 commit failure, queued releases, receiver synchronization and BLE backpressure.
+The core suite also checks initial confidence recovery, contact replacement and
+array reordering, and a physical-circle grid against an independent integer oracle
+for all four corners, radii 1–30%, and both surface orientations.
 The protocol fixture follows the configurator document with corner reversal bytes
 cleared to reflect the removed option: point
 conversion mask `0x5` plus sleep gives byte 6 `0x0b`.

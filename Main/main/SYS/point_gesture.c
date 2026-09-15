@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-enum { POINT_IDLE, POINT_ACTIVE, POINT_PASSTHROUGH, POINT_SUPPRESSED };
+enum { POINT_IDLE, POINT_ACTIVE, POINT_PASSTHROUGH, POINT_SUPPRESSED, POINT_WAITING };
 void point_gesture_reset(point_gesture_t *s) { memset(s, 0, sizeof(*s)); }
 bool point_gesture_inside(unsigned p, unsigned radius, uint16_t x, uint16_t y,
     uint16_t xmax, uint16_t ymax, uint16_t width, uint16_t height)
@@ -42,18 +42,25 @@ point_result_t point_gesture_update(point_gesture_t *s, const device_config_t *c
     }
     if (s->state == POINT_PASSTHROUGH) return r;
     if (s->state == POINT_SUPPRESSED) { r.suppress = true; return r; }
-    if (count != 1 || !m->fingers[id].confidence ||
-        m->fingers[id].x > xmax || m->fingers[id].y > ymax ||
-        (s->state == POINT_ACTIVE && id != s->id)) {
+    uint8_t contact_id = m->fingers[id].contact_id;
+    if (count != 1 || ((s->state == POINT_ACTIVE || s->state == POINT_WAITING) && contact_id != s->id)) {
         r.cancel = r.suppress = s->state == POINT_ACTIVE;
         s->state = r.suppress ? POINT_SUPPRESSED : POINT_PASSTHROUGH; return r;
     }
+    if (!m->fingers[id].confidence || m->fingers[id].x > xmax || m->fingers[id].y > ymax) {
+        r.cancel = r.suppress = s->state == POINT_ACTIVE;
+        /* An untrusted initial sample is not a valid origin. Once claimed,
+         * confidence loss cancels the gesture until all contacts lift. */
+        s->state = r.suppress ? POINT_SUPPRESSED : POINT_WAITING;
+        s->id = contact_id; return r;
+    }
+    if (s->state == POINT_WAITING) s->state = POINT_IDLE;
     uint16_t x = m->fingers[id].x, y = m->fingers[id].y;
     if (s->state == POINT_IDLE) {
         for (unsigned p = 0; p < 4; ++p) {
             const uint8_t *record = c->bytes + CFG_POINTS + p * 5;
             if (!record[0] || !point_gesture_inside(p, record[3], x, y, xmax, ymax, width, height)) continue;
-            *s = (point_gesture_t){.state = POINT_ACTIVE, .owned = true, .point = p, .id = id,
+            *s = (point_gesture_t){.state = POINT_ACTIVE, .owned = true, .point = p, .id = contact_id,
                 .action = record[1], .step = record[4],
                 .repeat = (c->bytes[7] & (0x10U << p)) != 0,
                 .convert = device_config_point_to_edge(c, p), .start_x = x, .start_y = y,
