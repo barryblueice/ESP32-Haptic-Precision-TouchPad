@@ -22,7 +22,7 @@ bool device_config_valid(const device_config_t *c)
             !b[i+3] || b[i+3] > max_width || !b[i+4] || b[i+4] > 10) return false;
     }
     for (unsigned i = CFG_POINTS; i < DEVICE_CONFIG_SIZE; i += 5)
-        if (b[i] > 1 || b[i+1] > 12 || (b[i] && !b[i+1]) || b[i+2] > 1 ||
+        if (b[i] > 1 || b[i+1] > 12 || (b[i] && !b[i+1]) || b[i+2] != 0 ||
             !b[i+3] || b[i+3] > 30 || !b[i+4] || b[i+4] > 10) return false;
     return true;
 }

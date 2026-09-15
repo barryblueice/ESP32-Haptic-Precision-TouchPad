@@ -3,7 +3,7 @@
 
 typedef struct {
     uint8_t state, id, point, action, step;
-    bool reverse, repeat, convert, owned;
+    bool repeat, convert, owned;
     uint16_t start_x, start_y;
     uint32_t repeat_at;
 } point_gesture_t;

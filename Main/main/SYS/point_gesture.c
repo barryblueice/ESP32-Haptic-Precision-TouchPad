@@ -19,7 +19,7 @@ static point_result_t action(const point_gesture_t *s)
 {
     int sign = (s->action & 1) ? 1 : -1;
     return (point_result_t){.suppress = true, .action = (s->action + 1) / 2,
-        .steps = s->reverse ? -sign : sign};
+        .steps = sign};
 }
 bool point_gesture_repeating(const point_gesture_t *s) { return s->state == POINT_ACTIVE && s->repeat; }
 point_result_t point_gesture_tick(point_gesture_t *s, uint32_t now)
@@ -54,7 +54,7 @@ point_result_t point_gesture_update(point_gesture_t *s, const device_config_t *c
             const uint8_t *record = c->bytes + CFG_POINTS + p * 5;
             if (!record[0] || !point_gesture_inside(p, record[3], x, y, xmax, ymax, width, height)) continue;
             *s = (point_gesture_t){.state = POINT_ACTIVE, .owned = true, .point = p, .id = id,
-                .action = record[1], .reverse = record[2], .step = record[4],
+                .action = record[1], .step = record[4],
                 .repeat = (c->bytes[7] & (0x10U << p)) != 0,
                 .convert = device_config_point_to_edge(c, p), .start_x = x, .start_y = y,
                 .repeat_at = now + 400};
