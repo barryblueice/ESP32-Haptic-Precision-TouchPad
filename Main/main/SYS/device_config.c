@@ -13,7 +13,7 @@ static device_config_t active, pending;
 static portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t writer, applied;
 static bool initialized, pending_apply, pending_restart, halted, saved_restart;
-static uint32_t capabilities = 0x3ff;
+static uint32_t capabilities = 0x7ff;
 
 static esp_err_t store_config(const device_config_t *c)
 {
@@ -87,9 +87,9 @@ esp_err_t device_config_init(void)
         device_config_t loaded;
         if (device_config_load_record(&loaded, record, size)) {
             active = loaded;
-            if (record[4] == 1) {
+            if (record[4] < DEVICE_CONFIG_VERSION) {
                 err = store_config(&active);
-                if (err != ESP_OK) ESP_LOGW("CONFIG", "v1 migration save failed: %s", esp_err_to_name(err));
+                if (err != ESP_OK) ESP_LOGW("CONFIG", "Configuration migration save failed: %s", esp_err_to_name(err));
             }
         } else ESP_LOGW("CONFIG", "Invalid/unknown configuration retained; using defaults");
     } else ESP_LOGW("CONFIG", "Unreadable configuration retained; using defaults (%s)", esp_err_to_name(err));

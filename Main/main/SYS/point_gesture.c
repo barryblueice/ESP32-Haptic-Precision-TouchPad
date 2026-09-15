@@ -63,10 +63,10 @@ point_result_t point_gesture_update(point_gesture_t *s, const device_config_t *c
     uint16_t x = m->fingers[id].x, y = m->fingers[id].y;
     if (s->state == POINT_IDLE) {
         for (unsigned p = 0; p < 4; ++p) {
-            const uint8_t *record = c->bytes + CFG_POINTS + p * 5;
-            if (!record[0] || !point_gesture_inside(p, record[3], x, y, xmax, ymax, width, height)) continue;
+            const uint8_t *record = c->bytes + CFG_POINTS + p * 4;
+            if (!record[0] || !point_gesture_inside(p, record[2], x, y, xmax, ymax, width, height)) continue;
             *s = (point_gesture_t){.state = POINT_ACTIVE, .owned = true, .point = p, .id = contact_id,
-                .action = record[1], .step = record[4],
+                .action = record[1], .step = record[3],
                 .repeat = (c->bytes[7] & (0x10U << p)) != 0,
                 .convert = device_config_point_to_edge(c, p), .start_x = x, .start_y = y,
                 .repeat_at = now + POINT_WHEEL_HOLD_DELAY_MS};

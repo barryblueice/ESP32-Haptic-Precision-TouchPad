@@ -8,9 +8,11 @@ enum { RSTP_OK, RSTP_UNSUPPORTED, RSTP_VERSION, RSTP_LENGTH, RSTP_INVALID,
 enum { RSTP_INFO = 1, RSTP_READ, RSTP_WRITE };
 enum { CFG_INTENSITY, CFG_LEVEL, CFG_LIGHT, CFG_MEDIUM, CFG_STRONG,
        CFG_ROTATION, CFG_SLEEP, CFG_EDGE_REPEAT, CFG_TIMEOUT = 8, CFG_EDGES = 12,
-       CFG_POINTS = 32, DEVICE_CONFIG_SIZE = 52 };
+       CFG_POINTS = 32, CFG_WIRELESS_LIGHT = 48, CFG_WIRELESS_MEDIUM = 49,
+       CFG_WIRELESS_STRONG = 50, DEVICE_CONFIG_SIZE = 52, DEVICE_CONFIG_VERSION = 3 };
 enum { RSTP_CAP_EDGES = 0x20, RSTP_CAP_ARROW_KEYS = 0x40, RSTP_CAP_EDGE_REPEAT = 0x80,
-       RSTP_CAP_POINTS = 0x100, RSTP_CAP_POINT_TO_EDGE = 0x200 };
+       RSTP_CAP_POINTS = 0x100, RSTP_CAP_POINT_TO_EDGE = 0x200,
+       RSTP_CAP_WIRELESS_THRESHOLDS = 0x400 };
 /* Wire name edge_repeat_mask: retain the captured edge/axis outside its band.
  * Steps still require movement; this does not enable timed auto-repeat. */
 typedef struct { uint8_t bytes[DEVICE_CONFIG_SIZE]; } device_config_t;
