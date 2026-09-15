@@ -110,6 +110,29 @@ The touchpad sends surface information once per second. Without a recent ACK
 (2.5 seconds), it pauses PTP input and clears pending actions. A live receiver
 session belongs to one transmitter. Existing heartbeats and mode commands remain.
 
+## Local feedback in 2.4 GHz mode
+
+Pressure detection and local press/release feedback continue before the receiver
+handshake, during disconnection, and across failed radio transfers. Both mouse
+and PTP output wait for a current surface ACK. Heartbeat/surface send failures
+retry at the existing one-second interval; pointer/action failures recover host
+output without cancelling local feedback. Firmware and radio ABI versions do
+not change.
+
+Raw frames carry separate source and output generations. Recovery discards host
+reports/actions, sends neutral reports, and requires an all-up observation before
+accepting fresh input. The recovery lift cannot become a tap, and queued frames
+from before the output reset cannot be sent in the new generation. Local pressure
+state and corner/edge ownership survive output recovery. I2C errors, raw queue
+overflow/expiry, format/mode changes and configuration changes reset both paths
+and require a lift. Haptic sleep, initialization, fault and disabled-strength
+guards remain in effect.
+
+Rate-limited `INPUT` diagnostics include `source_gen`, `source_reason`,
+`output_reason` and `haptic_state`. `SURFACE_HAPTIC` reports observed button
+down/up counts and state at most once every five seconds; these counts describe
+input transitions, not a measurement of motor playback.
+
 ## Verification
 
 Use the **same ESP-IDF setup selected in VS Code**, and the existing `build`
@@ -124,6 +147,7 @@ python tests/run_host_tests.py --clang $env:HOST_CLANG
 python tests/run_ble_tests.py $env:HOST_CLANG
 python tests/run_receiver_tests.py $env:HOST_CLANG
 python tests/run_input_irq_tests.py $env:HOST_CLANG
+python tests/run_wireless_haptic_tests.py $env:HOST_CLANG
 ```
 
 The receiver's existing `tools/receiver/host_checks.py` also invokes the expanded
@@ -150,6 +174,14 @@ cases cover the initial/repeat deadlines, clock wrap, and output backpressure.
 Five touch IRQ scenarios cover a pending signal before interrupt enable, idle and
 duplicate wakes, coalesced reports, an enable-time edge race, and bounded batches
 with read-error retry.
+
+The wireless haptic suite adds 16 production-C scenarios covering the parser,
+pressure algorithm, haptic event queue, host report queue and ESP-NOW sender.
+These include offline feedback, reconnect without replay, control/pointer/action
+failures, queue pressure, source recovery, mode changes, sleep/fault/zero strength,
+simulated taps/drags and native mouse buttons. Hardware acceptance still requires
+continuous clicks, held dragging, receiver disconnect/reconnect, idle wake, and
+a USB comparison on the actual touchpad; host tests do not verify motor output.
 
 ### Startup input diagnostics
 

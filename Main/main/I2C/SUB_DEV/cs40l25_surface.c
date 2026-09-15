@@ -12,6 +12,7 @@
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static surface_haptic_runtime_t runtime;
 static bool started, sleep_requested;
+static uint32_t button_presses, button_releases;
 
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 
@@ -36,6 +37,9 @@ void cs40l25_surface_button_update(bool down, uint8_t setting)
 {
     uint32_t now = now_ms();
     taskENTER_CRITICAL(&lock);
+    if (runtime.down != down) {
+        if (down) ++button_presses; else ++button_releases;
+    }
     surface_runtime_button(&runtime, down, setting, now);
     taskEXIT_CRITICAL(&lock);
 }
@@ -81,12 +85,21 @@ static void worker(void *arg)
     taskEXIT_CRITICAL(&lock);
     bool powered = true, heartbeat_pending = false;
     uint32_t heartbeat_start = 0, drops_seen = 0;
+    uint32_t logged_at = 0, logged_presses = 0, logged_releases = 0;
     uint8_t last_waveform = 0;
     ESP_LOGI(TAG, "Initialized: Surface settings 0..100, MBOX1 PRESS/RELEASE");
     while (true) {
         taskENTER_CRITICAL(&lock);
         bool want_sleep = sleep_requested;
+        uint32_t presses = button_presses, releases = button_releases;
+        surface_haptic_state_t state = runtime.state;
         taskEXIT_CRITICAL(&lock);
+        uint32_t log_time = now_ms();
+        if (log_time - logged_at >= 5000U && (presses != logged_presses || releases != logged_releases)) {
+            ESP_LOGI(TAG, "button_down=%" PRIu32 " button_up=%" PRIu32 " state=%u",
+                     presses, releases, (unsigned)state);
+            logged_at = log_time; logged_presses = presses; logged_releases = releases;
+        }
         if (want_sleep) {
             if (powered) {
                 if (!surface_haptic_hw_power_off()) { fault("sleep power off", last_waveform); break; }

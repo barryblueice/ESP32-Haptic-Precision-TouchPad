@@ -2,7 +2,8 @@
 #include "report_buffer.h"
 #include "freertos/task.h"
 
-typedef struct { uint8_t bytes[64]; uint32_t generation, time_ms; } input_frame_t;
+/* Raw frames use the source generation; HID/aux reports use input_generation(). */
+typedef struct { uint8_t bytes[64]; uint32_t generation, output_generation, time_ms; } input_frame_t;
 
 void input_pipeline_init(void);
 void input_register_parser(void);
@@ -11,7 +12,14 @@ void input_wake_sender(void);
 void input_wake_parser(void);
 void input_set_link(uint8_t ready_mask);
 void input_recover(void);
-void input_capture(const uint8_t *bytes, bool success, uint32_t generation, uint32_t time_ms);
+/* Reset raw parsing and host output. Diagnostic reason must have static storage. */
+void input_source_recover(const char *reason);
+uint32_t input_source_generation(void);
+bool input_source_observe(uint32_t generation, bool all_up);
+void input_source_button(uint32_t generation, bool down);
+bool input_output_ready(uint32_t generation);
+void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
+                   uint32_t output_generation, uint32_t time_ms);
 bool input_next_frame(input_frame_t *frame);
 uint32_t input_generation(void);
 uint8_t input_mode(void);
