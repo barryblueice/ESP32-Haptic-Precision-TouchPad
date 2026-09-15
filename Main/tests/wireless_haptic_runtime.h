@@ -86,3 +86,19 @@ static uint32_t bsp_dut_trigger_haptic(uint8_t index,uint32_t duration) {
 static uint8_t receiver_mac[6]={1,2,3,4,5,6};
 static esp_err_t esp_now_send(const uint8_t *mac,const uint8_t *packet,unsigned length);
 static void wireless_make_heartbeat(wireless_msg_t *packet) { *packet=(wireless_msg_t){.type=ALIVE_MODE}; }
+static void wireless_settings_peer(const uint8_t *mac) { (void)mac; }
+static bool test_settings_reply_pending;
+static unsigned test_settings_completions;
+static bool wireless_settings_reply(uint8_t *packet,uint8_t *mac) {
+    if(!test_settings_reply_pending)return false;
+    wire_settings_t s={1,1,1,0,63,2,0};wire_settings_encode(packet,WIRE_SETTINGS_ACK,&s);
+    memcpy(mac,receiver_mac,6);return true;
+}
+static void wireless_settings_reply_complete(bool success) {
+    ++test_settings_completions;if(success)test_settings_reply_pending=false;
+}
+typedef struct { uint8_t peer_addr[6]; int channel,ifidx; } esp_now_peer_info_t;
+#define ESPNOW_CHANNEL 1
+#define WIFI_IF_STA 0
+static bool esp_now_is_peer_exist(const uint8_t *mac) { (void)mac;return true; }
+static int esp_now_add_peer(const esp_now_peer_info_t *peer) { (void)peer;return ESP_OK; }

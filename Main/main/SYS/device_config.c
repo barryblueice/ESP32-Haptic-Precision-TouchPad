@@ -130,11 +130,6 @@ uint16_t device_config_save(const device_config_t *c)
     xSemaphoreGive(writer);
     return status;
 }
-esp_err_t device_config_set_legacy(unsigned offset, uint8_t value, bool persist)
-{
-    if (offset > 1) return ESP_ERR_INVALID_ARG;
-    return device_config_set_controls(1U << offset, offset == 0 ? value : 0, offset == 1 ? value : 0, persist);
-}
 esp_err_t device_config_set_controls(uint8_t mask, uint8_t intensity, uint8_t level, bool persist)
 {
     if (!mask || mask > 3 || ((mask & 1) && intensity > 100) || ((mask & 2) && (level < 1 || level > 3)))
@@ -147,6 +142,11 @@ esp_err_t device_config_set_controls(uint8_t mask, uint8_t intensity, uint8_t le
     if (err == ESP_OK && persist) err = store_config(&c);
     if (err == ESP_OK) apply_at_boundary(&c, false);
     xSemaphoreGive(writer); return err;
+}
+esp_err_t device_config_set_legacy(unsigned offset, uint8_t value, bool persist)
+{
+    if (offset > 1) return ESP_ERR_INVALID_ARG;
+    return device_config_set_controls(1U << offset, offset == 0 ? value : 0, offset == 1 ? value : 0, persist);
 }
 bool device_config_parser_boundary(void)
 {

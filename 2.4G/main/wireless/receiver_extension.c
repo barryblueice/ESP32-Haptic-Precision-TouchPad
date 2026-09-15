@@ -80,3 +80,11 @@ void receiver_ext_ack_complete(bool success)
     if (success && ack_flight.session == requested.session && ack_flight.rotation == requested.rotation) ack_pending = false;
     taskEXIT_CRITICAL(&extension_lock);
 }
+
+bool receiver_ext_target(uint8_t mac[6], uint32_t *session, uint32_t now)
+{
+    taskENTER_CRITICAL(&extension_lock);
+    bool ok = ready && now-last_seen < 2500U;
+    if (ok) { memcpy(mac,peer,6); *session=applied.session; }
+    taskEXIT_CRITICAL(&extension_lock); return ok;
+}

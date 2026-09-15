@@ -7,3 +7,4 @@ void receiver_ext_applied(const wire_surface_t *surface);
 void receiver_ext_usb_ready(bool ready);
 bool receiver_ext_ack(uint8_t packet[38], uint8_t mac[6]);
 void receiver_ext_ack_complete(bool success);
+bool receiver_ext_target(uint8_t mac[6], uint32_t *session, uint32_t now);

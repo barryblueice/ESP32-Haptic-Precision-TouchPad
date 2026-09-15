@@ -229,12 +229,12 @@ EXPORT int check_pair_overflow_and_stale_report_preserve_source(void)
 }
 
 static uint32_t fail_packet_type, immediate_fail_type;
-static unsigned sends[8];
+static unsigned sends[10];
 static bool radio_action_queued;
 static esp_err_t esp_now_send(const uint8_t *mac,const uint8_t *packet,unsigned length)
 {
     (void)mac;if(length!=38){++hardware_errors;return ESP_FAIL;}
-    uint32_t type=wire_u32(packet);if(type<8)++sends[type];
+    uint32_t type=wire_u32(packet);if(type<10)++sends[type];
     /* Let the startup release/cancel finish before failing the requested action. */
     bool can_fail=type!=WIRE_AUX||radio_action_queued;
     if(can_fail&&type==immediate_fail_type)return ESP_FAIL;
@@ -255,6 +255,7 @@ static void reset_radio(void)
     fail_packet_type=immediate_fail_type=UINT32_MAX;send_done=false;send_status=ESP_NOW_SEND_SUCCESS;
     acknowledged=true;acknowledged_at=0;surface=(wire_surface_t){WIRE_VERSION,0,1};
     wifi_hook=radio_hook;radio_action_queued=false;
+    test_settings_reply_pending=false;test_settings_completions=0;
 }
 EXPORT int check_control_failures_do_not_reset_input(void)
 {
@@ -294,5 +295,20 @@ EXPORT int check_auxiliary_send_failure_preserves_source(void)
         CHECK(reports.stats.recoveries>2);
         CHECK(input_source_generation()==1&&!cancellations);
     }
+    return 0;
+}
+EXPORT int check_settings_ack_failure_preserves_local_feedback(void)
+{
+    for(unsigned immediate=0;immediate<2;++immediate) {
+        reset_radio();test_settings_reply_pending=true;
+        surface_runtime_button(&haptic,true,63,now);
+        if(immediate)immediate_fail_type=WIRE_SETTINGS_ACK;else fail_packet_type=WIRE_SETTINGS_ACK;
+        wifi_budget=10;wifi_send_task(NULL);wifi_hook=NULL;
+        CHECK(sends[WIRE_SETTINGS_ACK] && test_settings_completions && test_settings_reply_pending);
+        CHECK(reports.stats.recoveries==2 && input_source_generation()==1 && !cancellations && haptic.down);
+    }
+    reset_radio();test_settings_reply_pending=true;
+    wifi_budget=10;wifi_send_task(NULL);wifi_hook=NULL;
+    CHECK(sends[WIRE_SETTINGS_ACK]==1 && test_settings_completions==1 && !test_settings_reply_pending);
     return 0;
 }
