@@ -22,7 +22,10 @@ EXPORT int check_config_masks(void)
         for(unsigned radius=1;radius<=30;++radius){c.bytes[b+3]=radius;CHECK(device_config_valid(&c));}
         c.bytes[b+3]=31;CHECK(!device_config_valid(&c));c.bytes[b+3]=30;
         c.bytes[b+4]=0;CHECK(!device_config_valid(&c));c.bytes[b+4]=10;
-        c.bytes[b+2]=2;CHECK(!device_config_valid(&c));c.bytes[b+2]=0;
+        for(unsigned reserved=1;reserved<=255;++reserved){
+            c.bytes[b+2]=reserved;CHECK(!device_config_valid(&c));
+        }
+        c.bytes[b+2]=0;
     }
     return 0;
 }
@@ -86,11 +89,11 @@ EXPORT int check_geometry(void)
 }
 EXPORT int check_actions_and_repeat(void)
 {
-    for(unsigned a=1;a<=12;++a)for(unsigned reverse=0;reverse<2;++reverse){
-        device_config_t c=configured();c.bytes[33]=a;c.bytes[34]=reverse;c.bytes[7]=0x10;
+    for(unsigned a=1;a<=12;++a){
+        device_config_t c=configured();c.bytes[33]=a;c.bytes[7]=0x10;
         point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);
         point_result_t r=point_gesture_update(&s,&c,&m,2302,1532,1149,766,100);
-        CHECK(r.suppress&&r.action==(a+1)/2&&r.steps==((a&1)?1:-1)*(reverse?-1:1));
+        CHECK(r.suppress&&r.action==(a+1)/2&&r.steps==((a&1)?1:-1));
         CHECK(!point_gesture_tick(&s,499).steps);CHECK(point_gesture_tick(&s,500).steps==r.steps);
         CHECK(!point_gesture_tick(&s,599).steps);CHECK(point_gesture_tick(&s,600).steps==r.steps);
         CHECK(point_gesture_tick(&s,2000).steps==r.steps);CHECK(!point_gesture_tick(&s,2000).steps);

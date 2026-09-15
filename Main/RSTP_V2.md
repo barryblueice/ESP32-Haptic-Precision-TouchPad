@@ -13,6 +13,11 @@ Bits 5–7 must be zero. Conversion requires both edges (`0x020`) and points
 (`0x100`); its own capability is `0x200`. Each point keeps its conversion setting
 and step when disabled. A disabled point does not claim input.
 
+Corner actions have no direction-reversal option: select the desired direction
+directly from the 12 bindings. Each corner record remains 5 bytes
+(`enabled, action, reserved, radius, step`); the former reversal byte is reserved
+and must be zero. Nonzero reserved bytes are rejected. Edge reversal is unchanged.
+
 The first confident single contact inside an enabled corner immediately emits
 the selected action, without a pressure click. The origin and point settings
 are fixed for that contact. Moving into another corner does not select it.
@@ -114,10 +119,11 @@ cached SDK libraries. Its test image is under `build/validation/ble-ptp`.
 
 Automated validation covers 16 core scenarios, 25 receiver scenarios (including
 22 existing regressions) and 4 BLE scenarios. These contain the 32 sleep/mask
-combinations, 64 start-point/mask combinations, all action/reverse pairs, physical
+combinations, 64 start-point/mask combinations, all 12 corner bindings, physical
 circle boundaries, rotations, handoff, repetition, cancellation, migration and
 commit failure, queued releases, receiver synchronization and BLE backpressure.
-The protocol fixture is copied from the revised configurator document: point
+The protocol fixture follows the configurator document with corner reversal bytes
+cleared to reflect the removed option: point
 conversion mask `0x5` plus sleep gives byte 6 `0x0b`.
 
 ### Hardware acceptance still required
@@ -128,7 +134,7 @@ For each transport in PTP mode, verify:
 1. USB save/readback/reconnect and power-cycle retention of all four switches.
 2. Each corner and circle boundary in all four orientations; disabled corners
    preserve normal clicks/edges and their saved settings return when reenabled.
-3. All 12 bindings and reverse options, with no extra ordinary click.
+3. All 12 corner bindings, with no extra ordinary click.
 4. 400/100 ms repetition, immediate lift stop, and no continued key or wheel input
    after reconnect, mode changes or input recovery.
 5. Per-point conversion threshold and edge takeover, including motion into another
