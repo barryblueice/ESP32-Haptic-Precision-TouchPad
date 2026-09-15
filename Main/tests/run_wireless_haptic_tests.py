@@ -31,7 +31,7 @@ code += '\n#undef TAG\n' + parser
 wifi = body(ROOT / 'main/WIFI/wifi_handle.c')
 code += '\n' + wifi[wifi.index('static portMUX_TYPE send_lock'):wifi.index('void wireless_wifi_init')]
 code += wifi[wifi.index('void wifi_send_task'):].replace('while (true)', 'while (wifi_budget-- > 0)')
-cases = (ROOT / 'tests/wireless_haptic_cases.c').read_text(encoding='utf-8')
+cases = (ROOT / 'tests/wireless_haptic_cases.c').read_text(encoding='utf-8') + '\n' + (ROOT / 'tests/vbus_pressure_cases.c').read_text(encoding='utf-8')
 code += '\n' + cases
 out = ROOT / 'build/wireless-haptic-host-tests'
 out.mkdir(parents=True, exist_ok=True)

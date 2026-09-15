@@ -5,7 +5,7 @@ static tp_multi_msg_t contact(unsigned x,unsigned y)
 static device_config_t configured(void)
 {
     device_config_t c;device_config_defaults(&c);
-    for(unsigned i=0;i<4;++i){c.bytes[32+i*5]=1;c.bytes[33+i*5]=3;}
+    for(unsigned i=0;i<4;++i){c.bytes[32+i*4]=1;c.bytes[33+i*4]=3;}
     return c;
 }
 EXPORT int check_config_masks(void)
@@ -17,15 +17,12 @@ EXPORT int check_config_masks(void)
     }
     for(unsigned bit=5;bit<8;++bit){c.bytes[6]=1U<<bit;CHECK(!device_config_valid(&c));}
     c=configured();for(unsigned i=0;i<4;++i){
-        unsigned b=32+i*5;c.bytes[b+1]=13;CHECK(!device_config_valid(&c));c.bytes[b+1]=3;
-        c.bytes[b+3]=0;CHECK(!device_config_valid(&c));
-        for(unsigned radius=1;radius<=30;++radius){c.bytes[b+3]=radius;CHECK(device_config_valid(&c));}
-        c.bytes[b+3]=31;CHECK(!device_config_valid(&c));c.bytes[b+3]=30;
-        c.bytes[b+4]=0;CHECK(!device_config_valid(&c));c.bytes[b+4]=10;
-        for(unsigned reserved=1;reserved<=255;++reserved){
-            c.bytes[b+2]=reserved;CHECK(!device_config_valid(&c));
-        }
-        c.bytes[b+2]=0;
+        unsigned b=32+i*4;c.bytes[b+1]=13;CHECK(!device_config_valid(&c));c.bytes[b+1]=3;
+        c.bytes[b+2]=0;CHECK(!device_config_valid(&c));
+        for(unsigned radius=1;radius<=30;++radius){c.bytes[b+2]=radius;CHECK(device_config_valid(&c));}
+        c.bytes[b+2]=31;CHECK(!device_config_valid(&c));c.bytes[b+2]=30;
+        c.bytes[b+3]=0;CHECK(!device_config_valid(&c));c.bytes[b+3]=10;
+
     }
     return 0;
 }
@@ -43,18 +40,18 @@ EXPORT int check_capabilities(void)
 EXPORT int check_storage_records(void)
 {
     device_config_t c=configured(),out;uint8_t record[60];c.bytes[6]=0x0b;c.bytes[7]=0xa5;
-    for(unsigned i=0;i<4;++i)c.bytes[35+i*5]=30;
+    for(unsigned i=0;i<4;++i)c.bytes[34+i*4]=30;
     device_config_store_record(record,&c);CHECK(device_config_load_record(&out,record,60));CHECK(!memcmp(&c,&out,52));
     record[4]=1;record[6]=32;record[14]=1;record[15]=5;
     CHECK(device_config_load_record(&out,record,40));CHECK(out.bytes[6]==1&&out.bytes[7]==5);
-    for(unsigned i=32;i<52;i+=5)CHECK(!out.bytes[i]&&out.bytes[i+3]==5&&out.bytes[i+4]==2);
+    for(unsigned i=32;i<48;i+=4)CHECK(!out.bytes[i]&&out.bytes[i+2]==5&&out.bytes[i+3]==2);
     record[14]=3;CHECK(!device_config_load_record(&out,record,40));record[14]=1;
     record[4]=3;CHECK(!device_config_load_record(&out,record,40));return 0;
 }
 EXPORT int check_protocol_errors(void)
 {
     uint8_t b[64]={0};memcpy(b,"RSTP",4);b[4]=1;b[5]=3;b[6]=1;b[8]=52;
-    device_config_t c=configured();for(unsigned i=0;i<4;++i)c.bytes[35+i*5]=30;
+    device_config_t c=configured();for(unsigned i=0;i<4;++i)c.bytes[34+i*4]=30;
     memcpy(b+12,c.bytes,52);rstp_request_t r;
     CHECK(rstp_decode(b,64,&r)&&!r.status);b[8]=32;CHECK(rstp_decode(b,64,&r)&&r.status==RSTP_LENGTH);
     b[8]=52;b[18]=0x20;CHECK(rstp_decode(b,64,&r)&&r.status==RSTP_INVALID);
@@ -387,8 +384,8 @@ EXPORT int check_migration_commit_failure(void)
     device_config_store_record(nvs_blob,&c);nvs_blob[4]=1;nvs_blob[6]=32;nvs_size=40;
     fail_commit=true;CHECK(device_config_init()==ESP_OK);device_config_t out;device_config_get(&out);
     CHECK(out.bytes[0]==72&&out.bytes[6]==1&&nvs_size==40&&nvs_blob[4]==1);
-    fail_commit=false;CHECK(device_config_init()==ESP_OK);CHECK(nvs_size==60&&nvs_blob[4]==2);
-    device_config_get(&out);CHECK(out.bytes[0]==72&&out.bytes[35]==5);return 0;
+    fail_commit=false;CHECK(device_config_init()==ESP_OK);CHECK(nvs_size==60&&nvs_blob[4]==3);
+    device_config_get(&out);CHECK(out.bytes[0]==72&&out.bytes[34]==5);return 0;
 }
 EXPORT int check_save_failure(void)
 {

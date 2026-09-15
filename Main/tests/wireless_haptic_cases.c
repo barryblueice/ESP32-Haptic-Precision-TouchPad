@@ -1,5 +1,5 @@
 enum { SAMPLE, LINK, RECOVER, READ_FAIL, OVERFLOW, MODE, CONFIG_CHANGE, SLEEP,
-       READY, FAULT, STRENGTH, AGE, STOP_DRAIN, START_DRAIN, OLD_FRAME, STALE_FRAME, NATIVE_FRAME };
+       READY, FAULT, STRENGTH, AGE, STOP_DRAIN, START_DRAIN, OLD_FRAME, STALE_FRAME, NATIVE_FRAME, VBUS };
 typedef struct { unsigned kind, z, tips, x, y, arg; } step_t;
 #define UP {SAMPLE,0,0,1100,700,0}
 #define TOUCH(z) {SAMPLE,z,1,1100,700,0}
@@ -50,6 +50,7 @@ static void sample_hook(void)
     drain_haptic();drain_host();now+=10;
     const step_t *s=&steps[step_index++];
     switch(s->kind) {
+    case VBUS: test_vbus=s->arg;break;
     case SAMPLE: capture_at(s->z,s->tips,s->x,s->y,input_generation());break;
     case LINK: saved_output_generation=input_generation();input_set_link(s->arg);break;
     case RECOVER: input_recover();break;
@@ -74,7 +75,7 @@ static void sample_hook(void)
 }
 static void reset_test(unsigned transport,unsigned mode)
 {
-    now=0;wifi_hook=NULL;parser_hook=sample_hook;raw_count=0;
+    now=0;test_vbus=1;ptp_button_press_threshold=2;wifi_hook=NULL;parser_hook=sample_hook;raw_count=0;
     current_mode=transport;current_tp_mode=mode;reports=(report_buffer_t){0};
     ready_mask=0;mode_pending=false;mode_applied=true;requested_mode=mode;request_serial=0;
     haptic=(surface_haptic_runtime_t){0};surface_runtime_state(&haptic,SURFACE_READY);

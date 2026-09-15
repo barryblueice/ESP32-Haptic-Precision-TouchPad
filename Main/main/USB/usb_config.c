@@ -55,7 +55,7 @@ static void config_task(void *arg)
         uint8_t payload[DEVICE_CONFIG_SIZE] = {0}; uint16_t size = 0, status = request.status;
         if (!status) switch (request.command) {
         case RSTP_INFO:
-            rstp_put32(payload, device_config_capabilities()); payload[4] = 2; payload[6] = 0; payload[10] = 2; size = 12; break;
+            rstp_put32(payload, device_config_capabilities()); payload[4] = 2; payload[6] = 0; payload[10] = DEVICE_CONFIG_VERSION; size = 12; break;
         case RSTP_READ: {
             device_config_t config; device_config_get(&config); memcpy(payload, config.bytes, DEVICE_CONFIG_SIZE); size = DEVICE_CONFIG_SIZE; break;
         }

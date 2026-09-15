@@ -1,6 +1,11 @@
 #include <limits.h>
 #include <xmmintrin.h>
 typedef int esp_err_t;
+typedef unsigned TickType_t;
+#define pdMS_TO_TICKS(ms) ((ms)/10)
+#define VBUS_DET_GPIO 9
+static int test_vbus = 1;
+static int gpio_get_level(int gpio) { (void)gpio; return test_vbus; }
 typedef int portMUX_TYPE;
 typedef void *TaskHandle_t;
 typedef void *QueueHandle_t;

@@ -25,7 +25,7 @@ def main():
            'SYS/point_gesture.c','SYS/aux_output.c','SYS/device_config.c','I2C/TP/tp_coordinates.h']
     code=(ROOT/'tests/host_runtime.h').read_text(encoding='utf-8')+'\n'
     code+='\n'.join(body(ROOT/'main'/f) for f in files)
-    cases=(ROOT/'tests/core_cases.c').read_text(encoding='utf-8')
+    cases=(ROOT/'tests/core_cases.c').read_text(encoding='utf-8')+'\n'+(ROOT/'tests/vbus_config_cases.c').read_text(encoding='utf-8')
     code+='\n'+cases
     names=re.findall(r'EXPORT int (check_\w+)\(void\)',cases)
     output=ROOT/'build/host-tests';output.mkdir(parents=True,exist_ok=True)
@@ -40,10 +40,10 @@ def main():
         if line:raise AssertionError(f'{name} failed: {code.splitlines()[line-1]} (generated line {line})')
         print(name+': passed')
     fixture=json.loads((ROOT/'tests/protocol_vectors.json').read_text(encoding='utf-8'))
-    vector=(ctypes.c_ubyte*64).from_buffer_copy(bytes.fromhex(fixture['point_write_request']))
+    vector=(ctypes.c_ubyte*64).from_buffer_copy(bytes.fromhex(fixture['v3_point_write_request']))
     line=lib.check_vector(vector)
     if line:raise AssertionError(f'protocol vector failed at {line}')
-    result={'passed':True,'cases':names+['point_write_request'],'compiler':args.clang}
+    result={'passed':True,'cases':names+['v3_point_write_request'],'compiler':args.clang}
     (output/'result.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8')
     print(f'{len(names)+1} production-C scenarios passed')
 

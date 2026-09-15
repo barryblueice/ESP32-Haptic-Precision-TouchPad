@@ -108,7 +108,16 @@ typedef struct {
 
 static ptp_force_click_state_t ptp_force_click_state = {0};
 
+/* Owned by the parser; supply selection is independent of the host transport. */
+static bool pressure_vbus_high, pressure_vbus_candidate;
+static uint32_t pressure_vbus_sample_at, pressure_vbus_candidate_at;
+
 static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
+    if (!pressure_vbus_high) {
+        device_config_t config; device_config_get(&config);
+        unsigned index = threshold_level == 1 ? 0 : threshold_level == 3 ? 2 : 1;
+        return config.bytes[CFG_WIRELESS_LIGHT + index];
+    }
     switch (threshold_level) {
         case 1:
             return click_light_weight_threshold;
@@ -119,6 +128,37 @@ static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
         case 2:
         default:
             return click_midium_weight_threshold;
+    }
+}
+
+static void pressure_vbus_log(void)
+{
+    ESP_LOGI(TAG, "VBUS=%u pressure_group=%s level=%u threshold=%u",
+             pressure_vbus_high, pressure_vbus_high ? "powered" : "battery",
+             ptp_button_press_threshold, ptp_map_button_press_threshold(ptp_button_press_threshold));
+}
+
+static void pressure_vbus_init(void)
+{
+    pressure_vbus_high = pressure_vbus_candidate = gpio_get_level(VBUS_DET_GPIO) != 0;
+    pressure_vbus_sample_at = pressure_vbus_candidate_at = (uint32_t)(esp_timer_get_time() / 1000);
+    pressure_vbus_log();
+}
+
+static void pressure_vbus_poll(void)
+{
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    if ((uint32_t)(now - pressure_vbus_sample_at) < 10) return;
+    pressure_vbus_sample_at = now;
+    bool high = gpio_get_level(VBUS_DET_GPIO) != 0;
+    if (high != pressure_vbus_candidate) {
+        pressure_vbus_candidate = high;
+        pressure_vbus_candidate_at = now;
+    }
+    if (high != pressure_vbus_high && (uint32_t)(now - pressure_vbus_candidate_at) >= 30) {
+        pressure_vbus_high = high;
+        input_source_recover("vbus");
+        pressure_vbus_log();
     }
 }
 
@@ -375,6 +415,8 @@ static void reset_input_state(void)
 void i2c_queue_task(void *arg) {
 
     input_register_parser();
+    pressure_vbus_init();
+    const TickType_t poll_ticks = pdMS_TO_TICKS(10) ? pdMS_TO_TICKS(10) : 1;
     const esp_timer_create_args_t point_timer_args = {.callback = point_timer_wake, .name = "point_wheel"};
     ESP_ERROR_CHECK(esp_timer_create(&point_timer_args, &point_timer));
     input_frame_t frame;
@@ -396,6 +438,7 @@ void i2c_queue_task(void *arg) {
             continue;
         }
 
+        pressure_vbus_poll();
         if (input_apply_mode_request()) continue;
         if (generation != input_source_generation()) {
             generation = input_source_generation();
@@ -420,7 +463,7 @@ void i2c_queue_task(void *arg) {
             if (repeat.steps && input_output_ready(output_generation) &&
                 !aux_output_repeat(repeat.action, repeat.steps, output_generation, now)) input_recover();
             point_schedule();
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+            ulTaskNotifyTake(pdTRUE, poll_ticks);
             continue;
         }
         /* A reset may have raced with dequeuing the next captured frame. */
