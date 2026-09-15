@@ -46,6 +46,7 @@ typedef union {
     haptic_ptp_report_t haptic_ptp;
     vbus_msg_t vbus;
     alive_msg_t alive;
+    uint8_t extension[34];
 } report_payload_t;
 typedef struct __attribute__((packed)) {
     wireless_input_mode_t type;

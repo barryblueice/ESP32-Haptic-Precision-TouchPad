@@ -25,7 +25,7 @@
 #define HID_MAX_APPS                 1
 
 // Number of HID reports defined in the service
-#define HID_NUM_REPORTS          7
+#define HID_NUM_REPORTS          10
 
 // HID Report IDs for the service
 #define HID_RPT_ID_PTP_IN        1   //Vendor defined input report ID
@@ -41,7 +41,7 @@
 #define ATT_SVC_HID          0x1812
 
 /// Maximal number of Report Char. that can be added in the DB for one HIDS.
-#define HIDD_LE_NB_REPORT_INST_MAX            (9)
+#define HIDD_LE_NB_REPORT_INST_MAX            (10)
 
 /// Maximal length of Report Char. Value
 #define HIDD_LE_REPORT_MAX_LEN                (512)
@@ -152,6 +152,20 @@ enum {
     HIDD_LE_IDX_REPORT_VAL,
     HIDD_LE_IDX_REPORT_REP_REF,
 
+#if CONFIG_BLE_ENABLE_PTP_MODE
+    HIDD_LE_IDX_AUX_WHEEL_CHAR,
+    HIDD_LE_IDX_AUX_WHEEL_VAL,
+    HIDD_LE_IDX_AUX_WHEEL_CCC,
+    HIDD_LE_IDX_AUX_WHEEL_REF,
+    HIDD_LE_IDX_AUX_CONSUMER_CHAR,
+    HIDD_LE_IDX_AUX_CONSUMER_VAL,
+    HIDD_LE_IDX_AUX_CONSUMER_CCC,
+    HIDD_LE_IDX_AUX_CONSUMER_REF,
+    HIDD_LE_IDX_AUX_KEYBOARD_CHAR,
+    HIDD_LE_IDX_AUX_KEYBOARD_VAL,
+    HIDD_LE_IDX_AUX_KEYBOARD_CCC,
+    HIDD_LE_IDX_AUX_KEYBOARD_REF,
+#endif
     HIDD_LE_IDX_NB,
 };
 

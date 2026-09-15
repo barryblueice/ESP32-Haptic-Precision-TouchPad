@@ -13,12 +13,12 @@ static device_config_t active, pending;
 static portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t writer, applied;
 static bool initialized, pending_apply, pending_restart, halted, saved_restart;
-static uint32_t capabilities = 0xff;
+static uint32_t capabilities = 0x3ff;
 
 static esp_err_t store_config(const device_config_t *c)
 {
-    uint8_t record[40] = {'R','S','C','F',1,0,32,0};
-    memcpy(record + 8, c->bytes, 32);
+    uint8_t record[60];
+    device_config_store_record(record, c);
     nvs_handle_t h;
     esp_err_t err = nvs_open("storage", NVS_READWRITE, &h);
     if (err != ESP_OK) return err;
@@ -68,7 +68,7 @@ esp_err_t device_config_init(void)
     if (timeout >= 1000 && timeout <= 3600000 && timeout % 1000 == 0) rstp_put32(active.bytes + 8, timeout);
 #endif
     nvs_handle_t h;
-    uint8_t record[40]; size_t size = sizeof(record);
+    uint8_t record[60]; size_t size = sizeof(record);
     esp_err_t err = nvs_open("storage", NVS_READONLY, &h);
     if (err == ESP_OK) { err = nvs_get_blob(h, "rstp_config", record, &size); nvs_close(h); }
     if (err == ESP_ERR_NVS_NOT_FOUND) {
@@ -83,11 +83,16 @@ esp_err_t device_config_init(void)
         if (active.bytes[4] < active.bytes[3]) active.bytes[4] = active.bytes[3];
         err = store_config(&active);
         if (err != ESP_OK) ESP_LOGW("CONFIG", "Migration save failed: %s", esp_err_to_name(err));
-    } else if (err == ESP_OK && size == 40 && !memcmp(record, "RSCF\1\0\40\0", 8)) {
-        device_config_t loaded; memcpy(loaded.bytes, record + 8, 32);
-        if (device_config_valid(&loaded)) active = loaded;
-        else ESP_LOGW("CONFIG", "Invalid configuration retained; using defaults");
-    } else ESP_LOGW("CONFIG", "Unreadable/unknown configuration retained; using defaults (%s)", esp_err_to_name(err));
+    } else if (err == ESP_OK) {
+        device_config_t loaded;
+        if (device_config_load_record(&loaded, record, size)) {
+            active = loaded;
+            if (record[4] == 1) {
+                err = store_config(&active);
+                if (err != ESP_OK) ESP_LOGW("CONFIG", "v1 migration save failed: %s", esp_err_to_name(err));
+            }
+        } else ESP_LOGW("CONFIG", "Invalid/unknown configuration retained; using defaults");
+    } else ESP_LOGW("CONFIG", "Unreadable configuration retained; using defaults (%s)", esp_err_to_name(err));
     mirror(&active); initialized = true;
     return ESP_OK;
 }
@@ -95,13 +100,12 @@ bool device_config_ready(void) { return initialized; }
 void device_config_get(device_config_t *out)
 { taskENTER_CRITICAL(&config_lock); *out = active; taskEXIT_CRITICAL(&config_lock); }
 uint8_t device_config_value(unsigned offset)
-{ device_config_t c; device_config_get(&c); return offset < 32 ? c.bytes[offset] : 0; }
+{ device_config_t c; device_config_get(&c); return offset < DEVICE_CONFIG_SIZE ? c.bytes[offset] : 0; }
 uint32_t device_config_capabilities(void)
 {
     taskENTER_CRITICAL(&config_lock); uint32_t c = capabilities; taskEXIT_CRITICAL(&config_lock);
     if (cs40l25_surface_get_state() == SURFACE_FAULT) c &= ~((1U << 0) | (1U << 4));
-    if (!(c & RSTP_CAP_EDGES)) c &= ~(RSTP_CAP_ARROW_KEYS | RSTP_CAP_EDGE_REPEAT);
-    return c;
+    return rstp_capabilities_normalize(c);
 }
 void device_config_disable(uint32_t caps)
 { taskENTER_CRITICAL(&config_lock); capabilities &= ~caps; taskEXIT_CRITICAL(&config_lock); }
@@ -152,8 +156,7 @@ bool device_config_parser_boundary(void)
 }
 uint8_t device_config_rotation(void)
 {
-    /* Wireless descriptors retain their compile-time orientation. */
-    if (current_mode == WIRED_MODE && initialized) return device_config_value(CFG_ROTATION);
+    if (initialized) return device_config_value(CFG_ROTATION);
 #if CONFIG_TP_ROTATION_PORTRAIT
     return 1;
 #elif CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED

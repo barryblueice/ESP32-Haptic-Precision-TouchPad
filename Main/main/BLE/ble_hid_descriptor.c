@@ -3,18 +3,10 @@
 
 #include "BLE/BLE_bluedroid.h"
 
-#if CONFIG_TP_ROTATION_LANDSCAPE || CONFIG_TP_ROTATION_LANDSCAPE_FLIPPED
-#define LOGICAL_X_MAX   0x26, 0xFA, 0x08
-#define LOGICAL_Y_MAX   0x26, 0xFC, 0x05
-#define PHYSICAL_X_MAX  0x46, 0x7D, 0x04
-#define PHYSICAL_Y_MAX  0x46, 0xFE, 0x02
-#elif CONFIG_TP_ROTATION_PORTRAIT || CONFIG_TP_ROTATION_PORTRAIT_FLIPPED
-#define LOGICAL_Y_MAX   0x26, 0xFA, 0x08
-#define LOGICAL_X_MAX   0x26, 0xFC, 0x05
-#define PHYSICAL_Y_MAX  0x46, 0x7D, 0x04
-#define PHYSICAL_X_MAX  0x46, 0xFE, 0x02
-#endif
-
+#define LOGICAL_X_MAX 0x26, 0xFE, 0x08
+#define LOGICAL_Y_MAX 0x26, 0xFC, 0x05
+#define PHYSICAL_X_MAX 0x46, 0x7D, 0x04
+#define PHYSICAL_Y_MAX 0x46, 0xFE, 0x02
 const uint8_t ble_mouse_hid_report_descriptor[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x02,        // Usage (Mouse)
@@ -62,7 +54,7 @@ const uint8_t ble_mouse_hid_report_descriptor[] = {
     0x15, 0x00, 0x25, 0x64, 0x75, 0x08, 0x95, 0x01, 0xB1, 0x02, 0xC0
 };
 
-const uint8_t ble_ptp_hid_report_descriptor[] = {
+uint8_t ble_ptp_hid_report_descriptor[] = {
 
     //TOUCH PAD input TLC
     0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
@@ -453,8 +445,29 @@ const uint8_t ble_ptp_hid_report_descriptor[] = {
     0xb1, 0x03,                         // FEATURE (Cnst,Var,Abs)
     0xc0,                               // END_COLLECTION
     0xc0,                               // END_COLLECTION
+#include "SYS/aux_descriptor.inc"
 };
 
 const uint16_t ble_mouse_hid_report_len = sizeof(ble_mouse_hid_report_descriptor);
 
 const uint16_t ble_ptp_hid_report_len = sizeof(ble_ptp_hid_report_descriptor);
+
+#include "SYS/device_config.h"
+void ble_descriptor_init(void)
+{
+    static bool initialized;
+    if (initialized) return;
+    initialized = true;
+    if (!(device_config_rotation() & 1)) return;
+    for (unsigned i = 0; i < sizeof(ble_ptp_hid_report_descriptor);) {
+        uint8_t tag = ble_ptp_hid_report_descriptor[i];
+        unsigned n = tag & 3; if (n == 3) n = 4;
+        if (n == 2 && i + 2 < sizeof(ble_ptp_hid_report_descriptor) && (tag == 0x26 || tag == 0x46)) {
+            uint16_t v = ble_ptp_hid_report_descriptor[i+1] | (ble_ptp_hid_report_descriptor[i+2] << 8);
+            if (tag == 0x26) { if (v == 2302) v = 1532; else if (v == 1532) v = 2302; }
+            else { if (v == 1149) v = 766; else if (v == 766) v = 1149; }
+            ble_ptp_hid_report_descriptor[i+1] = v; ble_ptp_hid_report_descriptor[i+2] = v >> 8;
+        }
+        i += n + 1;
+    }
+}

@@ -1,3 +1,4 @@
+#include "SYS/wireless_extension.h"
 #include "protocol.h"
 #include <string.h>
 
@@ -27,6 +28,12 @@ bool wireless_decode(const uint8_t *data, int len, wireless_msg_t *out)
     uint32_t type;
     memcpy(&type, data, sizeof(type));
     size_t size = report_size(wireless_report_kind(type));
+    if (type == WIRE_AUX || type == WIRE_SURFACE) {
+        wire_surface_t surface; wire_action_t action;
+        bool valid = type == WIRE_AUX ? wire_action_decode(data,len,&action) : wire_surface_decode(data,len,WIRE_SURFACE,&surface);
+        if (!valid) return false;
+        size = 34;
+    }
     if (type == VBUS_STATUS) size = sizeof(vbus_msg_t);
     if (type == ALIVE_MODE) size = sizeof(alive_msg_t);
     if (!size || (size_t)len < 4 + size) return false;

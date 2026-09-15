@@ -38,7 +38,7 @@ void tp_modern_sleep_init(void)
 {
     if (timer != NULL) return;
     device_config_t config; device_config_get(&config);
-    enabled = config.bytes[CFG_SLEEP] != 0;
+    enabled = device_config_sleep(&config);
     timeout_ms = rstp_u32(config.bytes + CFG_TIMEOUT);
     const esp_timer_create_args_t args = {.callback = sleep_cb, .name = "tp_modern_sleep"};
     if (esp_timer_create(&args, &timer) != ESP_OK) {

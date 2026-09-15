@@ -1,16 +1,14 @@
 #pragma once
-#include <stdbool.h>
-#include <stdint.h>
-typedef struct { uint8_t id, length, data[8]; uint32_t generation, epoch; bool release; } usb_aux_report_t;
-bool usb_aux_steps(uint8_t action, int steps, uint32_t generation, uint32_t time_ms);
-bool usb_aux_take(usb_aux_report_t *out, uint32_t generation, uint32_t time_ms);
-void usb_aux_complete(bool success);
-void usb_aux_unsubmitted(void);
-void usb_aux_reset(bool connected);
-bool usb_aux_active(void);
-bool usb_aux_release_pending(void);
-/* Cancel queued steps without forgetting an accepted transfer or its release. */
-void usb_aux_cancel(void);
-bool usb_aux_report_current(const usb_aux_report_t *report);
-void usb_aux_resume(void);
-bool usb_aux_neutral_pending(void);
+#include "SYS/aux_output.h"
+#define usb_aux_active aux_output_active
+#define usb_aux_cancel aux_output_cancel
+#define usb_aux_complete aux_output_complete
+#define usb_aux_neutral_pending aux_output_neutral_pending
+#define usb_aux_release_pending aux_output_release_pending
+#define usb_aux_report_current aux_output_report_current
+#define usb_aux_report_t aux_output_report_t
+#define usb_aux_reset aux_output_reset
+#define usb_aux_resume aux_output_resume
+#define usb_aux_steps aux_output_steps
+#define usb_aux_take aux_output_take
+#define usb_aux_unsubmitted aux_output_unsubmitted

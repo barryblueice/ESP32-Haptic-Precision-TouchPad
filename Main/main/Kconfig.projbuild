@@ -44,8 +44,7 @@ menu "TouchPad Configuration"
             prompt "TouchPad Rotation"
             default TP_ROTATION_LANDSCAPE
             help
-            Initial USB RSTP orientation; saved settings override this after migration.
-            BLE retains this compile-time orientation.
+            Initial RSTP orientation; saved settings apply to USB, BLE PTP and the paired 2.4G receiver.
 
         config TP_ROTATION_LANDSCAPE
             bool "Landscape"
