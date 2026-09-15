@@ -129,6 +129,79 @@ EXPORT int check_cancel_and_time_wrap(void)
     CHECK(r.suppress&&r.cancel);CHECK(!point_gesture_tick(&s,1000).steps);
     m.fingers[1].tip_switch=0;CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,2000).suppress);return 0;
 }
+EXPORT int check_point_identity(void)
+{
+    device_config_t c=configured();c.bytes[7]=0x10;
+    point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);m.fingers[0].contact_id=7;
+    CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,0).initial);
+    /* Replacing a contact in the same array slot must stop its gesture. */
+    m.fingers[0].contact_id=8;
+    point_result_t r=point_gesture_update(&s,&c,&m,2000,1000,200,100,400);
+    CHECK(r.cancel&&r.suppress&&!r.steps);CHECK(!point_gesture_tick(&s,1000).steps);
+    point_gesture_reset(&s);m=contact(0,0);m.fingers[0].contact_id=7;
+    CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,0).initial);
+    /* Array ordering alone does not change contact identity. */
+    m.fingers[2]=m.fingers[0];m.fingers[0].tip_switch=0;
+    r=point_gesture_update(&s,&c,&m,2000,1000,200,100,400);
+    CHECK(!r.cancel&&r.steps==1);
+    m.fingers[2].confidence=0;
+    CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,401).cancel);
+    m.fingers[2].confidence=1;
+    CHECK(!point_gesture_update(&s,&c,&m,2000,1000,200,100,1000).steps);
+    return 0;
+}
+EXPORT int check_point_geometry_grid(void)
+{
+    /* Independent integer oracle, using the descriptor's exact 3:2 ratio. */
+    for(unsigned portrait=0;portrait<2;++portrait){
+        unsigned xmax=portrait?1532:2302,ymax=portrait?2302:1532;
+        unsigned width=portrait?2:3,height=portrait?3:2;
+        for(unsigned radius=1;radius<=30;++radius)for(unsigned p=0;p<4;++p)
+            for(unsigned x=0;x<=xmax;x+=23)for(unsigned y=0;y<=ymax;y+=19){
+                uint64_t dx=(uint64_t)((p&1)?xmax-x:x)*width*ymax*100;
+                uint64_t dy=(uint64_t)((p&2)?ymax-y:y)*height*xmax*100;
+                uint64_t r=(uint64_t)2*radius*xmax*ymax;
+                bool expected=dx*dx+dy*dy<=r*r;
+                CHECK(point_gesture_inside(p,radius,x,y,xmax,ymax,width*383,height*383)==expected);
+            }
+    }
+    return 0;
+}
+EXPORT int check_first_trusted_point(void)
+{
+    device_config_t c=configured();c.bytes[7]=0x10;
+    for(unsigned portrait=0;portrait<2;++portrait)for(unsigned p=0;p<4;++p){
+        unsigned xmax=portrait?1532:2302,ymax=portrait?2302:1532;
+        point_gesture_t state={0};tp_multi_msg_t msg=contact((p&1)?xmax-1:1,(p&2)?ymax-1:1);
+        msg.fingers[0].confidence=0;
+        CHECK(!point_gesture_update(&state,&c,&msg,xmax,ymax,portrait?766:1149,portrait?1149:766,0).steps);
+        msg.fingers[0].confidence=1;
+        CHECK(point_gesture_update(&state,&c,&msg,xmax,ymax,portrait?766:1149,portrait?1149:766,10).initial);
+        CHECK(state.point==p);
+    }
+    point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);m.fingers[0].confidence=0;
+    CHECK(!point_gesture_update(&s,&c,&m,2000,1000,200,100,0).initial);
+    CHECK(!point_gesture_tick(&s,1000).steps);
+    m.fingers[0].confidence=1;
+    CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,1000).initial);
+    CHECK(!point_gesture_tick(&s,1399).steps);CHECK(point_gesture_tick(&s,1400).steps);
+    /* Once a valid origin is outside the points, entering one does not claim it. */
+    point_gesture_reset(&s);m=contact(1000,500);m.fingers[0].confidence=0;
+    point_gesture_update(&s,&c,&m,2000,1000,200,100,0);
+    m.fingers[0].confidence=1;
+    CHECK(!point_gesture_update(&s,&c,&m,2000,1000,200,100,1).initial);
+    m=contact(0,0);CHECK(!point_gesture_update(&s,&c,&m,2000,1000,200,100,2).initial);
+    /* Identity changes and multiple contacts while waiting cannot arm a point. */
+    for(unsigned multiple=0;multiple<2;++multiple){
+        point_gesture_reset(&s);m=contact(0,0);m.fingers[0].confidence=0;
+        point_gesture_update(&s,&c,&m,2000,1000,200,100,0);
+        m.fingers[0].confidence=1;
+        if(multiple)m.fingers[1]=m.fingers[0];else m.fingers[0].contact_id=1;
+        CHECK(!point_gesture_update(&s,&c,&m,2000,1000,200,100,1).initial);
+        m=contact(0,0);CHECK(!point_gesture_update(&s,&c,&m,2000,1000,200,100,2).initial);
+    }
+    return 0;
+}
 EXPORT int check_edge_handoff(void)
 {
     device_config_t c=configured();c.bytes[6]=3;c.bytes[12]=1;c.bytes[13]=2;
@@ -172,6 +245,7 @@ EXPORT int check_fast_lift_preserves_first_action(void)
 EXPORT int check_all_rotations(void)
 {
     initialized=true;device_config_defaults(&active);
+    const unsigned expected[4][4]={{2,3,0,1},{3,1,2,0},{1,0,3,2},{0,2,1,3}};
     for(unsigned rotation=0;rotation<4;++rotation) {
         active.bytes[5]=rotation;
         uint16_t xmax=device_config_x_max(),ymax=device_config_y_max();
@@ -179,6 +253,7 @@ EXPORT int check_all_rotations(void)
         for(unsigned raw=0;raw<4;++raw) {
             uint16_t x,y;tp_rotate_coordinates((raw&1)?2302:0,(raw&2)?1532:0,&x,&y);
             unsigned corner=(x==xmax?1:0)|(y==ymax?2:0);
+            CHECK(corner==expected[rotation][raw]);
             CHECK(!seen[corner]);seen[corner]=true;
             CHECK(point_gesture_inside(corner,5,x,y,xmax,ymax,rotation&1?766:1149,rotation&1?1149:766));
         }
