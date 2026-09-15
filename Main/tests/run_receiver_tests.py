@@ -32,7 +32,7 @@ cases=cases.replace('    input_init();','''    input_init();
     requested = applied = ack_flight = (wire_surface_t){0};
     pending_apply = ready = ack_pending = flight_ack = false;
     last_sequence = last_seen = 0; memset(peer,0,6);
-    count=0; flight=false; release_due=neutral_due=0; aux_epoch=radio_epoch=0;
+    count=0; flight=false; held_mask=release_due=neutral_due=0; aux_epoch=radio_epoch=0;
     aux_generation=input_generation(); usb_aux_flight=false; prefer_aux=true;
     descriptor_rotation=surface_rotation=disconnect_count=0;''',1)
 # Reconnection now releases the two added HID collections before PTP input.
@@ -45,7 +45,7 @@ code=code.replace('while (true)','while (test_steps-- > 0)')
 out=ROOT/'build/receiver-host-tests';out.mkdir(parents=True,exist_ok=True)
 c=out/'checks.c';dll=out/'checks.dll';c.write_text(code,encoding='utf-8')
 clang=sys.argv[1]
-subprocess.run([clang,'-std=c11','-O1','-fno-builtin','-mno-stack-arg-probe',
+subprocess.run([clang,'-std=c11','-O1','-fno-builtin','-mno-stack-arg-probe','-DAUX_OUTPUT_RECEIVER',
                '-Werror=implicit-function-declaration','-shared','-nostdlib','-fuse-ld=lld',
                '-Wl,/noentry','-Wl,/nodefaultlib',str(c),'-o',str(dll)],check=True)
 lib=ctypes.CDLL(str(dll));names=re.findall(r'EXPORT int (check_\w+)\(void\)',cases)

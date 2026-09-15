@@ -138,7 +138,7 @@ void wifi_send_task(void *arg)
                 if (auxiliary) {
                     kind = 3;
                     if (!++sequence) ++sequence;
-                    wire_action_t a = {surface.session, sequence, event.action, event.steps};
+                    wire_action_t a = {surface.session, sequence, event.action, event.steps, event.hold};
                     wire_action_encode(packet, &a);
                 } else if (have_pending && (pending.mode == MOUSE_MODE || link_ready)) {
                     kind = 0; wireless_msg_t data = {0};

@@ -31,8 +31,16 @@ dimensions (1149 × 766 units, logical range 2302 × 1532) normalize the axes.
 Portrait swaps both dimensions. Out-of-range raw positions cannot trigger a
 corner after coordinate clamping.
 
-Held-point repetition begins at 400 ms and repeats every 100 ms. A delayed task
-emits one repeat, with no catch-up burst. When that point permits conversion,
+With point repetition enabled, keyboard and Consumer actions send one key down
+and remain held until the contact ends. They emit no firmware-generated repeat
+or intermediate release reports. Keyboard repeat delay/rate follow the host's
+settings; volume/brightness hold behavior depends on the host's Consumer support.
+With repetition disabled, the point emits one press/release pair.
+
+Wheel/pan actions emit one immediate step, wait 600 ms, then repeat every 200 ms.
+`POINT_WHEEL_HOLD_DELAY_MS` and `POINT_WHEEL_REPEAT_MS` in `point_gesture.h` set
+these timings. A delayed timer emits one step without catch-up bursts, and busy
+output skips repeats without accumulating a backlog. When that point permits conversion,
 `max(abs(dx)/W, abs(dy)/H) * 100 >= step` ends repetition and starts edge parsing
 at the current position. Earlier movement is not replayed. Outside an enabled
 edge the contact becomes ordinary movement. Ordinary contacts outside enabled
@@ -40,10 +48,11 @@ points retain their previous behavior. Edge continuation still requires movement
 it is not timed auto-repeat.
 
 Lift, additional contacts, invalid contact identity/confidence, connection/mode
-changes and pipeline recovery cancel repetition. A quick lift keeps the first
-queued action but discards later repeats. Accepted keyboard/Consumer transfers
-are followed by a release, including uncertain transfer failures. Queue entries
-older than 100 ms expire rather than replaying stale input.
+changes and pipeline recovery release held keys and cancel wheel repetition.
+A quick lift keeps the first queued action as a tap and discards later repeats.
+Uncertain accepted transfer failures schedule a release. Queue entries older
+than 100 ms expire rather than replaying stale input; completed held keys do not
+expire while the contact remains valid.
 
 Only PTP mode gains corner gestures on USB, BLE and 2.4 GHz. Mouse mode retains
 its previous behavior (including existing USB edges in simulated mouse mode).
@@ -62,9 +71,9 @@ switch a mouse build into PTP.
 - A committed USB write returns status 7, then restarts after response completion.
   Reconnect and read back to confirm the value. A failed commit returns status 6
   without activating the requested configuration.
-- Update the ESP32-S3 touchpad and ESP32-S2 receiver together. The new PTP radio
-  path requires receiver direction synchronization before input. An old receiver
-  cannot acknowledge it and is not supported for this PTP path.
+- Update the ESP32-S3 touchpad and ESP32-S2 receiver together. Radio extension
+  version 2 adds key-hold semantics and requires a matching receiver handshake.
+  A version-1 receiver cannot acknowledge it and is not supported for this PTP path.
 - The receiver updates the haptic PTP descriptor before acknowledging a new
   portrait/landscape orientation; changing dimensions disconnects/re-enumerates
   USB. The receiver does not rotate already transformed coordinates again.
@@ -82,16 +91,20 @@ retain their layout. The definitions shared by both firmwares are in
 
 | Type | Fields in payload, in order |
 | --- | --- |
-| 5: action | session uint32, sequence uint32, action uint8, steps int16 |
-| 6: surface | extension version uint8 = 1, rotation uint8, nonzero session uint32 |
+| 5: action | session uint32, sequence uint32, action uint8, steps int16, hold uint8 |
+| 6: surface | extension version uint8 = 2, rotation uint8, nonzero session uint32 |
 | 7: surface ACK | same payload as the accepted surface record |
 
 Actions 1–6 use the existing edge action categories and signed direction.
-Action 0 with zero steps cancels queued actions. Other steps are nonzero and
-bounded to −127…127. Sequences are nonzero and increase within the session.
+Action 0 with zero steps and hold=0 cancels queued actions and releases held keys.
+hold=1 (envelope byte 15) is allowed only for actions 1, 2, 5, 6 with steps ±1;
+it sends one key down, released by the next cancellation/recovery. hold=0 keeps
+the existing discrete action behavior, with nonzero steps bounded to −127…127.
+Sequences are nonzero and increase within the session.
 The receiver rejects duplicate/out-of-order actions, incorrect sessions and
 actions from another peer. The receiver generates USB key down/up locally;
-wheel reports do not change the receiver's PTP/mouse mode.
+completed holds also release when the radio link times out or the mode changes.
+Wheel reports do not change the receiver's PTP/mouse mode.
 
 The touchpad sends surface information once per second. Without a recent ACK
 (2.5 seconds), it pauses PTP input and clears pending actions. A live receiver
@@ -123,14 +136,17 @@ Main build. It reads the existing compile commands, recompiles seven project
 objects, replaces those members in a copy of libmain, and links against the
 cached SDK libraries. Its test image is under `build/validation/ble-ptp`.
 
-Automated validation covers 19 core scenarios, 25 receiver scenarios (including
-22 existing regressions) and 4 BLE scenarios. These contain the 32 sleep/mask
+Automated validation covers 23 core scenarios, 32 receiver scenarios (including
+27 existing regressions) and 4 BLE scenarios. These contain the 32 sleep/mask
 combinations, 64 start-point/mask combinations, all 12 corner bindings, physical
 circle boundaries, rotations, handoff, repetition, cancellation, migration and
 commit failure, queued releases, receiver synchronization and BLE backpressure.
 The core suite also checks initial confidence recovery, contact replacement and
 array reordering, and a physical-circle grid against an independent integer oracle
-for all four corners, radii 1–30%, and both surface orientations.
+for all four corners, radii 1–30%, and both surface orientations. Hold cases check
+one press/no intermediate release, quick lift before/during/after submission,
+failed transfers/releases, recovery, and radio hold/cancel propagation. Wheel
+cases cover the initial/repeat deadlines, clock wrap, and output backpressure.
 Five touch IRQ scenarios cover a pending signal before interrupt enable, idle and
 duplicate wakes, coalesced reports, an enable-time edge race, and bounded batches
 with read-error retry.
@@ -168,8 +184,9 @@ For each transport in PTP mode, verify:
 2. Each corner and circle boundary in all four orientations; disabled corners
    preserve normal clicks/edges and their saved settings return when reenabled.
 3. All 12 corner bindings, with no extra ordinary click.
-4. 400/100 ms repetition, immediate lift stop, and no continued key or wheel input
-   after reconnect, mode changes or input recovery.
+4. Keyboard holds follow the host repeat settings; Consumer holds use the host's
+   volume/brightness behavior. Wheels wait 600 ms then repeat every 200 ms.
+   Lifting stops both; reconnect, mode changes and recovery leave no stuck keys.
 5. Per-point conversion threshold and edge takeover, including motion into another
    corner and conversion where no edge is enabled.
 6. BLE pairing, full PTP input, all auxiliary subscriptions and congestion recovery;

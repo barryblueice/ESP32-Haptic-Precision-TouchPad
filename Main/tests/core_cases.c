@@ -94,12 +94,23 @@ EXPORT int check_actions_and_repeat(void)
         point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);
         point_result_t r=point_gesture_update(&s,&c,&m,2302,1532,1149,766,100);
         CHECK(r.suppress&&r.action==(a+1)/2&&r.steps==((a&1)?1:-1));
-        CHECK(!point_gesture_tick(&s,499).steps);CHECK(point_gesture_tick(&s,500).steps==r.steps);
-        CHECK(!point_gesture_tick(&s,599).steps);CHECK(point_gesture_tick(&s,600).steps==r.steps);
-        CHECK(point_gesture_tick(&s,2000).steps==r.steps);CHECK(!point_gesture_tick(&s,2000).steps);
+        bool wheel=a>=5&&a<=8;
+        CHECK(r.hold==!wheel&&point_gesture_repeating(&s)==wheel);
+        CHECK(!point_gesture_tick(&s,100).steps&&!point_gesture_tick(&s,699).steps);
+        CHECK(point_gesture_tick(&s,700).steps==(wheel?r.steps:0));
+        CHECK(!point_gesture_tick(&s,899).steps);
+        CHECK(point_gesture_tick(&s,900).steps==(wheel?r.steps:0));
+        CHECK(point_gesture_tick(&s,2000).steps==(wheel?r.steps:0));
+        CHECK(!point_gesture_tick(&s,2000).steps);
         m=(tp_multi_msg_t){0};CHECK(point_gesture_update(&s,&c,&m,2302,1532,1149,766,2001).cancel);
         CHECK(!point_gesture_tick(&s,3000).steps);
-    }return 0;
+    }
+    device_config_t c=configured();c.bytes[7]=0;
+    point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);
+    point_result_t r=point_gesture_update(&s,&c,&m,2302,1532,1149,766,0);
+    CHECK(r.initial&&!r.hold);
+    CHECK(!point_gesture_tick(&s,0).steps&&!point_gesture_tick(&s,2000).steps);
+    return 0;
 }
 EXPORT int check_conversion_independence(void)
 {
@@ -122,9 +133,9 @@ EXPORT int check_conversion_independence(void)
 }
 EXPORT int check_cancel_and_time_wrap(void)
 {
-    device_config_t c=configured();c.bytes[7]=0x10;point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);
+    device_config_t c=configured();c.bytes[7]=0x10;c.bytes[33]=5;point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);
     point_gesture_update(&s,&c,&m,2000,1000,200,100,0xffffff00U);
-    CHECK(!point_gesture_tick(&s,0x8f).steps);CHECK(point_gesture_tick(&s,0x90).steps);
+    CHECK(!point_gesture_tick(&s,0x157).steps);CHECK(point_gesture_tick(&s,0x158).steps);
     m.fingers[1]=m.fingers[0];point_result_t r=point_gesture_update(&s,&c,&m,2000,1000,200,100,150);
     CHECK(r.suppress&&r.cancel);CHECK(!point_gesture_tick(&s,1000).steps);
     m.fingers[1].tip_switch=0;CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,2000).suppress);return 0;
@@ -143,7 +154,7 @@ EXPORT int check_point_identity(void)
     /* Array ordering alone does not change contact identity. */
     m.fingers[2]=m.fingers[0];m.fingers[0].tip_switch=0;
     r=point_gesture_update(&s,&c,&m,2000,1000,200,100,400);
-    CHECK(!r.cancel&&r.steps==1);
+    CHECK(!r.cancel&&r.suppress&&!r.steps&&s.owned);
     m.fingers[2].confidence=0;
     CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,401).cancel);
     m.fingers[2].confidence=1;
@@ -184,7 +195,7 @@ EXPORT int check_first_trusted_point(void)
     CHECK(!point_gesture_tick(&s,1000).steps);
     m.fingers[0].confidence=1;
     CHECK(point_gesture_update(&s,&c,&m,2000,1000,200,100,1000).initial);
-    CHECK(!point_gesture_tick(&s,1399).steps);CHECK(point_gesture_tick(&s,1400).steps);
+    CHECK(!point_gesture_tick(&s,1000).steps&&!point_gesture_tick(&s,1001).steps);
     /* Once a valid origin is outside the points, entering one does not claim it. */
     point_gesture_reset(&s);m=contact(1000,500);m.fingers[0].confidence=0;
     point_gesture_update(&s,&c,&m,2000,1000,200,100,0);
@@ -224,11 +235,121 @@ EXPORT int check_aux_release_and_cancel(void)
 }
 EXPORT int check_wire_protocol(void)
 {
-    uint8_t b[38];wire_surface_t s={1,3,123},out;
+    uint8_t b[38];wire_surface_t s={WIRE_VERSION,3,123},out;
     wire_surface_encode(b,WIRE_SURFACE,&s);CHECK(wire_surface_decode(b,38,WIRE_SURFACE,&out)&&out.rotation==3);
     b[10]=1;CHECK(!wire_surface_decode(b,38,WIRE_SURFACE,&out));
     wire_action_t a={123,1,6,-1},action;wire_action_encode(b,&a);CHECK(wire_action_decode(b,38,&action)&&action.steps==-1);
-    CHECK(!wire_action_decode(b,37,&action));b[12]=7;CHECK(!wire_action_decode(b,38,&action));return 0;
+    CHECK(!wire_action_decode(b,37,&action));b[12]=7;CHECK(!wire_action_decode(b,38,&action));
+    a.hold=true;wire_action_encode(b,&a);CHECK(wire_action_decode(b,38,&action)&&action.hold);
+    b[15]=2;CHECK(!wire_action_decode(b,38,&action));b[15]=1;
+    b[12]=3;CHECK(!wire_action_decode(b,38,&action));
+    b[12]=5;b[13]=2;b[14]=0;CHECK(!wire_action_decode(b,38,&action));
+    a=(wire_action_t){123,2,0,0,true};wire_action_encode(b,&a);CHECK(!wire_action_decode(b,38,&action));
+    s.version=1;wire_surface_encode(b,WIRE_SURFACE,&s);CHECK(!wire_surface_decode(b,38,WIRE_SURFACE,&out));
+    return 0;
+}
+EXPORT int check_point_key_hold_and_release(void)
+{
+    for(unsigned binding=1;binding<=12;++binding) {
+        if(binding>=5&&binding<=8)continue;
+        device_config_t c=configured();c.bytes[33]=binding;c.bytes[7]=0x10;
+        point_gesture_t s={0};tp_multi_msg_t m=contact(0,0);
+        point_result_t p=point_gesture_update(&s,&c,&m,2302,1532,1149,766,0);
+        CHECK(p.hold);
+        aux_output_reset(false);
+        CHECK(aux_output_hold(p.action,p.steps,test_generation,0));
+        aux_output_report_t r;
+        CHECK(aux_output_take(&r,test_generation,0)&&!r.release);
+        const uint8_t expected[12]={0x6f,0x70,0xe9,0xea,0,0,0,0,0x52,0x51,0x4f,0x50};
+        CHECK(r.id==(binding<=4?7:8)&&r.data[binding<=4?0:2]==expected[binding-1]);
+        aux_output_complete(true);
+        /* Stationary and moving reports do not emit more key downs or key ups. */
+        for(unsigned now=0;now<10000;now+=10) {
+            CHECK(!point_gesture_tick(&s,now).steps);
+            CHECK(!point_gesture_update(&s,&c,&m,2302,1532,1149,766,now).steps);
+            CHECK(!aux_output_take(&r,test_generation,now)&&!aux_output_active());
+        }
+        m=(tp_multi_msg_t){0};CHECK(point_gesture_update(&s,&c,&m,2302,1532,1149,766,10000).cancel);
+        aux_output_cancel_gesture();
+        CHECK(aux_output_take(&r,test_generation,10000)&&r.release);
+        CHECK(!r.data[0]&&!r.data[2]);aux_output_complete(true);
+        CHECK(!point_gesture_tick(&s,10000).steps&&!aux_output_active());
+    }
+    return 0;
+}
+EXPORT int check_hold_cancellation_and_failure(void)
+{
+    aux_output_report_t r;
+    CHECK(!aux_output_hold(3,1,test_generation,0)&&!aux_output_hold(5,2,test_generation,0));
+    for(unsigned when=0;when<3;++when) {
+        aux_output_reset(false);CHECK(aux_output_hold(5,1,test_generation,0));
+        if(when==0)aux_output_cancel_gesture();
+        CHECK(aux_output_take(&r,test_generation,0)&&r.data[2]==0x52);
+        if(when==1)aux_output_cancel_gesture();
+        aux_output_complete(true);
+        if(when==2)aux_output_cancel_gesture();
+        CHECK(aux_output_take(&r,test_generation,0)&&r.release);
+        aux_output_complete(true);CHECK(!aux_output_active());
+    }
+    /* Failure, recovery, resume, and a new generation release a completed hold. */
+    for(unsigned reason=0;reason<5;++reason) {
+        aux_output_reset(false);CHECK(aux_output_hold(2,-1,test_generation,0));
+        CHECK(aux_output_take(&r,test_generation,0));
+        if(reason==4)aux_output_cancel();
+        aux_output_complete(reason!=0);
+        if(reason==1)aux_output_cancel();
+        if(reason==2)aux_output_resume();
+        if(reason==3)++test_generation;
+        CHECK(aux_output_take(&r,test_generation,0)&&r.release&&r.id==7);
+        aux_output_complete(false);
+        CHECK(aux_output_take(&r,test_generation,0)&&r.release&&r.id==7);
+        aux_output_complete(true);
+        if(reason==2) { CHECK(aux_output_take(&r,test_generation,0)&&r.release&&r.id==8);aux_output_complete(true); }
+        CHECK(!aux_output_active());
+    }
+    /* A rejected submission can be retried without losing its hold semantics. */
+    aux_output_reset(false);CHECK(aux_output_hold(5,1,test_generation,0));
+    CHECK(aux_output_take(&r,test_generation,0));aux_output_unsubmitted();
+    CHECK(aux_output_take(&r,test_generation,0));aux_output_complete(true);
+    CHECK(!aux_output_take(&r,test_generation,1000));aux_output_cancel();
+    CHECK(aux_output_take(&r,test_generation,1000)&&r.release);aux_output_complete(true);
+    return 0;
+}
+EXPORT int check_wheel_repeat_backpressure(void)
+{
+    aux_output_report_t r;aux_output_reset(false);
+    CHECK(aux_output_once(3,1,test_generation,0));
+    for(unsigned cycle=0;cycle<64;++cycle) {
+        for(unsigned i=0;i<64;++i)CHECK(aux_output_repeat(3,1,test_generation,0));
+        CHECK(aux_output_take(&r,test_generation,0)&&r.id==2&&r.data[3]==1);
+        for(unsigned i=0;i<64;++i)CHECK(aux_output_repeat(3,1,test_generation,0));
+        aux_output_complete(true);CHECK(!aux_output_active());
+        CHECK(aux_output_repeat(3,1,test_generation,0));
+    }
+    aux_output_cancel_gesture();CHECK(!aux_output_active());return 0;
+}
+EXPORT int check_radio_hold_and_cancel(void)
+{
+    for(unsigned when=0;when<3;++when) {
+        aux_output_reset(false);aux_output_event_t e;
+        CHECK(aux_output_take_event(&e,test_generation,0)&&!e.action);aux_output_event_complete(true);
+        CHECK(aux_output_hold(5,1,test_generation,0));
+        if(when==0) {
+            aux_output_cancel_gesture();
+            CHECK(aux_output_take_event(&e,test_generation,0)&&!e.action);aux_output_event_complete(true);
+        }
+        CHECK(aux_output_take_event(&e,test_generation,0)&&e.action==5&&e.hold==(when!=0));
+        if(when==1)aux_output_cancel_gesture();
+        aux_output_event_complete(true);
+        if(when==2) {
+            CHECK(!aux_output_take_event(&e,test_generation,1000));aux_output_cancel_gesture();
+        }
+        if(when!=0) {
+            CHECK(aux_output_take_event(&e,test_generation,0)&&!e.action&&!e.hold);aux_output_event_complete(true);
+        }
+        CHECK(!aux_output_take_event(&e,test_generation,0));
+    }
+    return 0;
 }
 EXPORT int check_fast_lift_preserves_first_action(void)
 {

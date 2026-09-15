@@ -21,12 +21,17 @@ static point_result_t action(const point_gesture_t *s)
     return (point_result_t){.suppress = true, .action = (s->action + 1) / 2,
         .steps = sign};
 }
-bool point_gesture_repeating(const point_gesture_t *s) { return s->state == POINT_ACTIVE && s->repeat; }
+bool point_gesture_repeating(const point_gesture_t *s)
+{
+    /* Only wheel/pan use firmware repeats. Keys stay down until cancellation. */
+    return s->state == POINT_ACTIVE && s->repeat && s->action >= 5 && s->action <= 8;
+}
 point_result_t point_gesture_tick(point_gesture_t *s, uint32_t now)
 {
     point_result_t r = {.suppress = s->state == POINT_ACTIVE || s->state == POINT_SUPPRESSED};
     if (point_gesture_repeating(s) && (int32_t)(now - s->repeat_at) >= 0) {
-        s->repeat_at = now + 100; r = action(s);
+        s->repeat_at = now + POINT_WHEEL_REPEAT_MS;
+        r = action(s);
     }
     return r;
 }
@@ -64,8 +69,10 @@ point_result_t point_gesture_update(point_gesture_t *s, const device_config_t *c
                 .action = record[1], .step = record[4],
                 .repeat = (c->bytes[7] & (0x10U << p)) != 0,
                 .convert = device_config_point_to_edge(c, p), .start_x = x, .start_y = y,
-                .repeat_at = now + 400};
-            r = action(s); r.initial = true; return r;
+                .repeat_at = now + POINT_WHEEL_HOLD_DELAY_MS};
+            r = action(s); r.initial = true;
+            r.hold = s->repeat && !point_gesture_repeating(s);
+            return r;
         }
         s->state = POINT_PASSTHROUGH; return r;
     }
