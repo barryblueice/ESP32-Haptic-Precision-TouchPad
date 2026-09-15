@@ -5,7 +5,7 @@
 
 void wifi_now_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len)
 {
-    (void)recv_info;
+    if (recv_info && data && len == 38) wireless_surface_ack(recv_info->src_addr, data, len);
     if (data && len == 1 && (data[0] == PTP_MODE || data[0] == MOUSE_MODE))
         input_request_mode(data[0]);
 }

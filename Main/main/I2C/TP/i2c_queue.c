@@ -15,6 +15,7 @@
 #include "SYS/input_pipeline.h"
 #include "SYS/device_config.h"
 #include "SYS/edge_gesture.h"
+#include "SYS/point_gesture.h"
 #include "USB/usb_aux.h"
 #include "SYS/hid_msg.h"
 
@@ -77,6 +78,18 @@ static uint8_t consecutive_errors[5] = {0};
 
 static bool slot_active[5] = {false};
 static edge_gesture_t edge_state;
+static point_gesture_t point_state;
+static esp_timer_handle_t point_timer;
+static void point_timer_wake(void *arg) { (void)arg; input_wake_parser(); }
+static void point_schedule(void)
+{
+    esp_timer_stop(point_timer);
+    if (point_gesture_repeating(&point_state)) {
+        uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+        int32_t delay = (int32_t)(point_state.repeat_at - now);
+        esp_timer_start_once(point_timer, (uint64_t)(delay > 0 ? delay : 1) * 1000);
+    }
+}
 
 typedef struct {
     bool tracking_contact;
@@ -334,6 +347,8 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 static void reset_input_state(void)
 {
     edge_gesture_reset(&edge_state);
+    point_gesture_reset(&point_state);
+    if (point_timer) esp_timer_stop(point_timer);
     usb_aux_cancel();
     ptp_report_reset();
     ptp_force_click_state = (ptp_force_click_state_t){0};
@@ -361,6 +376,8 @@ static void reset_input_state(void)
 void i2c_queue_task(void *arg) {
 
     input_register_parser();
+    const esp_timer_create_args_t point_timer_args = {.callback = point_timer_wake, .name = "point_repeat"};
+    ESP_ERROR_CHECK(esp_timer_create(&point_timer_args, &point_timer));
     input_frame_t frame;
     uint32_t generation = input_generation();
     int previous_format = -1;
@@ -386,6 +403,10 @@ void i2c_queue_task(void *arg) {
             previous_mode = current_tp_mode;
         }
         if (!input_next_frame(&frame)) {
+            uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+            point_result_t repeat = point_gesture_tick(&point_state, now);
+            if (repeat.steps && !usb_aux_steps(repeat.action, repeat.steps, generation, now)) input_recover();
+            point_schedule();
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             continue;
         }
@@ -430,8 +451,9 @@ void i2c_queue_task(void *arg) {
                     uint8_t finger_status = tp_packet[offset];
 
                     uint16_t rx, ry;
-                    tp_rotate_coordinates(tp_packet[offset + 1] | (tp_packet[offset + 2] << 8),
-                                          tp_packet[offset + 3] | (tp_packet[offset + 4] << 8), &rx, &ry);
+                    uint16_t raw_x = tp_packet[offset + 1] | (tp_packet[offset + 2] << 8);
+                    uint16_t raw_y = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
+                    tp_rotate_coordinates(raw_x, raw_y, &rx, &ry);
                     uint8_t pressure_z = tp_packet[offset + 5];
                     uint8_t major = tp_packet[offset + 6];
                     uint8_t minor = tp_packet[offset + 7];
@@ -442,7 +464,7 @@ void i2c_queue_task(void *arg) {
 
                     if (finger_status & 0x01) {
 
-                        bool is_confident = true;
+                        bool is_confident = raw_x <= 2302 && raw_y <= 1532;
 
                         if (major > PALM_MAJOR_LIMIT || minor > PALM_MINOR_LIMIT) {
                             is_confident = false;
@@ -564,15 +586,35 @@ void i2c_queue_task(void *arg) {
                 //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
                 // }
 
-                if (current_mode == WIRED_MODE) {
+                if (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE) {
                     device_config_t config; device_config_get(&config);
                     tp_multi_msg_t logical = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch) {
                         logical.fingers[id].x = last_raw_x[id]; logical.fingers[id].y = last_raw_y[id];
                     }
-                    edge_result_t edge = edge_gesture_update(&edge_state, &config, &logical,
+                    point_result_t point = {0};
+                    bool owned = point_state.owned;
+                    if (current_tp_mode == PTP_MODE) {
+                        bool portrait = device_config_rotation() & 1;
+                        point = point_gesture_update(&point_state, &config, &logical,
+                            device_config_x_max(), device_config_y_max(),
+                            portrait ? 766 : 1149, portrait ? 1149 : 766, frame.time_ms);
+                        owned |= point_state.owned;
+                        if (point.cancel) aux_output_cancel_gesture();
+                        if (point.handoff) edge_gesture_reset(&edge_state);
+                        if (point.steps && !(point.initial ?
+                            aux_output_once(point.action, point.steps, frame.generation, frame.time_ms) :
+                            usb_aux_steps(point.action, point.steps, frame.generation, frame.time_ms))) {
+                            input_recover(); continue;
+                        }
+                        point_schedule();
+                    }
+                    edge_result_t edge = {0};
+                    if (!point.suppress) edge = edge_gesture_update(&edge_state, &config, &logical,
                         device_config_x_max(), device_config_y_max());
-                    if (edge.cancelled) usb_aux_cancel();
+                    edge.suppress |= point.suppress;
+                    if (owned) edge.tap = false;
+                    if (edge.cancelled) aux_output_cancel_gesture();
                     if (edge.steps && !usb_aux_steps(edge.action, edge.steps, frame.generation, frame.time_ms)) {
                         input_recover(); continue;
                     }
@@ -595,7 +637,8 @@ void i2c_queue_task(void *arg) {
                         memset(tp_msg.fingers, 0, sizeof(tp_msg.fingers)); active_finger_count = 0;
                     }
                 }
-                ptp_update_force_click_button(&tp_msg, active_finger_count);
+                if (point_state.owned) ptp_reset_force_click(&tp_msg);
+                else ptp_update_force_click_button(&tp_msg, active_finger_count);
                 tp_msg.actual_count = active_finger_count > 0 ? active_finger_count : 1;
                 input_report_t report = {.mode = input_mode(), .time_ms = frame.time_ms};
                 bool tap = false;

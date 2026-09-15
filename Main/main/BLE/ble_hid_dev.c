@@ -37,3 +37,9 @@ esp_err_t hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
 
     return ESP_ERR_NOT_FOUND;
 }
+
+uint16_t hid_dev_report_handle(uint8_t id)
+{
+    hid_report_map_t *r = hid_dev_rpt_by_id(id, HID_REPORT_TYPE_INPUT);
+    return r ? r->handle : 0;
+}

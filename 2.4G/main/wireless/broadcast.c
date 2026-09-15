@@ -1,3 +1,4 @@
+#include "wireless/receiver_extension.h"
 #include "wireless.h"
 #include "input/input_pipeline.h"
 #include "esp_now.h"
@@ -10,6 +11,8 @@ static TaskHandle_t worker;
 static uint32_t requested_serial, flight_serial, retry_at, control_failures;
 static bool control_pending, control_in_flight, control_done, control_success, retry_wait;
 static uint8_t flight_mode;
+static bool flight_ack;
+static uint8_t ack_packet[38], ack_mac[6];
 
 void wireless_register_worker(void)
 {
@@ -49,7 +52,10 @@ void wireless_control_step(uint32_t now)
     if (control_in_flight && control_done) {
         control_done = false;
         control_in_flight = false;
-        if (control_success) {
+        if (flight_ack) {
+            receiver_ext_ack_complete(control_success);
+            if (!control_success) { ++control_failures; retry_at = now; retry_wait = true; }
+        } else if (control_success) {
             if (flight_serial == requested_serial) control_pending = false;
         } else {
             ++control_failures;
@@ -57,8 +63,10 @@ void wireless_control_step(uint32_t now)
             retry_wait = true;
         }
     }
-    if (!control_in_flight && control_pending && (!retry_wait || (uint32_t)(now - retry_at) >= 20U)) {
+    bool ack = !control_in_flight && receiver_ext_ack(ack_packet,ack_mac);
+    if (!control_in_flight && (control_pending || ack) && (!retry_wait || (uint32_t)(now - retry_at) >= 20U)) {
         flight_serial = requested_serial;
+        flight_ack = ack;
         control_in_flight = true;
         control_done = false;
         retry_wait = false;
@@ -67,7 +75,13 @@ void wireless_control_step(uint32_t now)
     taskEXIT_CRITICAL(&control_lock);
     if (submit) {
         flight_mode = (uint8_t)input_mode();
-        if (esp_now_send(broadcast_mac, &flight_mode, 1) != ESP_OK) {
+        if (flight_ack && !esp_now_is_peer_exist(ack_mac)) {
+            esp_now_peer_info_t peer = {.channel = ESPNOW_CHANNEL, .ifidx = WIFI_IF_STA};
+            memcpy(peer.peer_addr,ack_mac,6);
+            (void)esp_now_add_peer(&peer);
+        }
+        if (esp_now_send(flight_ack ? ack_mac : broadcast_mac,
+                         flight_ack ? ack_packet : &flight_mode, flight_ack ? 38 : 1) != ESP_OK) {
             taskENTER_CRITICAL(&control_lock);
             control_in_flight = false;
             ++control_failures;

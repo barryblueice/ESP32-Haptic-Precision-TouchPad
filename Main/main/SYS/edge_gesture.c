@@ -5,6 +5,7 @@ enum { EDGE_IDLE, EDGE_CANDIDATE, EDGE_CAPTURED, EDGE_BLOCKED, EDGE_SUPPRESSED }
 void edge_gesture_reset(edge_gesture_t *s) { memset(s, 0, sizeof(*s)); }
 static bool inside(unsigned edge, const uint8_t *record, uint16_t x, uint16_t y, uint16_t xmax, uint16_t ymax)
 {
+    if (!xmax || !ymax || x > xmax || y > ymax) return false;
     uint32_t distance = edge == 0 ? y : edge == 1 ? ymax - y : edge == 2 ? x : xmax - x;
     return distance * 100 <= (uint32_t)record[3] * (edge < 2 ? ymax : xmax);
 }

@@ -52,12 +52,12 @@ static void config_task(void *arg)
         }
         rstp_request_t request;
         if (!rstp_decode(cmd.data, cmd.size, &request)) continue;
-        uint8_t payload[32] = {0}; uint16_t size = 0, status = request.status;
+        uint8_t payload[DEVICE_CONFIG_SIZE] = {0}; uint16_t size = 0, status = request.status;
         if (!status) switch (request.command) {
         case RSTP_INFO:
-            rstp_put32(payload, device_config_capabilities()); payload[4] = 1; payload[6] = 1; payload[10] = 1; size = 12; break;
+            rstp_put32(payload, device_config_capabilities()); payload[4] = 2; payload[6] = 0; payload[10] = 2; size = 12; break;
         case RSTP_READ: {
-            device_config_t config; device_config_get(&config); memcpy(payload, config.bytes, 32); size = 32; break;
+            device_config_t config; device_config_get(&config); memcpy(payload, config.bytes, DEVICE_CONFIG_SIZE); size = DEVICE_CONFIG_SIZE; break;
         }
         case RSTP_WRITE: status = device_config_save(&request.config); break;
         }

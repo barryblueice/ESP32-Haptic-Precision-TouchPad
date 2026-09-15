@@ -46,7 +46,8 @@ set(srcs
     "SYS/device_config.c"
     "SYS/edge_gesture.c"
     "USB/usb_config.c"
-    "USB/usb_aux.c"
+    "SYS/aux_output.c"
+    "SYS/point_gesture.c"
 
     "GPIO/irq_func_btn.c"
     "GPIO/irq_tp_int.c"

@@ -1,3 +1,4 @@
+#include "esp_gatt_common_api.h"
 #include "SYS/input_pipeline.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -189,6 +190,7 @@ void ble_bluedroid_init() {
     ret = esp_bluedroid_enable();
     ESP_ERROR_CHECK(ret);
 
+    ESP_ERROR_CHECK(esp_ble_gatt_set_local_mtu(64));
     ESP_ERROR_CHECK(esp_hidd_profile_init());
 
     esp_ble_gap_register_callback(gap_event_handler);

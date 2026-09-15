@@ -78,6 +78,7 @@ const uint8_t mouse_hid_report_descriptor[] = {
     0xC0,                               // END_COLLECTION (Physical)
     0xC0,                               // END_COLLECTION (Application)
 
+#include "SYS/aux_descriptor.inc"
 };
 
 const uint8_t legacy_ptp_hid_report_descriptor[] = {
@@ -388,7 +389,7 @@ const uint8_t legacy_ptp_hid_report_descriptor[] = {
     0xc0,                               // END_COLLECTION
 };
 
-const uint8_t haptic_ptp_hid_report_descriptor[] = {
+uint8_t haptic_ptp_hid_report_descriptor[] = {
 
     //TOUCH PAD input TLC
     0x05, 0x0d,                         // USAGE_PAGE (Digitizers)
@@ -419,7 +420,7 @@ const uint8_t haptic_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    0x26, 0xFE, 0x08,                   // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
     0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
@@ -476,7 +477,7 @@ const uint8_t haptic_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    0x26, 0xFE, 0x08,                   // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
     0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
@@ -533,7 +534,7 @@ const uint8_t haptic_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    0x26, 0xFE, 0x08,                   // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
     0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
@@ -590,7 +591,7 @@ const uint8_t haptic_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    0x26, 0xFE, 0x08,                   // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
     0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
@@ -647,7 +648,7 @@ const uint8_t haptic_ptp_hid_report_descriptor[] = {
     0x05, 0x01,                         // USAGE_PAGE (Generic Desktop)
     0x09, 0x30,                         // USAGE (X)
     0x15, 0x00,                         // LOGICAL_MINIMUM (0)
-    0x26, 0xFA, 0x08,                   // LOGICAL_MAXIMUM
+    0x26, 0xFE, 0x08,                   // LOGICAL_MAXIMUM
 
     0x35, 0x00,                         // PHYSICAL_MINIMUM (0)
     0x46, 0x7D, 0x04,                   // PHYSICAL_MAXIMUM
@@ -885,5 +886,23 @@ uint8_t const desc_configuration[] = {
     TUD_HID_DESCRIPTOR(0, 0, false, sizeof(generic_hid_report_descriptor), EPNUM_GENERIC_IN, 64, 10),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(haptic_ptp_hid_report_descriptor), HAPTIC_EPNUM_TP_IN, 64, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS),
     TUD_HID_DESCRIPTOR(2, 0, HID_ITF_PROTOCOL_NONE, sizeof(legacy_ptp_hid_report_descriptor), LEGACY_EPNUM_TP_IN, 64, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS),
-    TUD_HID_DESCRIPTOR(3, 0, HID_ITF_PROTOCOL_MOUSE, sizeof(mouse_hid_report_descriptor), EPNUM_MOUSE_IN, 8, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS)
+    TUD_HID_DESCRIPTOR(3, 0, HID_ITF_PROTOCOL_MOUSE, sizeof(mouse_hid_report_descriptor), EPNUM_MOUSE_IN, 16, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS)
 };
+
+void receiver_descriptor_rotation(uint8_t rotation)
+{
+    static bool portrait;
+    bool next = (rotation & 1) != 0;
+    if (next == portrait) return;
+    portrait = next;
+    for (unsigned i=0; i<sizeof(haptic_ptp_hid_report_descriptor);) {
+        uint8_t tag=haptic_ptp_hid_report_descriptor[i]; unsigned n=tag&3; if(n==3)n=4;
+        if(n==2 && i+2<sizeof(haptic_ptp_hid_report_descriptor) && (tag==0x26 || tag==0x46)) {
+            uint16_t v=haptic_ptp_hid_report_descriptor[i+1]|(haptic_ptp_hid_report_descriptor[i+2]<<8);
+            if(tag==0x26) { if(v==2302)v=1532; else if(v==1532)v=2302; }
+            else { if(v==1149)v=766; else if(v==766)v=1149; }
+            haptic_ptp_hid_report_descriptor[i+1]=v; haptic_ptp_hid_report_descriptor[i+2]=v>>8;
+        }
+        i+=n+1;
+    }
+}

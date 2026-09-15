@@ -1,3 +1,5 @@
+#include "SYS/aux_output.h"
+#include "wireless/receiver_extension.h"
 #include "usb/usbhid.h"
 #include "input/input_pipeline.h"
 #include "wireless/wireless.h"
@@ -17,6 +19,9 @@
 static SemaphoreHandle_t usb_mutex;
 static input_report_t usb_pending, usb_flight;
 static bool usb_have_pending, usb_busy, dfu_requested;
+static bool usb_aux_flight, prefer_aux = true;
+static aux_output_report_t auxiliary;
+static uint8_t surface_rotation;
 static uint8_t button_press_threshold = 2, haptic_click_intensity = 2;
 
 tusb_desc_device_t const desc_device = {
@@ -48,7 +53,9 @@ static void usb_complete(uint8_t instance, bool success)
 {
     if (instance < REPORT_HAPTIC || instance > REPORT_MOUSE) return;
     xSemaphoreTake(usb_mutex, portMAX_DELAY);
-    if (usb_busy && instance == usb_flight.kind) {
+    if (usb_busy && usb_aux_flight && instance == REPORT_MOUSE) {
+        usb_busy = usb_aux_flight = false; aux_output_complete(success);
+    } else if (usb_busy && !usb_aux_flight && instance == usb_flight.kind) {
         usb_busy = false;
         input_complete(&usb_flight, success);
     }
@@ -137,7 +144,8 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
     case TINYUSB_EVENT_ATTACHED:
         /* A bus reset can reconfigure without a preceding DETACHED callback.
          * Mount means TinyUSB has reopened/reset the endpoint state. */
-        usb_busy = false;
+        usb_busy = usb_aux_flight = false;
+        aux_output_reset(true);
         usb_have_pending = false;
         input_set_mode(TP_MOUSE_MODE);
         input_set_usb(true);
@@ -147,14 +155,18 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         input_set_usb(false);
         input_set_mode(TP_MOUSE_MODE);
         /* TinyUSB has closed/reset endpoints; no transfer survives this event. */
-        usb_busy = false;
+        usb_busy = usb_aux_flight = false;
+        aux_output_reset(false);
         usb_have_pending = false;
         wireless_request_mode();
         break;
     case TINYUSB_EVENT_SUSPENDED:
+        aux_output_cancel();
+        receiver_ext_usb_ready(false);
         input_set_usb(false);
         break;
     case TINYUSB_EVENT_RESUMED:
+        aux_output_resume();
         input_set_usb(true);
         wireless_request_mode();
         break;
@@ -173,12 +185,39 @@ static void enter_dfu_mode(void)
 
 static void usbhid_step(void)
 {
+    wire_surface_t surface;
+    if (receiver_ext_apply(&surface)) {
+        input_recover(); aux_output_cancel();
+        if ((surface.rotation & 1) != (surface_rotation & 1)) {
+            receiver_ext_usb_ready(false);
+            tud_disconnect(); vTaskDelay(pdMS_TO_TICKS(100));
+            xSemaphoreTake(usb_mutex,portMAX_DELAY);
+            usb_busy = usb_aux_flight = usb_have_pending = false;
+            aux_output_reset(false);
+            receiver_descriptor_rotation(surface.rotation);
+            xSemaphoreGive(usb_mutex);
+            tud_connect();
+        }
+        surface_rotation = surface.rotation;
+        receiver_ext_applied(&surface);
+    }
+    receiver_ext_usb_ready(tud_mounted() && !tud_suspended());
     xSemaphoreTake(usb_mutex, portMAX_DELAY);
     bool dfu = dfu_requested;
     dfu_requested = false;
     if (usb_have_pending && !input_current(&usb_pending)) usb_have_pending = false;
     /* One in-flight input globally preserves cross-interface recovery ordering. */
     if (!usb_busy && !usb_have_pending) usb_have_pending = input_take(&usb_pending);
+    if (!dfu && !usb_busy && tud_mounted() && !tud_suspended() && tud_hid_n_ready(REPORT_MOUSE) &&
+        (!usb_have_pending || !usb_pending.release) &&
+        (aux_output_release_pending() || prefer_aux || !usb_have_pending) &&
+        aux_output_take(&auxiliary,input_generation(),input_now_ms())) {
+        usb_busy = usb_aux_flight = true;
+        if (!aux_output_report_current(&auxiliary) ||
+            !tud_hid_n_report(REPORT_MOUSE,auxiliary.id,auxiliary.data,auxiliary.length)) {
+            usb_busy = usb_aux_flight = false; aux_output_unsubmitted();
+        } else prefer_aux = false;
+    }
     if (!dfu && !usb_busy && usb_have_pending && tud_mounted() && !tud_suspended()) {
         uint8_t instance = (uint8_t)usb_pending.kind;
         if (tud_hid_n_ready(instance) && input_current(&usb_pending)) {
@@ -187,6 +226,7 @@ static void usbhid_step(void)
             uint8_t id = instance == REPORT_HAPTIC ? REPORTID_HAPTIC_TOUCHPAD :
                          instance == REPORT_LEGACY ? REPORTID_LEGACY_TOUCHPAD : REPORTID_MOUSE;
             if (tud_hid_n_report(instance, id, &usb_flight.data, report_size(usb_flight.kind))) {
+                prefer_aux = true;
                 input_submitted(&usb_flight);
                 usb_have_pending = false;
             } else {
