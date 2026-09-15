@@ -745,7 +745,7 @@ uint8_t haptic_ptp_hid_report_descriptor[] = {
     0x65, 0x00,                         // Unit(None)
     0x55, 0x00,                         // UnitExponent(0)
     0x15, 0x00,                         // LogicalMinimum(0)
-    0x25, 0x04,                         // LogicalMaximum(4)
+    0x25, 0x64,                         // LogicalMaximum(100)
     0x95, 0x01,                         // ReportCount(1)
     0x75, 0x08,                         // ReportSize(8)
     0xB1, 0x02,                         // Feature(Data,Var,Abs)

@@ -15,7 +15,7 @@ static void reset_all(void)
     mounted = endpoint_ready = usb_accept = true;
     suspended = false;
     usb_count = dfu_writes = restarts = 0;
-    button_press_threshold = haptic_click_intensity = 2;
+    receiver_settings_reset_for_test();
     init_error = sdk_calls = fail_at = lock_error = mutex_depth = 0;
     peer_added = send_registered = recv_registered = false;
     last_seen_timestamp = 0;
@@ -355,12 +355,12 @@ EXPORT int check_set_report_routing_and_dfu(void)
     CHECK(input_mode() == TP_PTP_MODE && control_pending);
     data[0] = 0xff;
     tud_hid_set_report_cb(REPORT_HAPTIC, 0x40, HID_REPORT_TYPE_FEATURE, data, 1);
-    CHECK(button_press_threshold == 3 && !dfu_requested);
+    CHECK(receiver_settings_get(WIRE_SETTING_LEVEL) == 2 && !dfu_requested);
     tud_hid_set_report_cb(REPORT_HAPTIC, 0x41, HID_REPORT_TYPE_FEATURE, data, 1);
-    CHECK(haptic_click_intensity == 4);
+    CHECK(receiver_settings_get(WIRE_SETTING_INTENSITY) == 63);
     data[0] = 0;
     tud_hid_set_report_cb(REPORT_HAPTIC, 0x40, HID_REPORT_TYPE_FEATURE, data, 1);
-    CHECK(button_press_threshold == 1);
+    CHECK(receiver_settings_get(WIRE_SETTING_LEVEL) == 2);
     data[0] = 0xff;
     tud_hid_set_report_cb(REPORT_MOUSE, 0, HID_REPORT_TYPE_OUTPUT, data, 1);
     tud_hid_set_report_cb(0, 0, HID_REPORT_TYPE_FEATURE, data, 1);

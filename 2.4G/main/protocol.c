@@ -34,6 +34,11 @@ bool wireless_decode(const uint8_t *data, int len, wireless_msg_t *out)
         if (!valid) return false;
         size = 34;
     }
+    if (type == WIRE_SETTINGS_ACK) {
+        wire_settings_t settings;
+        if (!wire_settings_decode(data,len,type,&settings)) return false;
+        size = 34;
+    }
     if (type == VBUS_STATUS) size = sizeof(vbus_msg_t);
     if (type == ALIVE_MODE) size = sizeof(alive_msg_t);
     if (!size || (size_t)len < 4 + size) return false;

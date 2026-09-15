@@ -1,4 +1,5 @@
 #include "wireless/receiver_extension.h"
+#include "wireless/receiver_settings.h"
 #include "wireless.h"
 #include <stddef.h>
 #include "input/input_pipeline.h"
@@ -39,6 +40,9 @@ static void wireless_receive_step(void)
     for (unsigned i = 0; i < RECEIVE_CAPACITY && xQueueReceive(receive_queue, &frame, 0) == pdPASS; ++i) {
         const wireless_msg_t *p = &frame.packet;
         if (input_now_ms() - frame.time_ms > REPORT_MAX_AGE_MS) continue;
+        if (p->type == WIRE_SETTINGS_ACK) {
+            receiver_settings_receive(frame.mac,(const uint8_t *)p,frame.time_ms); continue;
+        }
         if (p->type == WIRE_AUX || p->type == WIRE_SURFACE) {
             receiver_ext_receive(frame.mac,(const uint8_t *)p,frame.time_ms); continue;
         }

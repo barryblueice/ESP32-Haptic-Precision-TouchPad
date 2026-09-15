@@ -1,5 +1,6 @@
 #include "SYS/aux_output.h"
 #include "wireless/receiver_extension.h"
+#include "wireless/receiver_settings.h"
 #include "usb/usbhid.h"
 #include "input/input_pipeline.h"
 #include "wireless/wireless.h"
@@ -22,7 +23,7 @@ static bool usb_have_pending, usb_busy, dfu_requested;
 static bool usb_aux_flight, prefer_aux = true;
 static aux_output_report_t auxiliary;
 static uint8_t surface_rotation;
-static uint8_t button_press_threshold = 2, haptic_click_intensity = 2;
+
 
 tusb_desc_device_t const desc_device = {
     .bLength = sizeof(tusb_desc_device_t), .bDescriptorType = TUSB_DESC_DEVICE,
@@ -91,8 +92,8 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t id, hid_report_type_t t
         return count;
     }
     if (!haptic) return 0;
-    if (id == REPORTID_BUTTON_PRESS_THRESHOLD) { buffer[0] = button_press_threshold; return 1; }
-    if (id == REPORTID_HAPTIC_INTENSITY) { buffer[0] = haptic_click_intensity; return 1; }
+    if (id == REPORTID_BUTTON_PRESS_THRESHOLD) { buffer[0] = receiver_settings_get(WIRE_SETTING_LEVEL); return 1; }
+    if (id == REPORTID_HAPTIC_INTENSITY) { buffer[0] = receiver_settings_get(WIRE_SETTING_INTENSITY); return 1; }
     if (id == REPORTID_HAPTIC_WAVEFORM_LIST) {
         static const uint8_t waveforms[15] = {1,16, 2,16, 3,16, 4,16, 5,16, 20,20,20,20,20};
         uint16_t count = reqlen < sizeof(waveforms) ? reqlen : sizeof(waveforms);
@@ -125,13 +126,15 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t id, hid_report_type_t type,
             input_set_mode(buffer[0] == 3 ? TP_PTP_MODE : TP_MOUSE_MODE);
             wireless_request_mode();
         } else if (haptic && id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-            button_press_threshold = buffer[0] < 1 ? 1 : (buffer[0] > 3 ? 3 : buffer[0]);
+            for (unsigned i=1;i<size;++i) if (buffer[i]) return;
+            receiver_settings_set(WIRE_SETTING_LEVEL,buffer[0]);
         } else if (haptic && id == REPORTID_HAPTIC_INTENSITY) {
-            haptic_click_intensity = buffer[0] > 4 ? 4 : buffer[0];
+            for (unsigned i=1;i<size;++i) if (buffer[i]) return;
+            receiver_settings_set(WIRE_SETTING_INTENSITY,buffer[0]);
         }
     } else if (haptic && type == HID_REPORT_TYPE_OUTPUT &&
                id == REPORTID_HAPTIC_MANUAL_TRIGGER && size >= 7) {
-        /* Existing receiver-local command; the current radio ABI has no haptic downlink. */
+        /* Manual waveform playback is not part of Windows Feature settings. */
         ESP_LOGD("USB", "Local haptic output, %u bytes", size);
     }
 }

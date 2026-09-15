@@ -62,8 +62,10 @@ switch a mouse build into PTP.
 
 ## Saving and upgrading
 
-- Configure the touchpad over USB. Saved point, edge and rotation settings are
-  used by all three PTP transports. Wireless configuration writes are not added.
+- Configure points, edges and rotation over USB. Saved settings are used by all
+  three PTP transports. Windows intensity and button threshold Features also
+  synchronize over 2.4 GHz as described below; full RSTP configuration writes
+  still require USB.
 - NVS `storage/rstp_config` contains an 8-byte `RSCF` header and 52-byte v2 data.
   Valid v1 records are migrated with corner/conversion defaults; a failed
   migration commit leaves the original record available for retry. Unknown or
@@ -94,6 +96,8 @@ retain their layout. The definitions shared by both firmwares are in
 | 5: action | session uint32, sequence uint32, action uint8, steps int16, hold uint8 |
 | 6: surface | extension version uint8 = 2, rotation uint8, nonzero session uint32 |
 | 7: surface ACK | same payload as the accepted surface record |
+| 8: Windows settings request | settings version uint8 = 1, session uint32, client uint32, sequence uint32, mask uint8, intensity uint8, level uint8, status uint8 = 0 |
+| 9: Windows settings ACK | same identifiers/mask, actual intensity/level, status uint8 |
 
 Actions 1–6 use the existing edge action categories and signed direction.
 Action 0 with zero steps and hold=0 cancels queued actions and releases held keys.
@@ -109,6 +113,48 @@ Wheel reports do not change the receiver's PTP/mouse mode.
 The touchpad sends surface information once per second. Without a recent ACK
 (2.5 seconds), it pauses PTP input and clears pending actions. A live receiver
 session belongs to one transmitter. Existing heartbeats and mode commands remain.
+
+### Windows haptic settings over 2.4 GHz
+
+The receiver formerly kept Feature `0x40` (button threshold) and `0x41` (intensity)
+only in local variables, so Windows changes never reached the touchpad. Its
+intensity descriptor also exposed 0–4 instead of the wired path's 0–100. This is
+a confirmed code defect; without hardware acceptance it is not proof of the only
+cause of the reported symptom.
+
+The receiver now exposes intensity 0–100 and level 1–3. GET returns the last
+values confirmed by Main (defaults 63/2 before initial synchronization). SET
+accepts a separate or embedded report ID and zero padding; invalid values or
+nonzero padding are ignored. Writes are asynchronous: immediate GET may still
+return the previous confirmed value until Main applies and acknowledges the SET.
+
+Settings messages use bytes 4–20; bytes 21–37 must be zero. Mask bit 0 selects
+intensity and bit 1 selects level. A zero-mask request queries current values;
+unselected request fields are zero. The nonzero session comes from the surface
+handshake, client identifies a receiver boot, and sequence identifies a transaction.
+A new client first queries before writing. ACK status is 0 success, 1 busy,
+2 storage failure, or 3 unsupported. ACKs always contain both actual values.
+
+Main applies selected fields together through `device_config_set_controls`,
+preserving the NVS structure and other configuration fields. A dedicated worker
+performs storage and waits for the parser boundary; Wi-Fi callbacks and the sender
+never wait for NVS. Successful duplicate commands replay the cached ACK without
+writing flash again. Busy requests may retry; terminal errors return actual
+unchanged values. Configuration changes retain the existing source recovery.
+
+The receiver coalesces each field independently, retries unanswered transactions
+every 250 ms, queries initially and once per second when idle, and re-queries
+after a link/session change. Old ACKs cannot clear newer edits. Commands and
+replies share each firmware's existing serialized ESP-NOW sender. Settings send
+failures do not reset Main input or cancel local feedback. Types 0–7 retain their
+layouts; this settings extension requires both updated firmwares. Manual waveform
+Output `0x43` and third-party waveform APIs are outside this change.
+
+After flashing both firmwares, reconnect the USB receiver so Windows reads its
+updated descriptor. Hardware acceptance must cover strength 0/25/63/100, all
+three threshold levels, rapid successive changes, offline changes/reconnection,
+power-cycle retention, and a wired-mode comparison. No firmware was flashed by
+these software checks.
 
 ## Local feedback in 2.4 GHz mode
 
@@ -148,6 +194,7 @@ python tests/run_ble_tests.py $env:HOST_CLANG
 python tests/run_receiver_tests.py $env:HOST_CLANG
 python tests/run_input_irq_tests.py $env:HOST_CLANG
 python tests/run_wireless_haptic_tests.py $env:HOST_CLANG
+python tests/run_wireless_settings_tests.py $env:HOST_CLANG
 ```
 
 The receiver's existing `tools/receiver/host_checks.py` also invokes the expanded
@@ -160,7 +207,7 @@ Main build. It reads the existing compile commands, recompiles seven project
 objects, replaces those members in a copy of libmain, and links against the
 cached SDK libraries. Its test image is under `build/validation/ble-ptp`.
 
-Automated validation covers 23 core scenarios, 32 receiver scenarios (including
+Automated validation covers 23 core scenarios, 38 receiver scenarios (including
 27 existing regressions) and 4 BLE scenarios. These contain the 32 sleep/mask
 combinations, 64 start-point/mask combinations, all 12 corner bindings, physical
 circle boundaries, rotations, handoff, repetition, cancellation, migration and
@@ -175,13 +222,19 @@ Five touch IRQ scenarios cover a pending signal before interrupt enable, idle an
 duplicate wakes, coalesced reports, an enable-time edge race, and bounded batches
 with read-error retry.
 
-The wireless haptic suite adds 16 production-C scenarios covering the parser,
+The wireless haptic suite adds 17 production-C scenarios covering the parser,
 pressure algorithm, haptic event queue, host report queue and ESP-NOW sender.
 These include offline feedback, reconnect without replay, control/pointer/action
 failures, queue pressure, source recovery, mode changes, sleep/fault/zero strength,
 simulated taps/drags and native mouse buttons. Hardware acceptance still requires
 continuous clicks, held dragging, receiver disconnect/reconnect, idle wake, and
 a USB comparison on the actual touchpad; host tests do not verify motor output.
+
+Six Main settings scenarios exercise the production codec, asynchronous worker,
+and configuration/NVS path. Receiver settings cases cover initial query, atomic
+field updates, late replies, retry, busy/storage failure, peer/session validation,
+reconnect, USB padding, sender serialization, receive routing, and the actual HID
+descriptor ranges. Together all six suites cover 93 scenarios.
 
 ### Startup input diagnostics
 

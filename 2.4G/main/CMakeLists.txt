@@ -2,6 +2,7 @@ idf_component_register(
     SRCS "main.c"
         "protocol.c"
         "wireless/receiver_extension.c"
+        "wireless/receiver_settings.c"
         "../../Main/main/SYS/aux_output.c"
         "input/report_buffer.c"
         "input/input_pipeline.c"
