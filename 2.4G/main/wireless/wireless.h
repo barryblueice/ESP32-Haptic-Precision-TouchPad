@@ -15,3 +15,4 @@ void wireless_register_worker(void);
 void wireless_wake_worker(void);
 void monitor_link_task(void *arg);
 void wireless_heartbeat_seen(TickType_t tick);
+void wireless_led_init(void);

@@ -12,6 +12,7 @@ void app_main(void)
     /* Prepare the radio peer before USB callbacks can request a mode command. */
     wireless_init();
     usbhid_init();
+    wireless_led_init();
     uint8_t mac[6];
     ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_STA));
     ESP_LOGI("MAIN", "Device MAC: %02X:%02X:%02X:%02X:%02X:%02X",

@@ -19,6 +19,7 @@ static void reset_all(void)
     init_error = sdk_calls = fail_at = lock_error = mutex_depth = 0;
     peer_added = send_registered = recv_registered = false;
     last_seen_timestamp = 0;
+    heartbeat_online = connection_led_ready = false;
     gpio_level = gpio_writes = 0;
     nvs_init_result = nvs_erase_result = nvs_open_result = nvs_get_result = nvs_set_result = nvs_commit_result = 0;
     nvs_inits = nvs_erases = nvs_opens = nvs_sets = nvs_commits = nvs_closes = 0;
@@ -405,20 +406,124 @@ EXPORT int check_receive_validation_fifo_overflow(void)
     wireless_receive_step(); CHECK(!reports.count && reports.recovering && !qcount);
     return 0;
 }
-EXPORT int check_heartbeat_is_not_neutral_and_gpio_unchanged(void)
+EXPORT int check_heartbeat_is_not_neutral_and_gpio_connected(void)
 {
     ready_for(REPORT_MOUSE);
+    wireless_led_init();
     receive_queue = xQueueCreate(16, sizeof(receive_frame_t));
     input_recover();
     esp_now_recv_info_t info = {0};
     wireless_msg_t p = {.type = ALIVE_MODE};
     p.payload.alive.vbus_level = 1;
     fake_now = 100; wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
-    CHECK(gpio_level == 1 && last_seen_timestamp == 100 && reports.recovering && !reports.all_up);
+    CHECK(gpio_level == 0 && link_seen_at == 100 && reports.recovering && !reports.all_up);
     test_steps = 1; monitor_link_task(NULL);
     CHECK(gpio_level == 0);
     fake_now = 5101; test_steps = 1; monitor_link_task(NULL);
     CHECK(gpio_level == 1);
+    return 0;
+}
+EXPORT int check_gpio_startup_timeout_and_reconnect(void)
+{
+    reset_all(); wireless_init(); wireless_led_init();
+    CHECK(gpio_level == 1 && !link_online);
+    test_steps = 1; monitor_link_task(NULL);
+    CHECK(gpio_level == 1);
+    fake_now = 6000; test_steps = 1; monitor_link_task(NULL);
+    CHECK(gpio_level == 1);
+    esp_now_recv_info_t info = {0};
+    wireless_msg_t p = {.type = ALIVE_MODE};
+    fake_now = 7000;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 0 && link_online);
+    fake_now = 12000; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 0);
+    fake_now = 12001; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 1 && !heartbeat_online);
+    fake_now = 13000;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 0 && link_online);
+    return 0;
+}
+EXPORT int check_gpio_vbus_and_invalid_packets_do_not_connect(void)
+{
+    reset_all(); wireless_init(); wireless_led_init();
+    esp_now_recv_info_t info = {0};
+    wireless_msg_t p = {.type = VBUS_STATUS};
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 1 && !heartbeat_online);
+    p.type = ALIVE_MODE;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, 4); wireless_receive_step();
+    CHECK(gpio_level == 1 && !heartbeat_online);
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p));
+    fake_now = REPORT_MAX_AGE_MS + 1; wireless_receive_step();
+    CHECK(gpio_level == 0 && heartbeat_online && !link_online);
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 0);
+    p.type = VBUS_STATUS; p.payload.vbus.vbus_level = 1;
+    fake_now = 5000;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 0);
+    fake_now = REPORT_MAX_AGE_MS + 5002; test_steps = 1; monitor_link_task(NULL);
+    CHECK(gpio_level == 1 && !heartbeat_online);
+    return 0;
+}
+EXPORT int check_gpio_input_traffic_and_clock_wrap(void)
+{
+    reset_all(); wireless_init(); wireless_led_init();
+    esp_now_recv_info_t info = {0};
+    wireless_msg_t p = {.type = MOUSE_MODE};
+    fake_now = UINT32_MAX - 1000;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 0 && link_online);
+    fake_now = 3999; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 0);
+    fake_now = 4000; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 1);
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    CHECK(gpio_level == 0);
+    fake_now = 8000;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p)); wireless_receive_step();
+    fake_now = 10000; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 0);
+    fake_now = 13001; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 1);
+    return 0;
+}
+EXPORT int check_gpio_receive_bypasses_full_and_delayed_queue(void)
+{
+    reset_all(); wireless_init(); wireless_led_init();
+    esp_now_recv_info_t info = {0};
+    wireless_msg_t p = {.type = VBUS_STATUS};
+    for (unsigned i = 0; i < RECEIVE_CAPACITY; ++i)
+        wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p));
+    CHECK(gpio_level == 1 && !heartbeat_online);
+    p.type = ALIVE_MODE;
+    fake_now = 100;
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p));
+    CHECK(gpio_level == 0 && heartbeat_online && reports.stats.rx_overflows == 1);
+    /* The heartbeat never entered the full queue, but the radio is connected. */
+    fake_now = 1000; wireless_receive_step();
+    CHECK(gpio_level == 0 && !link_online);
+    /* Historical periodic output restores the level even without a state edge. */
+    gpio_level = 1;
+    test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 0);
+    fake_now = 5101; test_steps = 1; monitor_link_task(NULL); CHECK(gpio_level == 1);
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p));
+    CHECK(gpio_level == 0);
+    return 0;
+}
+EXPORT int check_gpio_packets_before_led_initialization(void)
+{
+    reset_all(); wireless_init();
+    esp_now_recv_info_t info = {0};
+    wireless_msg_t p = {.type = ALIVE_MODE};
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p));
+    CHECK(heartbeat_online && !connection_led_ready && !gpio_writes);
+    usbhid_init(); wireless_led_init();
+    CHECK(connection_led_ready && gpio_level == 0);
+    reset_all(); wireless_init();
+    wifi_now_recv_cb(&info, (uint8_t *)&p, sizeof(p));
+    fake_now = 5001; usbhid_init(); wireless_led_init();
+    CHECK(gpio_level == 1 && !heartbeat_online);
+    for (int failure = 1; failure <= 2; ++failure) {
+        reset_all(); fail_at = failure; wireless_led_init();
+        CHECK(init_error && !connection_led_ready);
+    }
     return 0;
 }
 EXPORT int check_link_loss_recovery(void)
