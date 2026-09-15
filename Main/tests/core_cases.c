@@ -18,7 +18,9 @@ EXPORT int check_config_masks(void)
     for(unsigned bit=5;bit<8;++bit){c.bytes[6]=1U<<bit;CHECK(!device_config_valid(&c));}
     c=configured();for(unsigned i=0;i<4;++i){
         unsigned b=32+i*5;c.bytes[b+1]=13;CHECK(!device_config_valid(&c));c.bytes[b+1]=3;
-        c.bytes[b+3]=16;CHECK(!device_config_valid(&c));c.bytes[b+3]=15;
+        c.bytes[b+3]=0;CHECK(!device_config_valid(&c));
+        for(unsigned radius=1;radius<=30;++radius){c.bytes[b+3]=radius;CHECK(device_config_valid(&c));}
+        c.bytes[b+3]=31;CHECK(!device_config_valid(&c));c.bytes[b+3]=30;
         c.bytes[b+4]=0;CHECK(!device_config_valid(&c));c.bytes[b+4]=10;
         c.bytes[b+2]=2;CHECK(!device_config_valid(&c));c.bytes[b+2]=0;
     }
@@ -38,6 +40,7 @@ EXPORT int check_capabilities(void)
 EXPORT int check_storage_records(void)
 {
     device_config_t c=configured(),out;uint8_t record[60];c.bytes[6]=0x0b;c.bytes[7]=0xa5;
+    for(unsigned i=0;i<4;++i)c.bytes[35+i*5]=30;
     device_config_store_record(record,&c);CHECK(device_config_load_record(&out,record,60));CHECK(!memcmp(&c,&out,52));
     record[4]=1;record[6]=32;record[14]=1;record[15]=5;
     CHECK(device_config_load_record(&out,record,40));CHECK(out.bytes[6]==1&&out.bytes[7]==5);
@@ -48,7 +51,8 @@ EXPORT int check_storage_records(void)
 EXPORT int check_protocol_errors(void)
 {
     uint8_t b[64]={0};memcpy(b,"RSTP",4);b[4]=1;b[5]=3;b[6]=1;b[8]=52;
-    device_config_t c=configured();memcpy(b+12,c.bytes,52);rstp_request_t r;
+    device_config_t c=configured();for(unsigned i=0;i<4;++i)c.bytes[35+i*5]=30;
+    memcpy(b+12,c.bytes,52);rstp_request_t r;
     CHECK(rstp_decode(b,64,&r)&&!r.status);b[8]=32;CHECK(rstp_decode(b,64,&r)&&r.status==RSTP_LENGTH);
     b[8]=52;b[18]=0x20;CHECK(rstp_decode(b,64,&r)&&r.status==RSTP_INVALID);
     b[4]=2;CHECK(rstp_decode(b,64,&r)&&r.status==RSTP_VERSION);
@@ -69,6 +73,9 @@ EXPORT int check_geometry(void)
         unsigned dx=(p&1)?x-100:x+100;
         CHECK(point_gesture_inside(p,10,dx,y,2000,1000,200,100));
         CHECK(!point_gesture_inside(p,10,dx,(p&2)?y-1:y+1,2000,1000,200,100));
+        dx=(p&1)?x-300:x+300;
+        CHECK(point_gesture_inside(p,30,dx,y,2000,1000,200,100));
+        CHECK(!point_gesture_inside(p,30,(p&1)?dx-1:dx+1,y,2000,1000,200,100));
     }
     CHECK(!point_gesture_inside(0,15,0,1001,2000,1000,200,100));
     CHECK(!point_gesture_inside(0,15,2001,0,2000,1000,200,100));

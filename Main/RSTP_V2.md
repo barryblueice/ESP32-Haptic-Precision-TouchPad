@@ -16,7 +16,7 @@ and step when disabled. A disabled point does not claim input.
 The first confident single contact inside an enabled corner immediately emits
 the selected action, without a pressure click. The origin and point settings
 are fixed for that contact. Moving into another corner does not select it.
-The physical radius is a percentage of the short side; the existing descriptor
+The physical radius accepts 1–30% of the short side (default 5%); the existing descriptor
 dimensions (1149 × 766 units, logical range 2302 × 1532) normalize the axes.
 Portrait swaps both dimensions. Out-of-range raw positions cannot trigger a
 corner after coordinate clamping.

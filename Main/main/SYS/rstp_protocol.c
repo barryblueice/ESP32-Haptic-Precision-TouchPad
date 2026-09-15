@@ -23,7 +23,7 @@ bool device_config_valid(const device_config_t *c)
     }
     for (unsigned i = CFG_POINTS; i < DEVICE_CONFIG_SIZE; i += 5)
         if (b[i] > 1 || b[i+1] > 12 || (b[i] && !b[i+1]) || b[i+2] > 1 ||
-            !b[i+3] || b[i+3] > 15 || !b[i+4] || b[i+4] > 10) return false;
+            !b[i+3] || b[i+3] > 30 || !b[i+4] || b[i+4] > 10) return false;
     return true;
 }
 uint32_t rstp_capabilities_normalize(uint32_t caps)
