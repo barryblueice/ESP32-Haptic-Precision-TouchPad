@@ -33,6 +33,7 @@ uint32_t input_generation(void) { return test_generation; }
 void input_wake_sender(void) { ++wake_count; }
 void input_wake_parser(void) { ++wake_count; }
 void input_recover(void) { ++test_generation; }
+void input_source_recover(const char *reason) { (void)reason; input_recover(); }
 static int surface_fault;
 int cs40l25_surface_get_state(void) { return surface_fault; }
 bool device_config_parser_boundary(void);

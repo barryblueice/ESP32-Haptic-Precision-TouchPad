@@ -54,7 +54,8 @@ static void vTaskDelay(unsigned ticks) { delays+=ticks; }
 static void tp_modern_sleep_init(void) {}
 static void tp_modern_sleep_record_activity(void) {}
 static void tp_modern_sleep_signal_activity_from_isr(void) {}
-static uint32_t input_generation(void) { return 7; }
+static uint32_t input_source_generation(void) { return 7; }
+static uint32_t input_generation(void) { return 11; }
 static int64_t esp_timer_get_time(void) { return 1000; }
 static int i2c_master_receive(int dev,uint8_t *data,size_t size,unsigned timeout) {
     (void)dev;(void)timeout;++reads;
@@ -62,8 +63,8 @@ static int i2c_master_receive(int dev,uint8_t *data,size_t size,unsigned timeout
     if(fail_read)return ESP_FAIL;
     --pending_reports;memset(data,0,size);data[0]=0x40;return ESP_OK;
 }
-static void input_capture(const uint8_t *data,bool success,uint32_t gen,uint32_t time) {
-    (void)data;if(gen!=7||time!=1)++errors;
+static void input_capture(const uint8_t *data,bool success,uint32_t gen,uint32_t output_gen,uint32_t time) {
+    (void)data;if(gen!=7||output_gen!=11||time!=1)++errors;
     if(success)++captures;else ++failed;
 }
 '''

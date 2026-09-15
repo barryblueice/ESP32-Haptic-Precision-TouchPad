@@ -26,10 +26,11 @@ static void tp_drain_pending(void)
      * produces no new falling edge until all queued reports are read. */
     for (unsigned reads = 0; reads < 8 && gpio_get_level(TP_INT_GPIO) == 0; ++reads) {
         tp_modern_sleep_record_activity();
-        uint32_t generation = input_generation();
+        uint32_t generation = input_source_generation();
+        uint32_t output_generation = input_generation();
         uint32_t time_ms = (uint32_t)(esp_timer_get_time() / 1000);
         esp_err_t err = i2c_master_receive(dev_handle, s_tp_packet, sizeof(s_tp_packet), 100);
-        input_capture(s_tp_packet, err == ESP_OK, generation, time_ms);
+        input_capture(s_tp_packet, err == ESP_OK, generation, output_generation, time_ms);
         if (err != ESP_OK) {
             vTaskDelay(pdMS_TO_TICKS(10));
             break;

@@ -5,12 +5,37 @@
 
 /* Extension payload in the existing 38-byte ESP-NOW envelope. */
 enum { WIRE_AUX = 5, WIRE_SURFACE = 6, WIRE_SURFACE_ACK = 7, WIRE_VERSION = 2 };
+enum { WIRE_SETTINGS = 8, WIRE_SETTINGS_ACK = 9, WIRE_SETTINGS_VERSION = 1 };
+enum { WIRE_SETTING_INTENSITY = 1, WIRE_SETTING_LEVEL = 2 };
+enum { WIRE_SETTINGS_OK, WIRE_SETTINGS_BUSY, WIRE_SETTINGS_STORAGE, WIRE_SETTINGS_UNSUPPORTED };
+typedef struct {
+    uint32_t session, client, sequence;
+    uint8_t mask, intensity, level, status;
+} wire_settings_t;
 typedef struct { uint8_t version, rotation; uint32_t session; } wire_surface_t;
 typedef struct { uint32_t session, sequence; uint8_t action; int16_t steps; bool hold; } wire_action_t;
 static inline uint32_t wire_u32(const uint8_t *b)
 { return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24); }
 static inline void wire_put32(uint8_t *b, uint32_t v)
 { for (unsigned i=0;i<4;++i) b[i]=(uint8_t)(v>>(8*i)); }
+/* A zero-mask request reads the current values. Only applied values appear in ACKs. */
+static inline void wire_settings_encode(uint8_t out[38], uint32_t type, const wire_settings_t *s)
+{
+    memset(out,0,38); wire_put32(out,type); out[4]=WIRE_SETTINGS_VERSION;
+    wire_put32(out+5,s->session); wire_put32(out+9,s->client); wire_put32(out+13,s->sequence);
+    out[17]=s->mask; out[18]=s->intensity; out[19]=s->level; out[20]=s->status;
+}
+static inline bool wire_settings_decode(const uint8_t *b, unsigned n, uint32_t type, wire_settings_t *s)
+{
+    if (!b || n!=38 || (type!=WIRE_SETTINGS && type!=WIRE_SETTINGS_ACK) || wire_u32(b)!=type ||
+        b[4]!=WIRE_SETTINGS_VERSION || !wire_u32(b+5) || !wire_u32(b+9) || !wire_u32(b+13) || b[17]>3) return false;
+    if (type==WIRE_SETTINGS) {
+        if (b[20] || ((b[17]&1) ? b[18]>100 : b[18]!=0) ||
+            ((b[17]&2) ? (b[19]<1 || b[19]>3) : b[19]!=0)) return false;
+    } else if (b[18]>100 || b[19]<1 || b[19]>3 || b[20]>WIRE_SETTINGS_UNSUPPORTED) return false;
+    for (unsigned i=21;i<38;++i) if (b[i]) return false;
+    *s=(wire_settings_t){wire_u32(b+5),wire_u32(b+9),wire_u32(b+13),b[17],b[18],b[19],b[20]}; return true;
+}
 static inline void wire_surface_encode(uint8_t out[38], uint32_t type, const wire_surface_t *s)
 {
     memset(out,0,38); wire_put32(out,type); out[4]=s->version; out[5]=s->rotation; wire_put32(out+6,s->session);

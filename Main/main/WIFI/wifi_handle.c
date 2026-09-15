@@ -20,6 +20,7 @@
 #include "SYS/device_config.h"
 #include "SYS/wireless_extension.h"
 #include "esp_random.h"
+#include "wireless_settings.h"
 
 #define TAG "WIFI_INIT"
 
@@ -51,6 +52,7 @@ static bool send_done;
 static wire_surface_t surface;
 static uint32_t acknowledged_at;
 static bool acknowledged;
+static uint8_t acknowledged_peer[6];
 void wireless_surface_ack(const uint8_t *mac, const uint8_t *data, unsigned size)
 {
     wire_surface_t ack;
@@ -58,10 +60,16 @@ void wireless_surface_ack(const uint8_t *mac, const uint8_t *data, unsigned size
     const uint8_t broadcast[6] = {255,255,255,255,255,255};
     if (memcmp(receiver_mac, broadcast, 6) && memcmp(receiver_mac, mac, 6)) return;
     taskENTER_CRITICAL(&send_lock);
-    if (ack.session == surface.session && ack.rotation == surface.rotation) {
+    bool accept = ack.session == surface.session && ack.rotation == surface.rotation &&
+        (!acknowledged || (uint32_t)(esp_timer_get_time()/1000)-acknowledged_at >= 2500U ||
+         !memcmp(acknowledged_peer,mac,6));
+    if (accept) {
+        memcpy(acknowledged_peer,mac,6);
         acknowledged = true; acknowledged_at = (uint32_t)(esp_timer_get_time() / 1000);
     }
-    taskEXIT_CRITICAL(&send_lock); input_wake_sender();
+    taskEXIT_CRITICAL(&send_lock);
+    if (accept) wireless_settings_peer(mac);
+    input_wake_sender();
 }
 static esp_now_send_status_t send_status;
 
@@ -90,10 +98,11 @@ void wireless_wifi_init(void)
     peer.channel = ESPNOW_CHANNEL;
     ESP_ERROR_CHECK(esp_now_add_peer(&peer));
     ESP_ERROR_CHECK(esp_now_register_send_cb(send_callback));
-    wireless_espnow_init();
     surface = (wire_surface_t){.version = WIRE_VERSION, .rotation = device_config_rotation(), .session = esp_random()};
     if (!surface.session) surface.session = 1;
-    input_set_link(1);
+    ESP_ERROR_CHECK(wireless_settings_init(surface.session));
+    wireless_espnow_init();
+    input_set_link(0);
     input_request_mode(PTP_MODE);
 }
 
@@ -103,8 +112,9 @@ void wifi_send_task(void *arg)
     input_report_t pending = {0};
     aux_output_event_t event = {0};
     uint8_t packet[38] = {0};
+    uint8_t settings_destination[6];
     bool have_pending = false, in_flight = false, link_ready = false, prefer_aux = true;
-    unsigned kind = 0; /* 0 pointer, 1 heartbeat, 2 surface, 3 action */
+    unsigned kind = 0; /* 0 pointer, 1 heartbeat, 2 surface, 3 action, 4 settings ACK */
     uint32_t heartbeat_at = 0, surface_at = 0, sequence = 0;
     bool first_surface = true;
     aux_output_reset(false);
@@ -116,14 +126,19 @@ void wifi_send_task(void *arg)
         bool ready = acknowledged && now - acknowledged_at < 2500;
         taskEXIT_CRITICAL(&send_lock);
         if (ready != link_ready) {
-            link_ready = ready; input_set_link(ready ? 3 : 1); aux_output_cancel();
+            link_ready = ready; input_set_link(ready ? 3 : 0); aux_output_cancel();
         }
         if (in_flight && done) {
             in_flight = false;
             bool ok = status == ESP_NOW_SEND_SUCCESS;
             if (kind == 3) aux_output_event_complete(ok);
+            else if (kind == 4) wireless_settings_reply_complete(ok);
             else if (kind == 0) { if (ok) input_report_ack(&pending); have_pending = false; }
-            if (!ok) { input_submit_failed(); input_recover(); }
+            if (!ok) {
+                input_submit_failed();
+                /* A failed heartbeat/surface announcement has no HID state to release. */
+                if (kind == 0 || kind == 3) input_recover();
+            }
         }
         if (have_pending && !in_flight && !input_report_current(&pending)) have_pending = false;
         if (!in_flight) {
@@ -132,6 +147,8 @@ void wifi_send_task(void *arg)
                 kind = 2; wire_surface_encode(packet, WIRE_SURFACE, &surface);
             } else if (now - heartbeat_at >= 1000) {
                 kind = 1; wireless_msg_t heartbeat; wireless_make_heartbeat(&heartbeat); memcpy(packet, &heartbeat, 38);
+            } else if (wireless_settings_reply(packet,settings_destination)) {
+                kind = 4;
             } else {
                 if (!have_pending) have_pending = input_take_report(&pending);
                 bool auxiliary = link_ready && (prefer_aux || !have_pending) && aux_output_take_event(&event, input_generation(), now);
@@ -149,7 +166,13 @@ void wifi_send_task(void *arg)
             }
             if (send) {
                 bool current = kind == 0 ? input_report_current(&pending) : kind == 3 ? aux_output_event_current(&event) : true;
-                esp_err_t err = current ? esp_now_send(receiver_mac, packet, sizeof(packet)) : ESP_FAIL;
+                const uint8_t *destination = kind == 4 ? settings_destination : receiver_mac;
+                if (kind == 4 && !esp_now_is_peer_exist(destination)) {
+                    esp_now_peer_info_t peer = {.channel = ESPNOW_CHANNEL, .ifidx = WIFI_IF_STA};
+                    memcpy(peer.peer_addr,destination,6);
+                    (void)esp_now_add_peer(&peer);
+                }
+                esp_err_t err = current ? esp_now_send(destination, packet, sizeof(packet)) : ESP_FAIL;
                 if (err == ESP_OK) {
                     in_flight = true;
                     if (kind == 1) heartbeat_at = now;
@@ -157,6 +180,11 @@ void wifi_send_task(void *arg)
                     if (kind == 0 || kind == 3) prefer_aux = kind == 0;
                 } else {
                     if (kind == 3) aux_output_unsubmitted();
+                    if (kind == 4) wireless_settings_reply_complete(false);
+                    if (current && (kind == 0 || kind == 3)) input_recover();
+                    /* Rate-limit rejected control submissions as well as completed ones. */
+                    if (kind == 1) heartbeat_at = now;
+                    if (kind == 2) { surface_at = now; first_surface = false; }
                     input_submit_failed(); vTaskDelay(1);
                 }
             }

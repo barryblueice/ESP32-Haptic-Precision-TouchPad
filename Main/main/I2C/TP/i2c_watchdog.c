@@ -22,6 +22,6 @@ void watchdog_timeout_callback(void* arg) {
     (void)arg;
     if (current_tp_mode == PTP_MODE && global_watchdog_start) {
         global_watchdog_start = false;
-        input_recover();
+        input_source_recover("watchdog");
     }
 }

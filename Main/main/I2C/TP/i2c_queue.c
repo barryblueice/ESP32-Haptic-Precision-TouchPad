@@ -20,7 +20,6 @@
 #include "SYS/hid_msg.h"
 
 #include "I2C/I2C_handle.h"
-#include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "GPIO/GPIO_handle.h"
 
 #define TAG "I2C_QUEUE"
@@ -379,7 +378,9 @@ void i2c_queue_task(void *arg) {
     const esp_timer_create_args_t point_timer_args = {.callback = point_timer_wake, .name = "point_wheel"};
     ESP_ERROR_CHECK(esp_timer_create(&point_timer_args, &point_timer));
     input_frame_t frame;
-    uint32_t generation = input_generation();
+    uint32_t generation = input_source_generation();
+    uint32_t output_generation = input_generation();
+    bool last_all_up = true;
     int previous_format = -1;
     uint8_t previous_mode = current_tp_mode;
 
@@ -396,16 +397,28 @@ void i2c_queue_task(void *arg) {
         }
 
         if (input_apply_mode_request()) continue;
-        if (generation != input_generation()) {
-            generation = input_generation();
+        if (generation != input_source_generation()) {
+            generation = input_source_generation();
             reset_input_state();
             previous_format = -1;
             previous_mode = current_tp_mode;
         }
+        if (output_generation != input_generation()) {
+            output_generation = input_generation();
+            /* Preserve local contact/force/region ownership across radio recovery. */
+            usb_aux_cancel();
+            if (last_all_up) {
+                ptp_report_reset();
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                ptp_simulated_mouse_reset();
+#endif
+            }
+        }
         if (!input_next_frame(&frame)) {
             uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
             point_result_t repeat = point_gesture_tick(&point_state, now);
-            if (repeat.steps && !aux_output_repeat(repeat.action, repeat.steps, generation, now)) input_recover();
+            if (repeat.steps && input_output_ready(output_generation) &&
+                !aux_output_repeat(repeat.action, repeat.steps, output_generation, now)) input_recover();
             point_schedule();
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             continue;
@@ -418,7 +431,7 @@ void i2c_queue_task(void *arg) {
             previous_mode = current_tp_mode;
         }
         if ((uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
-            input_recover();
+            input_source_recover("raw_age");
             continue;
         }
         uint8_t *tp_packet = frame.bytes;
@@ -427,7 +440,12 @@ void i2c_queue_task(void *arg) {
             all_up = true;
             for (unsigned i = 0; i < 5; ++i) if (tp_packet[4 + i * 8] & 1U) all_up = false;
         }
-        if (!input_observe(frame.generation, all_up)) continue;
+        uint32_t report_generation = frame.output_generation;
+        if (frame.generation != input_source_generation()) continue;
+        bool local_ready = input_source_observe(frame.generation, all_up);
+        bool publish = input_observe(report_generation, all_up);
+        last_all_up = all_up;
+        if (!local_ready || (!publish && current_mode != _2_4_MODE)) continue;
         {
 
             // printf("Raw Data: ");
@@ -436,13 +454,14 @@ void i2c_queue_task(void *arg) {
 
             int format = tp_packet[0] == 0x40;
             if ((previous_format != -1 && previous_format != format) || previous_mode != current_tp_mode) {
-                input_recover();
+                input_source_recover("format");
                 continue;
             }
             previous_format = format;
             previous_mode = current_tp_mode;
             if (tp_packet[0] == 0x40) {
                 int active_finger_count = 0;
+                bool published_pair = false;
 
                 update_simulated_scan_time(&tp_msg);
 
@@ -602,11 +621,11 @@ void i2c_queue_task(void *arg) {
                         owned |= point_state.owned;
                         if (point.cancel) aux_output_cancel_gesture();
                         if (point.handoff) edge_gesture_reset(&edge_state);
-                        if (point.steps && !(point.hold ?
-                            aux_output_hold(point.action, point.steps, frame.generation, frame.time_ms) : point.initial ?
-                            aux_output_once(point.action, point.steps, frame.generation, frame.time_ms) :
-                            aux_output_repeat(point.action, point.steps, frame.generation, frame.time_ms))) {
-                            input_recover(); continue;
+                        if (publish && point.steps && !(point.hold ?
+                            aux_output_hold(point.action, point.steps, report_generation, frame.time_ms) : point.initial ?
+                            aux_output_once(point.action, point.steps, report_generation, frame.time_ms) :
+                            aux_output_repeat(point.action, point.steps, report_generation, frame.time_ms))) {
+                            input_recover(); publish = false;
                         }
                         point_schedule();
                     }
@@ -616,22 +635,26 @@ void i2c_queue_task(void *arg) {
                     edge.suppress |= point.suppress;
                     if (owned) edge.tap = false;
                     if (edge.cancelled) aux_output_cancel_gesture();
-                    if (edge.steps && !usb_aux_steps(edge.action, edge.steps, frame.generation, frame.time_ms)) {
-                        input_recover(); continue;
+                    if (publish && edge.steps && !usb_aux_steps(edge.action, edge.steps, report_generation, frame.time_ms)) {
+                        input_recover(); publish = false;
                     }
                     if (edge.tap) {
                         input_report_t down = {.mode = input_mode(), .time_ms = frame.time_ms};
                         input_report_t up = down;
                         if (down.mode == PTP_MODE) {
-                            parse_ptp_report(&edge.tap_down, &down.data.ptp);
-                            parse_ptp_report(&tp_msg, &up.data.ptp);
-                            input_publish_pair(frame.generation, &down, &up);
-                            continue;
-                        }
+                            if (publish) {
+                                parse_ptp_report(&edge.tap_down, &down.data.ptp);
+                                parse_ptp_report(&tp_msg, &up.data.ptp);
+                                input_publish_pair(report_generation, &down, &up);
+                                published_pair = true;
+                            }
+                        } else {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                        edge.tap_down.actual_count = 1;
-                        parse_ptp_simulated_mouse_report(&edge.tap_down, &down.data.mouse);
+                            edge.tap_down.actual_count = 1;
+                            parse_ptp_simulated_mouse_report(&edge.tap_down, &down.data.mouse);
+                            input_source_button(frame.generation, down.data.mouse.buttons != 0);
 #endif
+                        }
                     }
                     if (edge.suppress) {
                         ptp_reset_force_click(&tp_msg);
@@ -646,15 +669,24 @@ void i2c_queue_task(void *arg) {
                 if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                     parse_ptp_simulated_mouse_report(&tp_msg, &report.data.mouse);
+                    input_source_button(frame.generation, report.data.mouse.buttons != 0);
                     tap = ptp_simulated_mouse_click_needs_release();
+                    if (tap) input_source_button(frame.generation, false);
 #else
                     continue;
 #endif
                 } else {
-                    cs40l25_surface_button_update(tp_msg.button_mask != 0, ptp_haptic_click_intensity_get());
+                    input_source_button(frame.generation, tp_msg.button_mask != 0);
                     parse_ptp_report(&tp_msg, &report.data.ptp);
                 }
-                input_publish(frame.generation, &report, tap);
+                if (publish && !published_pair) input_publish(report_generation, &report, tap);
+                if (!publish && all_up) {
+                    /* Offline/recovery taps cannot seed the next host double-tap drag. */
+                    ptp_report_reset();
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                    ptp_simulated_mouse_reset();
+#endif
+                }
 
             } else {
                 int dx = (int8_t)tp_packet[4], dy = (int8_t)tp_packet[5], mx, my;
@@ -667,12 +699,11 @@ void i2c_queue_task(void *arg) {
                 mouse_msg.x = mx < -127 ? -127 : mx > 127 ? 127 : mx;
                 mouse_msg.y = my < -127 ? -127 : my > 127 ? 127 : my;
                 mouse_msg.buttons = tp_packet[3];
-                cs40l25_surface_button_update((mouse_msg.buttons & 0x03U) != 0,
-                                               ptp_haptic_click_intensity_get());
+                input_source_button(frame.generation, (mouse_msg.buttons & 0x03U) != 0);
 
                 input_report_t report = {.mode = MOUSE_MODE, .time_ms = frame.time_ms};
                 parse_mouse_report(&mouse_msg, &report.data.mouse);
-                input_publish(frame.generation, &report, false);
+                if (publish) input_publish(report_generation, &report, false);
             }
         }
     }

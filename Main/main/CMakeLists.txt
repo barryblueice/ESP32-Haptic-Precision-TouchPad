@@ -59,6 +59,7 @@ set(srcs
     "WIFI/wifi_handle.c"
     "WIFI/broadcast.c"
     "WIFI/heartbeat.c"
+    "WIFI/wireless_settings.c"
 
     "BLE/ble_bluedroid_init.c"
     "BLE/esp_hidd_prf_api.c"

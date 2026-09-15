@@ -132,10 +132,18 @@ uint16_t device_config_save(const device_config_t *c)
 }
 esp_err_t device_config_set_legacy(unsigned offset, uint8_t value, bool persist)
 {
-    if ((offset != 0 && offset != 1) || (offset == 0 ? value > 100 : value < 1 || value > 3)) return ESP_ERR_INVALID_ARG;
+    if (offset > 1) return ESP_ERR_INVALID_ARG;
+    return device_config_set_controls(1U << offset, offset == 0 ? value : 0, offset == 1 ? value : 0, persist);
+}
+esp_err_t device_config_set_controls(uint8_t mask, uint8_t intensity, uint8_t level, bool persist)
+{
+    if (!mask || mask > 3 || ((mask & 1) && intensity > 100) || ((mask & 2) && (level < 1 || level > 3)))
+        return ESP_ERR_INVALID_ARG;
     if (!initialized || xSemaphoreTake(writer, 0) != pdTRUE) return ESP_ERR_INVALID_STATE;
-    device_config_t c; device_config_get(&c); c.bytes[offset] = value;
-    esp_err_t err = saved_restart || !(device_config_capabilities() & (1U << offset)) ? ESP_ERR_INVALID_STATE : ESP_OK;
+    device_config_t c; device_config_get(&c);
+    if (mask & 1) c.bytes[CFG_INTENSITY] = intensity;
+    if (mask & 2) c.bytes[CFG_LEVEL] = level;
+    esp_err_t err = saved_restart || (device_config_capabilities() & mask) != mask ? ESP_ERR_INVALID_STATE : ESP_OK;
     if (err == ESP_OK && persist) err = store_config(&c);
     if (err == ESP_OK) apply_at_boundary(&c, false);
     xSemaphoreGive(writer); return err;
@@ -151,7 +159,7 @@ bool device_config_parser_boundary(void)
     }
     bool stop = halted;
     taskEXIT_CRITICAL(&config_lock);
-    if (change) { input_recover(); xSemaphoreGive(applied); }
+    if (change) { input_source_recover("config"); xSemaphoreGive(applied); }
     return stop;
 }
 uint8_t device_config_rotation(void)
