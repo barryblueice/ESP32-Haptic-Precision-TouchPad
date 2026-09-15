@@ -34,8 +34,12 @@ void receiver_ext_receive(const uint8_t *mac, const uint8_t *packet, uint32_t no
         if (accept) {
             input_link_seen(now);
             if (!action.action) aux_output_cancel();
-            else if (input_mode() == TP_PTP_MODE &&
-                !aux_output_steps(action.action,action.steps,input_generation(),now)) input_recover();
+            else if (input_mode() == TP_PTP_MODE) {
+                bool ok = action.hold ?
+                    aux_output_hold(action.action,action.steps,input_generation(),now) :
+                    aux_output_steps(action.action,action.steps,input_generation(),now);
+                if (!ok) input_recover();
+            }
         }
     }
 }

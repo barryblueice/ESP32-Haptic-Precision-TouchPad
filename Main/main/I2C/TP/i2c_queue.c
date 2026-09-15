@@ -376,7 +376,7 @@ static void reset_input_state(void)
 void i2c_queue_task(void *arg) {
 
     input_register_parser();
-    const esp_timer_create_args_t point_timer_args = {.callback = point_timer_wake, .name = "point_repeat"};
+    const esp_timer_create_args_t point_timer_args = {.callback = point_timer_wake, .name = "point_wheel"};
     ESP_ERROR_CHECK(esp_timer_create(&point_timer_args, &point_timer));
     input_frame_t frame;
     uint32_t generation = input_generation();
@@ -405,7 +405,7 @@ void i2c_queue_task(void *arg) {
         if (!input_next_frame(&frame)) {
             uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
             point_result_t repeat = point_gesture_tick(&point_state, now);
-            if (repeat.steps && !usb_aux_steps(repeat.action, repeat.steps, generation, now)) input_recover();
+            if (repeat.steps && !aux_output_repeat(repeat.action, repeat.steps, generation, now)) input_recover();
             point_schedule();
             ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             continue;
@@ -602,9 +602,10 @@ void i2c_queue_task(void *arg) {
                         owned |= point_state.owned;
                         if (point.cancel) aux_output_cancel_gesture();
                         if (point.handoff) edge_gesture_reset(&edge_state);
-                        if (point.steps && !(point.initial ?
+                        if (point.steps && !(point.hold ?
+                            aux_output_hold(point.action, point.steps, frame.generation, frame.time_ms) : point.initial ?
                             aux_output_once(point.action, point.steps, frame.generation, frame.time_ms) :
-                            usb_aux_steps(point.action, point.steps, frame.generation, frame.time_ms))) {
+                            aux_output_repeat(point.action, point.steps, frame.generation, frame.time_ms))) {
                             input_recover(); continue;
                         }
                         point_schedule();

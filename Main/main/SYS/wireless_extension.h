@@ -4,9 +4,9 @@
 #include <string.h>
 
 /* Extension payload in the existing 38-byte ESP-NOW envelope. */
-enum { WIRE_AUX = 5, WIRE_SURFACE = 6, WIRE_SURFACE_ACK = 7, WIRE_VERSION = 1 };
+enum { WIRE_AUX = 5, WIRE_SURFACE = 6, WIRE_SURFACE_ACK = 7, WIRE_VERSION = 2 };
 typedef struct { uint8_t version, rotation; uint32_t session; } wire_surface_t;
-typedef struct { uint32_t session, sequence; uint8_t action; int16_t steps; } wire_action_t;
+typedef struct { uint32_t session, sequence; uint8_t action; int16_t steps; bool hold; } wire_action_t;
 static inline uint32_t wire_u32(const uint8_t *b)
 { return (uint32_t)b[0] | ((uint32_t)b[1] << 8) | ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24); }
 static inline void wire_put32(uint8_t *b, uint32_t v)
@@ -25,12 +25,14 @@ static inline void wire_action_encode(uint8_t out[38], const wire_action_t *a)
 {
     memset(out,0,38); wire_put32(out,WIRE_AUX); wire_put32(out+4,a->session);
     wire_put32(out+8,a->sequence); out[12]=a->action; out[13]=(uint8_t)a->steps; out[14]=(uint16_t)a->steps>>8;
+    out[15]=a->hold;
 }
 static inline bool wire_action_decode(const uint8_t *b, unsigned n, wire_action_t *a)
 {
     if(n!=38 || wire_u32(b)!=WIRE_AUX || !wire_u32(b+4) || !wire_u32(b+8) || b[12]>6) return false;
     int16_t steps=(int16_t)((uint16_t)b[13]|((uint16_t)b[14]<<8));
     if ((!b[12] && steps) || (b[12] && (!steps || steps < -127 || steps > 127))) return false;
-    for(unsigned i=15;i<38;++i) if(b[i]) return false;
-    *a=(wire_action_t){wire_u32(b+4),wire_u32(b+8),b[12],steps}; return true;
+    if (b[15]>1 || (b[15] && ((b[12]!=1 && b[12]!=2 && b[12]!=5 && b[12]!=6) || (steps!=1 && steps!=-1)))) return false;
+    for(unsigned i=16;i<38;++i) if(b[i]) return false;
+    *a=(wire_action_t){wire_u32(b+4),wire_u32(b+8),b[12],steps,b[15]!=0}; return true;
 }
