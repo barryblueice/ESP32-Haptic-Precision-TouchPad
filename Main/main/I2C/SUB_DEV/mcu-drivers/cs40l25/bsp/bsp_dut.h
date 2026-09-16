@@ -83,6 +83,8 @@ uint32_t bsp_dut_dynamic_calibrate(void);
 uint32_t bsp_dut_process(void);
 void bsp_dut_dump_diagnostics(void);
 void bsp_dut_dump_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms);
+/* Best-effort readback; call only from the task owning CS40L25. No writes. */
+void bsp_dut_log_gain(const char *phase);
 
 uint32_t bsp_dut_enable_vamp(bool is_enabled);
 uint32_t bsp_dut_discharge_vamp(void);
