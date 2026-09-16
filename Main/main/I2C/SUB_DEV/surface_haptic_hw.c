@@ -18,9 +18,10 @@
 
 #define TAG "SURFACE_HW"
 #define IO_TIMEOUT_MS 100
-// MP28167GQ-A-Z: 652 * 0.8 mV = 521.6 mV VREF.
-// 243k/10k divider gives 13.19648 V nominal; the FB branch has a series 1k.
-#define MP28167_TARGET_VREF_RAW 652U
+// MP28167GQ-A-Z: 0.8 mV/LSB. Board measurement: RAW 652 -> VOUT 6.75 V.
+// Assuming normal regulation, round(652 * 13.0 / 6.75) = 1256 -> 1004.8 mV VREF.
+// Estimated VOUT is 13.003 V; verify on hardware (see MP28167_VOLTAGE.md).
+#define MP28167_TARGET_VREF_RAW 1256U
 #define CHECK_ESP(call) do { esp_err_t e_ = (call); if (e_ != ESP_OK) { \
     ESP_LOGE(TAG, "%s: %s", #call, esp_err_to_name(e_)); return false; } } while (0)
 #define CHECK_BSP(call) do { uint32_t s_ = (call); if (s_ != BSP_STATUS_OK) { \
@@ -112,7 +113,8 @@ static bool prepare_power(void)
         wait_ms(250);
         if (!read_vref(&raw)) return false;
     }
-    ESP_LOGI(TAG, "VREF reference=%.1f mV", (double)raw * 0.8);
+    ESP_LOGI(TAG, "MP28167 VREF raw=%u reference=%.1f mV; VOUT target=13000 mV (not measured)",
+             (unsigned int)raw, (double)raw * 0.8);
     return raw == MP28167_TARGET_VREF_RAW;
 }
 
@@ -152,6 +154,7 @@ bool surface_haptic_hw_initialize(void)
     ESP_LOGI(TAG, "Skip shared GPIO33 reset and ROM/BHM playback");
     CHECK_BSP(bsp_dut_boot(false));
     firmware_loaded = true;
+    bsp_dut_log_gain("post-boot");
     for (unsigned int i = 0; i < 10; ++i) {
         CHECK_BSP(surface_haptic_hw_process());
         wait_ms(10);
@@ -169,6 +172,7 @@ bool surface_haptic_hw_initialize(void)
     if (!changed || !check_wave_count()) return false;
     CHECK_BSP(bsp_dut_update_haptic_config(0));
     CHECK_BSP(bsp_dut_enable_haptic_processing(true));
+    bsp_dut_log_gain("initialize");
     return check_vbst("initialize");
 }
 
@@ -181,6 +185,7 @@ bool surface_haptic_hw_wake(void)
     // Idle standby need not advance heartbeat; activity is checked on next playback.
     CHECK_BSP(bsp_dut_has_processed(&changed));
     CHECK_BSP(surface_haptic_hw_process());
+    bsp_dut_log_gain("wake");
     return check_vbst("wake");
 }
 

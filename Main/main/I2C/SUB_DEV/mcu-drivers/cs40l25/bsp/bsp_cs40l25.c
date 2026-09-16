@@ -204,6 +204,46 @@ static void bsp_log_power_up_diagnostics(void)
     }
 }
 
+void bsp_dut_log_gain(const char *phase)
+{
+    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    uint32_t value;
+
+    if (regmap_read(cp, CS40L25_INTP_AMP_CTRL_REG, &value) == REGMAP_STATUS_OK)
+    {
+        uint32_t volume = (value >> CS40L25_INTP_AMP_CTRL_AMP_VOL_PCM_BITOFFSET) &
+                          ((1U << CS40L25_INTP_AMP_CTRL_AMP_VOL_PCM_BITWIDTH) - 1U);
+        // Decode only levels documented by the SDK constants/WISCE init script.
+        const char *level = volume == CS40L25_AMP_VOLUME_MUTE ? "mute" :
+                            volume == CS40L25_AMP_VOLUME_0DB ? "0 dB" :
+                            volume == 0x3EU ? "+7.75 dB" : "raw (dB not decoded)";
+        ESP_LOGI(TAG, "%s gain readback: AMP_CTRL[0x6000]=0x%08" PRIX32
+                 " AMP_VOL_PCM=0x%03" PRIX32 " (%s) HPF=%u",
+                 phase, value, volume, level, (unsigned int)((value >> 15) & 1U));
+    }
+    else
+    {
+        ESP_LOGW(TAG, "%s gain readback: AMP_CTRL[0x6000] read failed", phase);
+    }
+
+    if (cs40l25_driver.fw_info == NULL)
+    {
+        ESP_LOGW(TAG, "%s gain readback: GAIN_CONTROL unavailable (no firmware)", phase);
+        return;
+    }
+    if (regmap_read_fw_control(cp, cs40l25_driver.fw_info,
+                              CS40L25_SYM_FIRMWARE_GAIN_CONTROL, &value) == REGMAP_STATUS_OK)
+    {
+        ESP_LOGI(TAG, "%s gain readback: GAIN_CONTROL=0x%08" PRIX32
+                 " control_gain=%" PRIu32 " gpi_gain=%" PRIu32 " (raw codes)",
+                 phase, value, (value >> 4) & 0x3FFU, (value >> 14) & 0x3FFU);
+    }
+    else
+    {
+        ESP_LOGW(TAG, "%s gain readback: GAIN_CONTROL read failed", phase);
+    }
+}
+
 static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
 {
     regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
@@ -220,6 +260,8 @@ static void bsp_log_trigger_diagnostics(uint8_t waveform, uint32_t duration_ms)
              waveform,
              duration_ms,
              cs40l25_driver.state);
+
+    bsp_dut_log_gain("trigger-diagnostic");
 
     if (regmap_read(cp, SURFACE_VIBEGEN_ENABLE_REG,
                                &vibegen_enable) == REGMAP_STATUS_OK)
@@ -968,6 +1010,11 @@ uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms)
         }
 
         ret = cs40l25_trigger(&cs40l25_driver, waveform, duration_ms);
+        if (ret == CS40L25_STATUS_OK)
+        {
+            // Read after the trigger ACK so diagnostics do not delay the effect start.
+            bsp_dut_log_gain("post-trigger");
+        }
     }
 
     if (ret == CS40L25_STATUS_OK)

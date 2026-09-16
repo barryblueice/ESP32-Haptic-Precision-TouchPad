@@ -92,12 +92,12 @@ static void worker(void *arg)
         taskENTER_CRITICAL(&lock);
         bool want_sleep = sleep_requested;
         uint32_t presses = button_presses, releases = button_releases;
-        surface_haptic_state_t state = runtime.state;
+        // surface_haptic_state_t state = runtime.state;
         taskEXIT_CRITICAL(&lock);
         uint32_t log_time = now_ms();
         if (log_time - logged_at >= 5000U && (presses != logged_presses || releases != logged_releases)) {
-            ESP_LOGI(TAG, "button_down=%" PRIu32 " button_up=%" PRIu32 " state=%u",
-                     presses, releases, (unsigned)state);
+            // ESP_LOGI(TAG, "button_down=%" PRIu32 " button_up=%" PRIu32 " state=%u",
+            //          presses, releases, (unsigned)state);
             logged_at = log_time; logged_presses = presses; logged_releases = releases;
         }
         if (want_sleep) {
