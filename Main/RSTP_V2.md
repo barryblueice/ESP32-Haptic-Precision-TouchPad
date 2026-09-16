@@ -1,5 +1,9 @@
 # RSTP v2 firmware
 
+This document records the earlier v2 implementation. Current v3 thresholds are
+documented in [VBUS_THRESHOLDS.md](VBUS_THRESHOLDS.md); the added point actions
+13–47 and capability `0x800` are documented in [FUNCTION_KEYS.md](FUNCTION_KEYS.md).
+
 ## Implemented behavior
 
 USB RSTP advertises firmware 2.0.0, configuration version 2 and capabilities

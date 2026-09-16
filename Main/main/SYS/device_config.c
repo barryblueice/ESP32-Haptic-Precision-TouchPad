@@ -13,7 +13,7 @@ static device_config_t active, pending;
 static portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t writer, applied;
 static bool initialized, pending_apply, pending_restart, halted, saved_restart;
-static uint32_t capabilities = 0x7ff;
+static uint32_t capabilities = 0xfff;
 
 static esp_err_t store_config(const device_config_t *c)
 {
