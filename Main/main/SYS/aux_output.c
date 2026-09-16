@@ -21,6 +21,11 @@ static int flight_steps;
 static uint32_t radio_epoch;
 static portMUX_TYPE aux_lock = portMUX_INITIALIZER_UNLOCKED;
 
+static uint8_t release_mask(uint8_t action)
+{
+    return action <= 2 || (action >= 13 && action <= 17) ? 1 : action >= 5 ? 2 : 0;
+}
+
 /* Called with aux_lock held. A completed hold has no queued work until release. */
 static void release_held(void)
 {
@@ -38,7 +43,7 @@ static void set_generation(uint32_t generation)
 static bool enqueue(uint8_t action, int steps, uint32_t generation, uint32_t time_ms, bool discrete, bool repeat, bool hold)
 {
     if (!steps) return true;
-    if (action < 1 || action > 6) return false;
+    if (!action || action > 47 || (action > 6 && action < 13) || (action >= 13 && steps < 0)) return false;
     taskENTER_CRITICAL(&aux_lock);
     set_generation(generation);
     if (repeat && (count || flight || release_due)) {
@@ -84,7 +89,7 @@ bool aux_output_take(aux_output_report_t *out, uint32_t generation, uint32_t tim
     taskENTER_CRITICAL(&aux_lock);
     set_generation(generation);
     unsigned expired = 0;
-    while (expired < count && time_ms - entries[expired].time_ms > 100) ++expired;
+    while (expired < count && entries[expired].action < 13 && time_ms - entries[expired].time_ms > 100) ++expired;
     if (expired) {
         count -= expired; ++aux_epoch;
         memmove(entries, entries + expired, count * sizeof(*entries));
@@ -114,9 +119,22 @@ bool aux_output_take(aux_output_report_t *out, uint32_t generation, uint32_t tim
                  * wheel unit per USB poll. Never combine opposite directions. */
                 flight_steps = e->steps > 127 ? 127 : e->steps < -127 ? -127 : e->steps;
                 out->data[e->action == 3 ? 3 : 4] = (uint8_t)(int8_t)flight_steps;
-            } else {
+            } else if (e->action <= 6) {
                 out->id = 8; out->length = 8;
                 out->data[2] = e->action == 5 ? (sign > 0 ? 0x52 : 0x51) : (sign > 0 ? 0x4f : 0x50);
+            } else if (e->action <= 17) {
+                static const uint8_t consumer[] = {0xe2, 0xcd, 0xb6, 0xb5, 0xb7};
+                out->id = 7; out->length = 2;
+                out->data[0] = consumer[e->action - 13];
+            } else {
+                static const uint8_t keys[] = {
+                    0x29, 0x28, 0x2b, 0x2c, 0x2a, 0x4c, 0x49, 0x4a, 0x4d, 0x4b, 0x4e, 0x46,
+                    0x3a, 0x3b, 0x3c, 0x3d, 0x3e, 0x3f, 0x40, 0x41, 0x42, 0x43, 0x44, 0x45,
+                    0x06, 0x19, 0x1b, 0x1d, 0x1c, 0x04
+                };
+                out->id = 8; out->length = 8;
+                out->data[0] = e->action >= 42 ? 0x01 : 0;
+                out->data[2] = keys[e->action - 18];
             }
         }
         flight = true;
@@ -134,7 +152,7 @@ void aux_output_complete(bool success)
             if (success) { release_due &= ~flight_release; neutral_due &= ~flight_release; }
         }
         else {
-            uint8_t mask = flight_action <= 2 ? 1 : flight_action >= 5 ? 2 : 0;
+            uint8_t mask = release_mask(flight_action);
             bool current = success && count && flight_generation == aux_generation && flight_epoch == aux_epoch;
             /* Cancellation converts even an in-flight first hold into a tap.
              * Failed/stale accepted transfers may have reached the host: release. */
@@ -191,7 +209,7 @@ bool aux_output_take_event(aux_output_event_t *out, uint32_t generation, uint32_
 {
     taskENTER_CRITICAL(&aux_lock);
     set_generation(generation);
-    while (count && now - entries[0].time_ms > 100) {
+    while (count && entries[0].action < 13 && now - entries[0].time_ms > 100) {
         --count; ++aux_epoch; memmove(entries, entries + 1, count * sizeof(*entries));
     }
     bool ok = !flight && (radio_epoch != aux_epoch || count);

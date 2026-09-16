@@ -54,9 +54,12 @@ static inline void wire_action_encode(uint8_t out[38], const wire_action_t *a)
 }
 static inline bool wire_action_decode(const uint8_t *b, unsigned n, wire_action_t *a)
 {
-    if(n!=38 || wire_u32(b)!=WIRE_AUX || !wire_u32(b+4) || !wire_u32(b+8) || b[12]>6) return false;
+    /* 1..6 retain directional semantics; 13..47 carry function bindings. */
+    if(n!=38 || wire_u32(b)!=WIRE_AUX || !wire_u32(b+4) || !wire_u32(b+8) ||
+        b[12]>47 || (b[12]>6 && b[12]<13)) return false;
     int16_t steps=(int16_t)((uint16_t)b[13]|((uint16_t)b[14]<<8));
     if ((!b[12] && steps) || (b[12] && (!steps || steps < -127 || steps > 127))) return false;
+    if (b[12]>=13 && steps<0) return false;
     if (b[15]>1 || (b[15] && ((b[12]!=1 && b[12]!=2 && b[12]!=5 && b[12]!=6) || (steps!=1 && steps!=-1)))) return false;
     for(unsigned i=16;i<38;++i) if(b[i]) return false;
     *a=(wire_action_t){wire_u32(b+4),wire_u32(b+8),b[12],steps,b[15]!=0}; return true;

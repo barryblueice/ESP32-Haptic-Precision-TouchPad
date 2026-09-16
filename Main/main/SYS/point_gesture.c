@@ -17,14 +17,20 @@ bool point_gesture_inside(unsigned p, unsigned radius, uint16_t x, uint16_t y,
 }
 static point_result_t action(const point_gesture_t *s)
 {
+    /* New function bindings retain their RSTP ID in the auxiliary queue.
+     * Legacy pairs still map to the six directional edge actions. */
+    if (s->action >= 13)
+        return (point_result_t){.suppress = true, .action = s->action, .steps = 1};
     int sign = (s->action & 1) ? 1 : -1;
     return (point_result_t){.suppress = true, .action = (s->action + 1) / 2,
         .steps = sign};
 }
 bool point_gesture_repeating(const point_gesture_t *s)
 {
-    /* Only wheel/pan use firmware repeats. Keys stay down until cancellation. */
-    return s->state == POINT_ACTIVE && s->repeat && s->action >= 5 && s->action <= 8;
+    /* Function keys repeat complete taps at the existing wheel cadence.
+     * Preserve the legacy 0..12 hold behavior. */
+    return s->state == POINT_ACTIVE && s->repeat &&
+        ((s->action >= 5 && s->action <= 8) || s->action >= 13);
 }
 point_result_t point_gesture_tick(point_gesture_t *s, uint32_t now)
 {

@@ -26,6 +26,22 @@ EXPORT int check_wire_actions_dedup_and_release(void)
     a=(wire_action_t){7,3,0,0};wire_action_encode(packet,&a);receiver_ext_receive(mac,packet,2);CHECK(count==0);
     CHECK(input_mode()==TP_PTP_MODE);return 0;
 }
+EXPORT int check_wire_function_keys_and_release(void)
+{
+    for(unsigned action=13;action<=47;++action) {
+        reset_all();input_set_mode(TP_PTP_MODE);
+        uint8_t mac[6]={1},packet[38];wire_surface_t s={WIRE_VERSION,0,7};
+        wire_surface_encode(packet,WIRE_SURFACE,&s);receiver_ext_receive(mac,packet,0);usbhid_step();
+        wire_action_t a={7,1,action,1};wire_action_encode(packet,&a);
+        receiver_ext_receive(mac,packet,0);receiver_ext_receive(mac,packet,1);CHECK(count==1);
+        aux_output_report_t r;CHECK(aux_output_take(&r,input_generation(),500)&&!r.release);
+        CHECK(r.id==(action<=17?7:8)&&r.data[action<=17?0:2]);
+        if(action>=18)CHECK(r.data[0]==(action>=42?1:0));
+        aux_output_complete(true);CHECK(aux_output_take(&r,input_generation(),500)&&r.release);
+        CHECK(!r.data[0]&&!r.data[2]);aux_output_complete(true);CHECK(!aux_output_active());
+    }
+    return 0;
+}
 EXPORT int check_aux_completion_and_failure(void)
 {
     ready_for(REPORT_HAPTIC);CHECK(aux_output_steps(2,1,input_generation(),0));

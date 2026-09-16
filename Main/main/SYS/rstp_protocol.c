@@ -26,13 +26,14 @@ bool device_config_valid(const device_config_t *c)
             !b[i+3] || b[i+3] > max_width || !b[i+4] || b[i+4] > 10) return false;
     }
     for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4)
-        if (b[i] > 1 || b[i+1] > 12 || (b[i] && !b[i+1]) ||
+        if (b[i] > 1 || b[i+1] > 47 || (b[i] && !b[i+1]) ||
             !b[i+2] || b[i+2] > 30 || !b[i+3] || b[i+3] > 10) return false;
     if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[50] > 100 || b[51]) return false;
     return true;
 }
 uint32_t rstp_capabilities_normalize(uint32_t caps)
 {
+    if (!(caps & RSTP_CAP_POINTS)) caps &= ~RSTP_CAP_POINT_FUNCTION_KEYS;
     if (!(caps & RSTP_CAP_EDGES)) caps &= ~(RSTP_CAP_ARROW_KEYS | RSTP_CAP_EDGE_REPEAT);
     if ((caps & (RSTP_CAP_EDGES | RSTP_CAP_POINTS)) != (RSTP_CAP_EDGES | RSTP_CAP_POINTS))
         caps &= ~RSTP_CAP_POINT_TO_EDGE;
@@ -57,7 +58,7 @@ bool device_config_load_record(device_config_t *out, const uint8_t *r, size_t si
         for (unsigned p = 0; p < 4; ++p) {
             const uint8_t *old = r + 8 + CFG_POINTS + p * 5;
             uint8_t *next = c.bytes + CFG_POINTS + p * 4;
-            if (old[1] > 12 || old[2] > 1) return false;
+            if (old[1] > 47 || old[2] > 1 || (old[1] > 12 && old[2])) return false;
             next[0] = old[0];
             next[1] = old[1] && old[2] ? ((old[1] & 1) ? old[1] + 1 : old[1] - 1) : old[1];
             next[2] = old[3]; next[3] = old[4];
@@ -79,6 +80,9 @@ bool device_config_supported(const device_config_t *a, const device_config_t *b,
         device_config_t defaults; device_config_defaults(&defaults);
         if (memcmp(b->bytes + CFG_POINTS, defaults.bytes + CFG_POINTS, 16) || (b->bytes[7] & 0xf0)) return false;
     }
+    if (!(caps & RSTP_CAP_POINT_FUNCTION_KEYS))
+        for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4)
+            if (b->bytes[i+1] > 12) return false;
     if ((caps & (RSTP_CAP_EDGES | RSTP_CAP_EDGE_REPEAT)) != (RSTP_CAP_EDGES | RSTP_CAP_EDGE_REPEAT) &&
         ((a->bytes[CFG_EDGE_REPEAT] ^ b->bytes[CFG_EDGE_REPEAT]) & 0x0f)) return false;
     for (unsigned i = CFG_EDGES; i < 32; i += 5)

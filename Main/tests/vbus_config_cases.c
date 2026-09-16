@@ -62,7 +62,7 @@ EXPORT int check_v2_conversion_and_invalid_records(void)
         CHECK(c.bytes[33]==(action?((action&1)?action+1:action-1):0));
     }
     old[42]=2;CHECK(!device_config_load_record(&c,old,60));
-    legacy_v2_record(old);old[41]=13;CHECK(!device_config_load_record(&c,old,60));
+    legacy_v2_record(old);old[41]=48;CHECK(!device_config_load_record(&c,old,60));
     legacy_v2_record(old);old[4]=4;CHECK(!device_config_load_record(&c,old,60));
     old[4]=2;CHECK(!device_config_load_record(&c,old,59));
     return 0;

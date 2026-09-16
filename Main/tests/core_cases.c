@@ -17,7 +17,7 @@ EXPORT int check_config_masks(void)
     }
     for(unsigned bit=5;bit<8;++bit){c.bytes[6]=1U<<bit;CHECK(!device_config_valid(&c));}
     c=configured();for(unsigned i=0;i<4;++i){
-        unsigned b=32+i*4;c.bytes[b+1]=13;CHECK(!device_config_valid(&c));c.bytes[b+1]=3;
+        unsigned b=32+i*4;c.bytes[b+1]=48;CHECK(!device_config_valid(&c));c.bytes[b+1]=3;
         c.bytes[b+2]=0;CHECK(!device_config_valid(&c));
         for(unsigned radius=1;radius<=30;++radius){c.bytes[b+2]=radius;CHECK(device_config_valid(&c));}
         c.bytes[b+2]=31;CHECK(!device_config_valid(&c));c.bytes[b+2]=30;

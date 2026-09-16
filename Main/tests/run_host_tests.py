@@ -26,6 +26,7 @@ def main():
     code=(ROOT/'tests/host_runtime.h').read_text(encoding='utf-8')+'\n'
     code+='\n'.join(body(ROOT/'main'/f) for f in files)
     cases=(ROOT/'tests/core_cases.c').read_text(encoding='utf-8')+'\n'+(ROOT/'tests/vbus_config_cases.c').read_text(encoding='utf-8')
+    cases+='\n'+(ROOT/'tests/function_key_cases.c').read_text(encoding='utf-8')
     code+='\n'+cases
     names=re.findall(r'EXPORT int (check_\w+)\(void\)',cases)
     output=ROOT/'build/host-tests';output.mkdir(parents=True,exist_ok=True)

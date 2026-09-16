@@ -17,6 +17,29 @@ static void complete_hook(void)
 {
     if(ble_flight)ble_input_complete(sent_conn,hid_dev_report_handle(sent_id),true);
 }
+static unsigned function_action;
+static bool function_press_seen;
+static void function_complete_hook(void)
+{
+    if(ble_flight&&test_sends==1) {
+        function_press_seen=sent_id==(function_action<=17?7:8)&&sent_bytes[function_action<=17?0:2]!=0;
+        if(function_action>=18)function_press_seen&=sent_bytes[0]==(function_action>=42?1:0);
+    }
+    complete_hook();
+}
+EXPORT int check_ble_function_keys_after_congestion(void)
+{
+    for(unsigned action=13;action<=47;++action) {
+        connect_ready();CHECK(aux_output_once(action,1,generation,now));
+        ble_input_congestion(1,true);budget=150;ble_hid_task(0);CHECK(!test_sends);
+        ble_input_congestion(1,false);function_action=action;function_press_seen=false;
+        step_hook=function_complete_hook;budget=4;ble_hid_task(0);step_hook=0;
+        CHECK(function_press_seen);
+        CHECK(test_sends==2&&!sent_bytes[0]&&!sent_bytes[2]&&!aux_output_active());
+        ble_input_connection(false,1);
+    }
+    return 0;
+}
 EXPORT int check_ble_async_action_release(void)
 {
     connect_ready();CHECK(aux_output_steps(5,1,generation,now));
