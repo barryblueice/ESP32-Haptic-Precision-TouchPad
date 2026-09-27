@@ -87,3 +87,8 @@ tools/
 # Local agent workspaces and tests
 /.kilo/
 /tests/
+
+# Keep Main Markdown documentation local except README files
+*.[mM][dD]
+!README.md
+!README_CN.md
