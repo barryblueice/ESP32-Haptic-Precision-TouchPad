@@ -128,6 +128,8 @@ static void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param
         esp_ble_gap_security_rsp(param->ble_security.ble_req.bd_addr, true);
 	 break;
      case ESP_GAP_BLE_AUTH_CMPL_EVT:
+        ble_hid_auth_complete(param->ble_security.auth_cmpl.bd_addr,
+                              param->ble_security.auth_cmpl.success);
         esp_bd_addr_t bd_addr;
         memcpy(bd_addr, param->ble_security.auth_cmpl.bd_addr, sizeof(esp_bd_addr_t));
         ESP_LOGI(TAG, "remote BD_ADDR: %08x%04x",\

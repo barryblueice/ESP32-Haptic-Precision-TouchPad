@@ -68,6 +68,15 @@ it is a compile-time setting, not a new runtime/NVS option. USB and 2.4 GHz keep
 their PTP support. BLE retains battery reporting and haptic strength Feature 0x41,
 but has no PTP, corner-key, keyboard or Consumer input collections.
 
+BLE notification subscriptions are stored per bonded peer in NVS `ble_ccc` and
+restored after successful authentication, including reconnects after transport
+switches and power cycles. An explicit unsubscribe is retained too. New peers
+must subscribe before mouse reports are sent. Bond keys and mouse mode settings
+are unchanged. For bonds created by firmware without saved subscriptions, the
+device requests service rediscovery; if the host keeps its old cache and does
+not subscribe again, remove that host's pairing once and pair again. Subsequent
+reconnects restore the saved subscription without repeating this step.
+
 ## Saving and upgrading
 
 - Configure points, edges and rotation over USB. Saved settings are used by all
@@ -269,18 +278,27 @@ and drains pending reports in bounded batches. This avoids waiting for another
 falling edge when INT was already low or several notifications were coalesced.
 It does not synthesize an all-up report from an idle GPIO level.
 
-`SURFACE_HAPTIC: Initialized` only confirms haptic initialization. The later
+`SURFACE_HAPTIC: Initialized` only confirms haptic initialization.
 `IRQ_TP_INT: Touch reader enabled, pending=...` confirms touch capture startup;
-host readiness still depends on USB enumeration or wireless connection.
+host readiness still depends on USB enumeration or wireless connection. Touch
+capture starts before peripheral setup, and haptic firmware loading starts after
+transport initialization. One-time startup, first controller input and first host
+input acknowledgment timestamps help distinguish initialization and input delays.
 
-The periodic `INPUT` statistics now include `link`, `mode`, `recovering`,
-`all_up`, `releases`, and `mode_pending`. `recover` is a cumulative reset count,
-including normal initialization and connection changes. `recovering=1 all_up=0`
-means no all-up sample has been observed since reset; nonzero `releases` means
-host release completion is outstanding. `link=0` means the host input path is not
-ready. Logging does not release the gate. Physical idle alone does not imply that
-an all-up report has been read. Hardware startup/reconnect acceptance remains
-required, including starting with and without a finger held on the surface.
+The periodic `INPUT` statistics include `link`, `mode`, `recovering`, `all_up`,
+`releases`, `mode_pending`, `source_wait_up`, `recovery_ready`, and `host_active`.
+`recover` is a cumulative reset count, including initialization and connection
+changes. Nonzero `releases` means necessary host release completion is outstanding.
+`source_wait_up=1` means a real controller lift is required; `recovery_ready` keeps
+that evidence independently of the current contact state. Cold USB, BLE and 2.4 GHz
+startup admits the first gesture, including a finger already resting at connection,
+without an activation lift. Runtime recovery still requires real lift evidence.
+HID-I2C reset/empty replies are ignored before parsing and cannot trigger a format
+change or supply lift evidence. `link=0`
+means the host input path is not ready. Neither logging nor an idle GPIO level
+releases a recovery gate. USB bus resets now retire cancelled transfers even
+without an unmount callback. See [USB startup recovery](USB_STARTUP_FIX.md) for
+the regression suite and the still-required hardware startup/reconnect acceptance.
 The protocol fixture follows the configurator document with corner reversal bytes
 cleared to reflect the removed option: point
 conversion mask `0x5` plus sleep gives byte 6 `0x0b`.

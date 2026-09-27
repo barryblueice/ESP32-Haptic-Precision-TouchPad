@@ -12,6 +12,7 @@ void report_buffer_reset(report_buffer_t *b, uint8_t mode)
     ++b->stats.recoveries;
     b->recovering = true;
     b->all_up = false;
+    b->recovery_ready = false;
     memset(&b->last, 0, sizeof(b->last));
     b->last.mode = mode;
 }
@@ -19,7 +20,9 @@ void report_buffer_reset(report_buffer_t *b, uint8_t mode)
 bool report_buffer_observe(report_buffer_t *b, bool all_up)
 {
     b->all_up = all_up;
-    if (b->recovering && all_up && !b->release_mask) b->recovering = false;
+    /* A real lift remains valid if endpoint completion arrives after a new touch. */
+    if (all_up) b->recovery_ready = true;
+    if (b->recovering && b->recovery_ready && !b->release_mask) b->recovering = false;
     return !b->recovering;
 }
 
@@ -130,5 +133,5 @@ void report_buffer_ack(report_buffer_t *b, const input_report_t *r)
 {
     if (!report_buffer_current(b, r)) return;
     if (r->release) b->release_mask &= ~(1U << r->mode);
-    if (!b->release_mask && b->all_up) b->recovering = false;
+    if (!b->release_mask && b->recovery_ready) b->recovering = false;
 }

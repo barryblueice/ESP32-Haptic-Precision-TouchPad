@@ -450,7 +450,7 @@ void i2c_queue_task(void *arg) {
             output_generation = input_generation();
             /* Preserve local contact/force/region ownership across radio recovery. */
             usb_aux_cancel();
-            if (last_all_up) {
+            if (last_all_up || input_starting()) {
                 ptp_report_reset();
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                 ptp_simulated_mouse_reset();

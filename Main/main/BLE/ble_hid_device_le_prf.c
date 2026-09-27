@@ -3,6 +3,9 @@
 #include "esp_gatt_common_api.h"
 #include <inttypes.h>
 #include <string.h>
+#include <stdlib.h>
+#include "esp_gap_ble_api.h"
+#include "nvs.h"
 #include "esp_log.h"
 
 #include "I2C/SUB_DEV/sub_dev.h"
@@ -80,6 +83,123 @@ esp_gatts_incl_svc_desc_t incl_svc = {0};
 
 static uint16_t bas_handle_table[BAS_IDX_NB];
 
+/* BTC serializes GATT and GAP callbacks. CCCDs belong to a bonded peer, not
+ * the shared attribute table, and must survive a controller restart. */
+enum { CCC_MOUSE = 1, CCC_BOOT = 2, CCC_BATTERY = 4, CCC_VALID = 0x80 };
+static struct {
+    bool connected, secured, bonded, was_bonded, ccc_known;
+    uint16_t conn;
+    esp_bd_addr_t peer;
+    char key[14];
+    uint8_t ccc, written;
+} hid_peer;
+
+static bool peer_bond_key(const uint8_t *peer, char key[14])
+{
+    int count = esp_ble_get_bond_device_num();
+    if (count <= 0) return false;
+    esp_ble_bond_dev_t *bonds = calloc(count, sizeof(*bonds));
+    if (!bonds) return false;
+    bool found = false;
+    if (esp_ble_get_bond_device_list(&count, bonds) == ESP_OK) {
+        for (int i = 0; i < count; ++i) {
+            esp_ble_bond_dev_t *bond = &bonds[i];
+            bool identity = (bond->bond_key.key_mask & ESP_LE_KEY_PID) != 0;
+            const uint8_t *address = identity ? bond->bond_key.pid_key.static_addr : bond->bd_addr;
+            if (memcmp(peer, bond->bd_addr, ESP_BD_ADDR_LEN) &&
+                memcmp(peer, address, ESP_BD_ADDR_LEN)) continue;
+            static const char hex[] = "0123456789abcdef";
+            key[0] = hex[(identity ? bond->bond_key.pid_key.addr_type : bond->bd_addr_type) & 0xf];
+            for (unsigned j = 0; j < ESP_BD_ADDR_LEN; ++j) {
+                key[1 + j * 2] = hex[address[j] >> 4];
+                key[2 + j * 2] = hex[address[j] & 0xf];
+            }
+            key[13] = 0;
+            found = true;
+            break;
+        }
+    }
+    free(bonds);
+    return found;
+}
+
+static esp_err_t peer_ccc_load(uint8_t *ccc)
+{
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("ble_ccc", NVS_READONLY, &handle);
+    if (err != ESP_OK) return err;
+    uint8_t value = 0;
+    err = nvs_get_u8(handle, hid_peer.key, &value);
+    nvs_close(handle);
+    if (err == ESP_OK && (value & ~7U) != CCC_VALID) return ESP_ERR_INVALID_STATE;
+    if (err == ESP_OK) *ccc = value & 7U;
+    return err;
+}
+
+static esp_err_t peer_ccc_save(uint8_t ccc)
+{
+    uint8_t stored;
+    if (peer_ccc_load(&stored) == ESP_OK && stored == ccc) return ESP_OK;
+    nvs_handle_t handle;
+    esp_err_t err = nvs_open("ble_ccc", NVS_READWRITE, &handle);
+    if (err != ESP_OK) return err;
+    err = nvs_set_u8(handle, hid_peer.key, CCC_VALID | ccc);
+    if (err == ESP_OK) err = nvs_commit(handle);
+    nvs_close(handle);
+    if (err != ESP_OK) ESP_LOGE(TAG, "CCCD persistence failed: %s", esp_err_to_name(err));
+    return err;
+}
+
+void ble_hid_auth_complete(const uint8_t *peer, bool success)
+{
+    if (!hid_peer.connected) return;
+    char key[14] = {0};
+    bool bonded = peer_bond_key(peer, key);
+    /* Accept the resolved identity as well as the address used on connect. */
+    if (memcmp(peer, hid_peer.peer, ESP_BD_ADDR_LEN)) {
+        char connected_key[14] = {0};
+        if (!bonded || !peer_bond_key(hid_peer.peer, connected_key) ||
+            memcmp(key, connected_key, sizeof(key))) return;
+    }
+    if (!success) {
+        hid_peer.secured = false;
+        ble_input_subscription(hid_peer.conn, false);
+        return;
+    }
+    if (hid_peer.secured) return;
+    hid_peer.secured = true;
+    hid_peer.bonded = bonded;
+    if (bonded) {
+        memcpy(hid_peer.key, key, sizeof(key));
+        uint8_t stored = 0;
+        esp_err_t err = hid_peer.was_bonded ? peer_ccc_load(&stored) : ESP_ERR_NVS_NOT_FOUND;
+        if (err == ESP_OK) hid_peer.ccc |= stored & ~hid_peer.written;
+        hid_peer.ccc_known = !hid_peer.was_bonded || err == ESP_OK || (hid_peer.written & CCC_MOUSE);
+        if (hid_peer.ccc_known) {
+            (void)peer_ccc_save(hid_peer.ccc);
+        }
+        if (hid_peer.was_bonded && err != ESP_OK && !(hid_peer.written & CCC_MOUSE)) {
+            /* Older firmware did not persist CCCDs. Ask cached hosts to discover
+             * the services again instead of assuming notification consent. */
+            ESP_LOGW(TAG, "No saved mouse CCCD; requesting service rediscovery");
+            esp_err_t change = esp_ble_gatts_send_service_change_indication(hidd_le_env.gatt_if, hid_peer.peer);
+            if (change != ESP_OK) ESP_LOGW(TAG, "Service rediscovery request failed: %s", esp_err_to_name(change));
+        }
+    }
+    ESP_LOGI(TAG, "Authenticated conn=%u bonded=%u mouse_notify=%u", hid_peer.conn,
+             hid_peer.bonded, !!(hid_peer.ccc & CCC_MOUSE));
+    ble_input_subscription(hid_peer.conn, (hid_peer.ccc & CCC_MOUSE) != 0);
+}
+
+static uint8_t ccc_for_handle(uint16_t handle)
+{
+    if (!handle) return 0;
+    if (handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MOUSE_IN_CCC]) return CCC_MOUSE;
+    if (handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_NTF_CFG]) return CCC_BOOT;
+    if (handle == bas_handle_table[BAS_IDX_BATT_LVL_NTF_CFG]) return CCC_BATTERY;
+    return 0;
+}
+
 #define CHAR_DECLARATION_SIZE   (sizeof(uint8_t))
 static const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 static const uint16_t include_service_uuid = ESP_GATT_UUID_INCLUDE_SERVICE;
@@ -125,7 +245,7 @@ static esp_gatts_attr_db_t bas_att_db[BAS_IDX_NB] = {
     [BAS_IDX_BATT_LVL_VAL]             	= {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&bat_lev_uuid, ESP_GATT_PERM_READ,
                                                                 sizeof(uint8_t),sizeof(uint8_t), &battery_level}},
 
-    [BAS_IDX_BATT_LVL_NTF_CFG]     	=  {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
+    [BAS_IDX_BATT_LVL_NTF_CFG]     	=  {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, ESP_GATT_PERM_READ|ESP_GATT_PERM_WRITE,
                                                           sizeof(uint16_t),sizeof(bat_lev_ccc), (uint8_t *)bat_lev_ccc}},
 
     [BAS_IDX_BATT_LVL_PRES_FMT]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&char_format_uuid, ESP_GATT_PERM_READ,
@@ -152,12 +272,12 @@ static esp_gatts_attr_db_t hidd_le_gatt_db[HIDD_LE_IDX_NB] = {
 
         [HIDD_LE_IDX_REPORT_MOUSE_IN_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
         [HIDD_LE_IDX_REPORT_MOUSE_IN_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ, HIDD_LE_REPORT_MAX_LEN, 0, NULL}},
-        [HIDD_LE_IDX_REPORT_MOUSE_IN_CCC]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
+        [HIDD_LE_IDX_REPORT_MOUSE_IN_CCC]  = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
         [HIDD_LE_IDX_REPORT_MOUSE_REP_REF] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_ref_descr_uuid, ESP_GATT_PERM_READ, sizeof(hidReportRefMouseIn), sizeof(hidReportRefMouseIn), (uint8_t *)&hidReportRefMouseIn}},
 
         [HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, CHAR_DECLARATION_SIZE, CHAR_DECLARATION_SIZE, (uint8_t *)&char_prop_read_notify}},
         [HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_VAL]  = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_mouse_input_uuid, ESP_GATT_PERM_READ, HIDD_LE_BOOT_REPORT_MAX_LEN, 0, NULL}},
-        [HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_NTF_CFG] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
+        [HIDD_LE_IDX_BOOT_MOUSE_IN_REPORT_NTF_CFG] = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&character_client_config_uuid, (ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE), sizeof(uint16_t), 0, NULL}},
 
         [HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_CHAR] = {{ESP_GATT_AUTO_RSP}, {ESP_UUID_LEN_16, (uint8_t *)&character_declaration_uuid, ESP_GATT_PERM_READ, 1, 1, (uint8_t *)&char_prop_read_write}},
         [HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL]  = {{ESP_GATT_RSP_BY_APP}, {ESP_UUID_LEN_16, (uint8_t *)&hid_report_uuid, ESP_GATT_PERM_READ | ESP_GATT_PERM_WRITE, sizeof(ptp_haptic_intensity_data), sizeof(ptp_haptic_intensity_data), (uint8_t *)&ptp_haptic_intensity_data}},
@@ -212,7 +332,13 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_CREATE_EVT:
             break;
         case ESP_GATTS_CONNECT_EVT: {
-
+            if (hid_peer.connected && hid_peer.conn == param->connect.conn_id &&
+                !memcmp(hid_peer.peer, param->connect.remote_bda, ESP_BD_ADDR_LEN)) break;
+            memset(&hid_peer, 0, sizeof(hid_peer));
+            hid_peer.connected = true;
+            hid_peer.conn = param->connect.conn_id;
+            memcpy(hid_peer.peer, param->connect.remote_bda, ESP_BD_ADDR_LEN);
+            hid_peer.was_bonded = peer_bond_key(hid_peer.peer, hid_peer.key);
             ble_hid_is_connected = true;
             ble_input_connection(true, param->connect.conn_id);
 
@@ -232,7 +358,9 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         }
         case ESP_GATTS_DISCONNECT_EVT: {
-
+            if (!hid_peer.connected || hid_peer.conn != param->disconnect.conn_id ||
+                memcmp(hid_peer.peer, param->disconnect.remote_bda, ESP_BD_ADDR_LEN)) break;
+            memset(&hid_peer, 0, sizeof(hid_peer));
             ble_hid_is_connected = false;
             ble_input_connection(false, param->disconnect.conn_id);
 
@@ -250,11 +378,32 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
         case ESP_GATTS_CLOSE_EVT:
             break;
         case ESP_GATTS_WRITE_EVT: {
-            uint16_t input_ccc = hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_MOUSE_IN_CCC];
-            if (param->write.handle == input_ccc && !param->write.is_prep &&
-                param->write.offset == 0 && param->write.len == 2) {
-                ble_input_subscription(param->write.conn_id,
-                    param->write.value[0] == 1 && param->write.value[1] == 0);
+            if (!hid_peer.connected || param->write.conn_id != hid_peer.conn ||
+                memcmp(param->write.bda, hid_peer.peer, ESP_BD_ADDR_LEN)) break;
+            uint8_t ccc = ccc_for_handle(param->write.handle);
+            if (ccc) {
+                esp_gatt_status_t status = ESP_GATT_OK;
+                if (param->write.is_prep) status = ESP_GATT_REQ_NOT_SUPPORTED;
+                else if (param->write.offset) status = ESP_GATT_INVALID_OFFSET;
+                else if (param->write.len != 2 || !param->write.value) status = ESP_GATT_INVALID_ATTR_LEN;
+                else if (param->write.value[1] || param->write.value[0] > 1) status = ESP_GATT_CCC_CFG_ERR;
+                else {
+                    uint8_t updated = (hid_peer.ccc & ~ccc) | (param->write.value[0] ? ccc : 0);
+                    bool known = hid_peer.ccc_known || ccc == CCC_MOUSE;
+                    if (hid_peer.secured && hid_peer.bonded && known && peer_ccc_save(updated) != ESP_OK)
+                        status = ESP_GATT_ERR_UNLIKELY;
+                    else {
+                        hid_peer.ccc = updated;
+                        hid_peer.written |= ccc;
+                        hid_peer.ccc_known = known;
+                        ble_input_subscription(hid_peer.conn, hid_peer.secured && (updated & CCC_MOUSE));
+                        ESP_LOGI(TAG, "CCCD conn=%u handle=%u value=%u", hid_peer.conn,
+                                 param->write.handle, param->write.value[0]);
+                    }
+                }
+                if (param->write.need_rsp) esp_ble_gatts_send_response(gatts_if, param->write.conn_id,
+                    param->write.trans_id, status, NULL);
+                break;
             }
 
                 if (param->write.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL]) {
@@ -274,6 +423,22 @@ void esp_hidd_prf_cb_hdl(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if,
             break;
         }
         case ESP_GATTS_READ_EVT: {
+            if (!hid_peer.connected || param->read.conn_id != hid_peer.conn ||
+                memcmp(param->read.bda, hid_peer.peer, ESP_BD_ADDR_LEN)) break;
+            uint8_t ccc = ccc_for_handle(param->read.handle);
+            if (ccc) {
+                esp_gatt_rsp_t rsp = {0};
+                uint8_t value[2] = {(hid_peer.ccc & ccc) ? 1 : 0, 0};
+                rsp.attr_value.handle = param->read.handle;
+                rsp.attr_value.offset = param->read.offset;
+                if (param->read.offset <= 2) {
+                    rsp.attr_value.len = 2 - param->read.offset;
+                    memcpy(rsp.attr_value.value, value + param->read.offset, rsp.attr_value.len);
+                }
+                if (param->read.need_rsp) esp_ble_gatts_send_response(gatts_if, param->read.conn_id,
+                    param->read.trans_id, param->read.offset > 2 ? ESP_GATT_INVALID_OFFSET : ESP_GATT_OK, &rsp);
+                break;
+            }
                 if (param->read.handle == hidd_le_env.hidd_inst.att_tbl[HIDD_LE_IDX_REPORT_HAPTIC_INTENSITY_VAL]) {
                     esp_gatt_rsp_t rsp = {0};
                     rsp.attr_value.handle = param->read.handle;
@@ -357,6 +522,7 @@ void hidd_le_create_service(esp_gatt_if_t gatts_if) {
 void hidd_le_init(void) {
 
     memset(&hidd_le_env, 0, sizeof(hidd_le_env_t));
+    memset(&hid_peer, 0, sizeof(hid_peer));
 }
 
 void hidd_clcb_alloc (uint16_t conn_id, esp_bd_addr_t bda) {
@@ -364,6 +530,7 @@ void hidd_clcb_alloc (uint16_t conn_id, esp_bd_addr_t bda) {
     hidd_clcb_t      *p_clcb = NULL;
 
     for (i_clcb = 0, p_clcb= hidd_le_env.hidd_clcb; i_clcb < HID_MAX_APPS; i_clcb++, p_clcb++) {
+        if (p_clcb->in_use && p_clcb->conn_id == conn_id) return;
         if (!p_clcb->in_use) {
             p_clcb->in_use      = true;
             p_clcb->conn_id     = conn_id;
@@ -380,8 +547,10 @@ bool hidd_clcb_dealloc (uint16_t conn_id) {
     hidd_clcb_t      *p_clcb = NULL;
 
     for (i_clcb = 0, p_clcb= hidd_le_env.hidd_clcb; i_clcb < HID_MAX_APPS; i_clcb++, p_clcb++) {
+        if (p_clcb->in_use && p_clcb->conn_id == conn_id) {
             memset(p_clcb, 0, sizeof(hidd_clcb_t));
             return true;
+        }
     }
 
     return false;
@@ -486,7 +655,7 @@ void battery_ble_notify_task(void *pvParameters) {
 
         uint8_t current_battery_level = raw_battery;
 
-        if (ble_hid_is_connected) {
+        if (ble_hid_is_connected && hid_peer.secured && (hid_peer.ccc & CCC_BATTERY)) {
 
             update_battery_level(hidd_le_env.gatt_if, ble_conn_id, current_battery_level);
         }

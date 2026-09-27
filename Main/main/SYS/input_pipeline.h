@@ -6,11 +6,17 @@
 typedef struct { uint8_t bytes[64]; uint32_t generation, output_generation, time_ms; } input_frame_t;
 
 void input_pipeline_init(void);
+/* True until the first real host input is acknowledged (or a real fault). */
+bool input_starting(void);
 void input_register_parser(void);
 void input_register_sender(void);
 void input_wake_sender(void);
 void input_wake_parser(void);
 void input_set_link(uint8_t ready_mask);
+/* USB task only: reset destroys the host session; suspend preserves transfers. */
+void input_usb_reset(void);
+void input_usb_link(bool ready);
+void input_report_submitted(const input_report_t *report);
 void input_recover(void);
 /* Reset raw parsing and host output. Diagnostic reason must have static storage. */
 void input_source_recover(const char *reason);

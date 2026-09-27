@@ -4,6 +4,8 @@
 #include "driver/i2c_master.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include <inttypes.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "tinyusb.h"
@@ -62,11 +64,10 @@ void app_main(void) {
 
     irq_func_btn_init();
     touchpad_init(); // I2C0 registration and the touchpad's GPIO33 reset precede haptics.
-    sub_dev_init();  // Register I2C1 devices before the haptic worker can use MP28167.
-    cs40l25_surface_init();
-    tp_modern_sleep_init();
-    /* Drain controller reports while the host connection is being initialized. */
+    /* Consume the HID reset reply and capture touch before peripheral setup. */
     irq_int_init();
+    ESP_LOGI(TAG, "Startup: touch capture enabled at %" PRIi64 " ms", esp_timer_get_time() / 1000);
+    sub_dev_init();  // Register I2C1 before transport battery queries or haptics.
 
 
     switch (current_mode) {
@@ -99,6 +100,10 @@ void app_main(void) {
             break;
 
     }
+    ESP_LOGI(TAG, "Startup: transport initialized at %" PRIi64 " ms", esp_timer_get_time() / 1000);
+    /* Firmware loading shares I2C0 with touch. Start it after input/transport
+     * setup so the first mode command is not queued behind DSP downloads. */
+    cs40l25_surface_init();
 }
 
 #endif

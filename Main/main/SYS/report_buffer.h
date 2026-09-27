@@ -28,7 +28,7 @@ typedef struct {
     unsigned count;
     uint32_t generation;
     uint8_t mode, release_mask;
-    bool recovering, all_up;
+    bool recovering, all_up, recovery_ready;
     input_report_t last;
     input_stats_t stats;
 } report_buffer_t;
