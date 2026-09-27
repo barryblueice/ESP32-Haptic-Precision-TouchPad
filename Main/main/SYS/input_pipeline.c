@@ -2,6 +2,7 @@
 #include "device_config.h"
 #include "rtos_queue.h"
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/TP/tp_raw_trace.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "esp_log.h"
 #include <string.h>
@@ -80,6 +81,10 @@ static void notify(TaskHandle_t task) { if (task) xTaskNotifyGive(task); }
 
 void input_pipeline_init(void)
 {
+#ifdef ESP_PLATFORM
+    /* Serial instrumentation is excluded from native algorithm harnesses. */
+    tp_raw_trace_init();
+#endif
     tp_data_queue = xQueueCreate(16, sizeof(input_frame_t));
     ESP_ERROR_CHECK(tp_data_queue ? ESP_OK : ESP_ERR_NO_MEM);
     reports.mode = current_tp_mode;
@@ -329,6 +334,9 @@ void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
             return;
         }
     }
+#ifdef ESP_PLATFORM
+    if (success) tp_raw_trace_capture(bytes, time_ms, generation, output_generation);
+#endif
     input_frame_t frame = {.generation = generation, .output_generation = output_generation, .time_ms = time_ms};
     if (success) memcpy(frame.bytes, bytes, sizeof(frame.bytes));
     if (success) {

@@ -17,6 +17,7 @@
 #include "SYS/connection.h"
 #include "SYS/edge_gesture.h"
 #include "SYS/point_gesture.h"
+#include "SYS/knuckle_gesture.h"
 #include "USB/usb_aux.h"
 #include "SYS/hid_msg.h"
 
@@ -79,6 +80,7 @@ static uint8_t consecutive_errors[5] = {0};
 static bool slot_active[5] = {false};
 static edge_gesture_t edge_state;
 static point_gesture_t point_state;
+static knuckle_gesture_t knuckle_state;
 static esp_timer_handle_t point_timer;
 static void point_timer_wake(void *arg) { (void)arg; input_wake_parser(); }
 static void point_schedule(void)
@@ -352,6 +354,7 @@ void update_simulated_scan_time(tp_multi_msg_t *msg) {
 
 static void reset_input_state(void)
 {
+    knuckle_gesture_reset(&knuckle_state);
     edge_gesture_reset(&edge_state);
     point_gesture_reset(&point_state);
     if (point_timer) esp_timer_stop(point_timer);
@@ -414,6 +417,8 @@ void i2c_queue_task(void *arg) {
         }
         if (output_generation != input_generation()) {
             output_generation = input_generation();
+            knuckle_state.pending = false;
+            if (knuckle_state.active) knuckle_state.rejected = true;
             /* Preserve local contact/force/region ownership across radio recovery. */
             usb_aux_cancel();
             if (last_all_up || input_starting()) {
@@ -617,11 +622,35 @@ void i2c_queue_task(void *arg) {
                 //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
                 // }
 
+                knuckle_result_t knock = knuckle_gesture_update(&knuckle_state, tp_packet, frame.time_ms);
+                /* Never pair knocks across an offline/recovery interval. */
+                if (!publish) {
+                    knuckle_state.pending = false;
+                    if (knuckle_state.active) knuckle_state.rejected = true;
+                    knock.screenshot = false;
+                }
+                if (knock.suppress) {
+                    edge_gesture_reset(&edge_state);
+                    point_gesture_reset(&point_state);
+                    point_schedule();
+                    ptp_reset_force_click(&tp_msg);
+                    memset(tp_msg.fingers, 0, sizeof(tp_msg.fingers));
+                    active_finger_count = 0;
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                    ptp_simulated_mouse_reset();
+#endif
+                }
+                if (publish && knock.screenshot) {
+                    if (aux_output_once(AUX_KNUCKLE_SCREENSHOT, 1, report_generation, frame.time_ms))
+                        input_source_gesture(frame.generation, true);
+                    else { input_recover(); publish = false; }
+                }
+
                 bool ble_custom_gestures = false;
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                 ble_custom_gestures = current_mode == BLE_MODE;
 #endif
-                if (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE || ble_custom_gestures) {
+                if (!knock.suppress && (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE || ble_custom_gestures)) {
                     device_config_t config; device_config_get(&config);
                     tp_multi_msg_t logical = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch) {

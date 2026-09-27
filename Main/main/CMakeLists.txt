@@ -4,6 +4,7 @@ set(srcs
 
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
+    "I2C/TP/tp_raw_trace.c"
     "I2C/TP/tp_sleep.c"
     "I2C/TP/i2c_watchdog.c"
     "I2C/TP/tp_report_handle.c"
@@ -50,6 +51,7 @@ set(srcs
     "USB/usb_config.c"
     "SYS/aux_output.c"
     "SYS/point_gesture.c"
+    "SYS/knuckle_gesture.c"
 
     "GPIO/irq_func_btn.c"
     "GPIO/irq_tp_int.c"

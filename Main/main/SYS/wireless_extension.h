@@ -54,9 +54,10 @@ static inline void wire_action_encode(uint8_t out[38], const wire_action_t *a)
 }
 static inline bool wire_action_decode(const uint8_t *b, unsigned n, wire_action_t *a)
 {
-    /* 1..6 retain directional semantics; 13..47 carry function bindings. */
+    /* 1..6 directional, 13..47 function bindings, 48 single-knuckle screenshot.
+     * Older receivers reject action 48 and require a firmware rebuild. */
     if(n!=38 || wire_u32(b)!=WIRE_AUX || !wire_u32(b+4) || !wire_u32(b+8) ||
-        b[12]>47 || (b[12]>6 && b[12]<13)) return false;
+        b[12]>48 || (b[12]>6 && b[12]<13)) return false;
     int16_t steps=(int16_t)((uint16_t)b[13]|((uint16_t)b[14]<<8));
     if ((!b[12] && steps) || (b[12] && (!steps || steps < -127 || steps > 127))) return false;
     if (b[12]>=13 && steps<0) return false;

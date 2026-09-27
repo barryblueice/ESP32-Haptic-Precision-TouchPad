@@ -3,6 +3,8 @@
 #include <stdint.h>
 typedef struct { uint8_t id, length, data[8]; uint32_t generation, epoch; bool release; } aux_output_report_t;
 enum { AUX_OUTPUT_MOUSE = 1, AUX_OUTPUT_CONSUMER = 2, AUX_OUTPUT_KEYBOARD = 4, AUX_OUTPUT_ALL = 7 };
+/* Gesture-only action, not an RSTP point binding ID. */
+enum { AUX_KNUCKLE_SCREENSHOT = 48 };
 uint8_t aux_output_report_mask(uint8_t id);
 /* BLE subscriptions: discard unavailable actions, retain neutral releases for
  * when a channel returns. Other transports keep the reset default of ALL. */
@@ -10,7 +12,8 @@ void aux_output_set_ready(uint8_t mask);
 bool aux_output_take_ready(aux_output_report_t *out, uint32_t generation, uint32_t time_ms, uint8_t mask);
 bool aux_output_release_pending_ready(uint8_t mask);
 /* Actions 1..6 are directional edge operations; 13..47 are RSTP function
- * bindings with positive steps and a complete press/release per step.
+ * bindings; 48 is the single-knuckle screenshot. Actions >=13 use positive
+ * steps and a complete press/release per step.
  * Values 7..12 are reserved here, not the legacy RSTP point bindings. */
 bool aux_output_steps(uint8_t action, int steps, uint32_t generation, uint32_t time_ms);
 bool aux_output_once(uint8_t action, int steps, uint32_t generation, uint32_t time_ms);

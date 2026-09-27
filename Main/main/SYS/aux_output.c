@@ -63,7 +63,7 @@ static void set_generation(uint32_t generation)
 static bool enqueue(uint8_t action, int steps, uint32_t generation, uint32_t time_ms, bool discrete, bool repeat, bool hold)
 {
     if (!steps) return true;
-    if (!action || action > 47 || (action > 6 && action < 13) || (action >= 13 && steps < 0)) return false;
+    if (!action || action > AUX_KNUCKLE_SCREENSHOT || (action > 6 && action < 13) || (action >= 13 && steps < 0)) return false;
     taskENTER_CRITICAL(&aux_lock);
     set_generation(generation);
     if (!(action_mask(action) & aux_ready_types)) {
@@ -161,6 +161,9 @@ bool aux_output_take_ready(aux_output_report_t *out, uint32_t generation, uint32
                 static const uint8_t consumer[] = {0xe2, 0xcd, 0xb6, 0xb5, 0xb7};
                 out->id = 7; out->length = 2;
                 out->data[0] = consumer[e->action - 13];
+            } else if (e->action == AUX_KNUCKLE_SCREENSHOT) {
+                out->id = 8; out->length = 8;
+                out->data[0] = 0x08; out->data[2] = 0x46; /* Win + Print Screen */
             } else {
                 static const uint8_t keys[] = {
                     0x29, 0x28, 0x2b, 0x2c, 0x2a, 0x4c, 0x49, 0x4a, 0x4d, 0x4b, 0x4e, 0x46,
