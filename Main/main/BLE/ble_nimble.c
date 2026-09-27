@@ -27,27 +27,29 @@ void ble_store_config_init(void);
 static struct {
     uint16_t conn;
     uint32_t epoch;
-    bool connected, encrypted, mouse_notify, battery_notify;
+    bool connected, encrypted, mouse_notify, battery_notify, consumer_notify, keyboard_notify;
 } peer;
 static bool host_synced, advertising_configured;
-static uint16_t mouse_handle, boot_handle, battery_handle;
+static uint16_t mouse_handle, boot_handle, battery_handle, consumer_handle, keyboard_handle;
 static uint8_t protocol_mode = 1, battery_level = 100;
-static uint8_t last_mouse[5], last_boot[3];
+static uint8_t last_mouse[5], last_boot[3], last_consumer[2], last_keyboard[8];
 static struct ble_npl_callout adv_retry;
 static struct ble_npl_event mouse_event, battery_event;
 static portMUX_TYPE mailbox_lock = portMUX_INITIALIZER_UNLOCKED;
 static struct {
-    bool busy;
+    bool busy, auxiliary;
     uint16_t conn;
     uint32_t epoch;
     input_report_t report;
+    aux_output_report_t aux;
 } mouse_mailbox;
 static uint8_t pending_battery = 100;
 
 enum {
     VALUE_INFO, VALUE_MAP, VALUE_CONTROL, VALUE_PROTOCOL, VALUE_MOUSE,
     VALUE_BOOT, VALUE_STRENGTH, VALUE_GENERIC, VALUE_BATTERY,
-    REF_MOUSE, REF_STRENGTH, REF_GENERIC, REF_BATTERY, FORMAT_BATTERY
+    REF_MOUSE, REF_STRENGTH, REF_GENERIC, REF_BATTERY, FORMAT_BATTERY,
+    VALUE_CONSUMER, VALUE_KEYBOARD, REF_CONSUMER, REF_KEYBOARD
 };
 
 static int append_value(struct ble_gatt_access_ctxt *ctxt, const void *data, uint16_t length)
@@ -64,6 +66,8 @@ static int gatt_access(uint16_t conn, uint16_t handle, struct ble_gatt_access_ct
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR || ctxt->op == BLE_GATT_ACCESS_OP_READ_DSC) {
         static const uint8_t info[] = {0x11, 0x01, 0, 1};
         static const uint8_t mouse_ref[] = {HID_RPT_ID_MOUSE_IN, 1};
+        static const uint8_t consumer_ref[] = {HID_RPT_ID_CONSUMER_IN, 1};
+        static const uint8_t keyboard_ref[] = {HID_RPT_ID_KEYBOARD_IN, 1};
         static const uint8_t strength_ref[] = {REPORTID_HAPTIC_INTENSITY, 3};
         static const uint8_t generic_ref[] = {2, 3}, generic[] = {2, 5, 1};
         static const uint8_t external_ref[] = {0x19, 0x2a};
@@ -74,11 +78,15 @@ static int gatt_access(uint16_t conn, uint16_t handle, struct ble_gatt_access_ct
         case VALUE_MAP: return append_value(ctxt, ble_mouse_hid_report_descriptor, ble_mouse_hid_report_len);
         case VALUE_PROTOCOL: return append_value(ctxt, &protocol_mode, 1);
         case VALUE_MOUSE: return append_value(ctxt, last_mouse, sizeof(last_mouse));
+        case VALUE_CONSUMER: return append_value(ctxt, last_consumer, sizeof(last_consumer));
+        case VALUE_KEYBOARD: return append_value(ctxt, last_keyboard, sizeof(last_keyboard));
         case VALUE_BOOT: return append_value(ctxt, last_boot, sizeof(last_boot));
         case VALUE_STRENGTH: return append_value(ctxt, &strength, 1);
         case VALUE_GENERIC: return append_value(ctxt, generic, sizeof(generic));
         case VALUE_BATTERY: return append_value(ctxt, &battery_level, 1);
         case REF_MOUSE: return append_value(ctxt, mouse_ref, sizeof(mouse_ref));
+        case REF_CONSUMER: return append_value(ctxt, consumer_ref, sizeof(consumer_ref));
+        case REF_KEYBOARD: return append_value(ctxt, keyboard_ref, sizeof(keyboard_ref));
         case REF_STRENGTH: return append_value(ctxt, strength_ref, sizeof(strength_ref));
         case REF_GENERIC: return append_value(ctxt, generic_ref, sizeof(generic_ref));
         case REF_BATTERY: return append_value(ctxt, external_ref, sizeof(external_ref));
@@ -106,6 +114,8 @@ static int gatt_access(uint16_t conn, uint16_t handle, struct ble_gatt_access_ct
     .access_cb = gatt_access, .arg = (void *)(uintptr_t)(value), .flags = (properties)
 
 static struct ble_gatt_dsc_def mouse_descriptors[] = {READ_DSC(0x2908, REF_MOUSE), {0}};
+static struct ble_gatt_dsc_def consumer_descriptors[] = {READ_DSC(0x2908, REF_CONSUMER), {0}};
+static struct ble_gatt_dsc_def keyboard_descriptors[] = {READ_DSC(0x2908, REF_KEYBOARD), {0}};
 static struct ble_gatt_dsc_def strength_descriptors[] = {READ_DSC(0x2908, REF_STRENGTH), {0}};
 static struct ble_gatt_dsc_def generic_descriptors[] = {READ_DSC(0x2908, REF_GENERIC), {0}};
 static struct ble_gatt_dsc_def map_descriptors[] = {READ_DSC(0x2907, REF_BATTERY), {0}};
@@ -125,6 +135,10 @@ static const struct ble_gatt_chr_def hid_chars[] = {
     {HID_CHR(0x2a33, VALUE_BOOT, BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY), .val_handle = &boot_handle},
     {HID_CHR(0x2a4d, VALUE_STRENGTH, BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_WRITE), .descriptors = strength_descriptors},
     {HID_CHR(0x2a4d, VALUE_GENERIC, BLE_GATT_CHR_F_READ), .descriptors = generic_descriptors},
+    {HID_CHR(0x2a4d, VALUE_CONSUMER, BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY),
+        .val_handle = &consumer_handle, .descriptors = consumer_descriptors},
+    {HID_CHR(0x2a4d, VALUE_KEYBOARD, BLE_GATT_CHR_F_READ | BLE_GATT_CHR_F_NOTIFY),
+        .val_handle = &keyboard_handle, .descriptors = keyboard_descriptors},
     {0}
 };
 static const struct ble_gatt_svc_def services[];
@@ -147,13 +161,24 @@ static int register_services(void)
 
 static void update_subscription(void)
 {
-    if (peer.connected)
+    if (peer.connected) {
         ble_input_subscription(peer.conn, peer.encrypted && peer.mouse_notify);
+        uint8_t mask = peer.encrypted ?
+            (peer.mouse_notify ? AUX_OUTPUT_MOUSE : 0) |
+            (peer.consumer_notify ? AUX_OUTPUT_CONSUMER : 0) |
+            (peer.keyboard_notify ? AUX_OUTPUT_KEYBOARD : 0) : 0;
+        ble_input_aux_subscription(peer.conn, mask);
+    }
 }
 
 uint16_t hid_dev_report_handle(uint8_t id)
 {
-    return id == HID_RPT_ID_MOUSE_IN ? mouse_handle : 0;
+    switch (id) {
+    case HID_RPT_ID_MOUSE_IN: return mouse_handle;
+    case HID_RPT_ID_CONSUMER_IN: return consumer_handle;
+    case HID_RPT_ID_KEYBOARD_IN: return keyboard_handle;
+    default: return 0;
+    }
 }
 
 esp_err_t ble_hid_send_mouse(uint16_t conn, uint32_t epoch, const input_report_t *report)
@@ -165,9 +190,29 @@ esp_err_t ble_hid_send_mouse(uint16_t conn, uint32_t epoch, const input_report_t
         return ESP_ERR_NO_MEM;
     }
     mouse_mailbox.busy = true;
+    mouse_mailbox.auxiliary = false;
     mouse_mailbox.conn = conn;
     mouse_mailbox.epoch = epoch;
     mouse_mailbox.report = *report;
+    taskEXIT_CRITICAL(&mailbox_lock);
+    ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &mouse_event);
+    return ESP_OK;
+}
+
+esp_err_t ble_hid_send_aux(uint16_t conn, uint32_t epoch, const aux_output_report_t *report)
+{
+    if (!report || !((report->id == 2 && report->length == 5) ||
+        (report->id == HID_RPT_ID_CONSUMER_IN && report->length == 2) ||
+        (report->id == HID_RPT_ID_KEYBOARD_IN && report->length == 8))) return ESP_ERR_INVALID_ARG;
+    taskENTER_CRITICAL(&mailbox_lock);
+    if (mouse_mailbox.busy) {
+        taskEXIT_CRITICAL(&mailbox_lock);
+        return ESP_ERR_NO_MEM;
+    }
+    mouse_mailbox.busy = mouse_mailbox.auxiliary = true;
+    mouse_mailbox.conn = conn;
+    mouse_mailbox.epoch = epoch;
+    mouse_mailbox.aux = *report;
     taskEXIT_CRITICAL(&mailbox_lock);
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &mouse_event);
     return ESP_OK;
@@ -180,22 +225,37 @@ static void send_mouse_event(struct ble_npl_event *event)
     uint16_t conn = mouse_mailbox.conn;
     uint32_t epoch = mouse_mailbox.epoch;
     input_report_t report = mouse_mailbox.report;
+    aux_output_report_t aux = mouse_mailbox.aux;
+    bool auxiliary = mouse_mailbox.auxiliary;
     mouse_mailbox.busy = false;
     taskEXIT_CRITICAL(&mailbox_lock);
     if (!peer.connected || peer.conn != conn || peer.epoch != epoch) return;
-    if (!peer.encrypted || !peer.mouse_notify || !input_report_current(&report)) {
-        ble_input_complete(conn, epoch, mouse_handle, BLE_TX_RETRY);
+    uint8_t id = auxiliary && aux.id != 2 ? aux.id : HID_RPT_ID_MOUSE_IN;
+    uint16_t handle = hid_dev_report_handle(id);
+    bool subscribed = id == HID_RPT_ID_MOUSE_IN ? peer.mouse_notify :
+        id == HID_RPT_ID_CONSUMER_IN ? peer.consumer_notify : peer.keyboard_notify;
+    bool current = auxiliary ? aux_output_report_current(&aux) : input_report_current(&report);
+    if (!peer.encrypted || !subscribed || !current) {
+        ble_input_complete(conn, epoch, handle, BLE_TX_RETRY);
         return;
     }
-    struct os_mbuf *om = ble_hs_mbuf_from_flat(&report.data.mouse, sizeof(report.data.mouse));
-    int rc = om ? ble_gatts_notify_custom(conn, mouse_handle, om) : BLE_HS_ENOMEM;
+    /* Wheel/pan reports must preserve the buttons last delivered to this peer. */
+    if (auxiliary && id == HID_RPT_ID_MOUSE_IN) aux.data[0] = last_mouse[0];
+    const void *data = auxiliary ? (const void *)aux.data : (const void *)&report.data.mouse;
+    uint8_t length = auxiliary ? aux.length : sizeof(report.data.mouse);
+    struct os_mbuf *om = ble_hs_mbuf_from_flat(data, length);
+    int rc = om ? ble_gatts_notify_custom(conn, handle, om) : BLE_HS_ENOMEM;
     /* notify_custom owns om on every return path. In this SDK NOTIFY_TX is
      * synchronous, including failures; settle exactly once using the return
      * code, not both the event and the return. This is not a host-side ACK. */
     ble_tx_result_t status = rc == 0 ? BLE_TX_OK :
         (rc == BLE_HS_ENOMEM || rc == BLE_HS_EBUSY || rc == BLE_HS_EAGAIN) ? BLE_TX_RETRY : BLE_TX_FAILED;
-    if (!rc) memcpy(last_mouse, &report.data.mouse, sizeof(last_mouse));
-    ble_input_complete(conn, epoch, mouse_handle, status);
+    if (!rc) {
+        uint8_t *last = id == HID_RPT_ID_MOUSE_IN ? last_mouse :
+            id == HID_RPT_ID_CONSUMER_IN ? last_consumer : last_keyboard;
+        memcpy(last, data, length);
+    }
+    ble_input_complete(conn, epoch, handle, status);
 }
 
 static void send_battery_event(struct ble_npl_event *event)
@@ -230,6 +290,8 @@ static void disconnected(void)
     memset(&peer, 0, sizeof(peer));
     protocol_mode = 1;
     memset(last_mouse, 0, sizeof(last_mouse));
+    memset(last_consumer, 0, sizeof(last_consumer));
+    memset(last_keyboard, 0, sizeof(last_keyboard));
     led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 }
 
@@ -268,6 +330,7 @@ static int gap_event(struct ble_gap_event *event, void *arg)
         peer.connected = true;
         peer.conn = event->connect.conn_handle;
         peer.encrypted = peer.mouse_notify = peer.battery_notify = false;
+        peer.consumer_notify = peer.keyboard_notify = false;
         peer.epoch = ble_input_connection(true, peer.conn);
         led_send_command(GPIO_LED_3, LED_CMD_STOP, 100, 1000, 0, false);
         led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 3, false);
@@ -293,6 +356,8 @@ static int gap_event(struct ble_gap_event *event, void *arg)
     case BLE_GAP_EVENT_SUBSCRIBE:
         if (!peer.connected || peer.conn != event->subscribe.conn_handle) break;
         if (event->subscribe.attr_handle == mouse_handle) peer.mouse_notify = event->subscribe.cur_notify;
+        if (event->subscribe.attr_handle == consumer_handle) peer.consumer_notify = event->subscribe.cur_notify;
+        if (event->subscribe.attr_handle == keyboard_handle) peer.keyboard_notify = event->subscribe.cur_notify;
         if (event->subscribe.attr_handle == battery_handle) peer.battery_notify = event->subscribe.cur_notify;
         update_subscription();
         break;

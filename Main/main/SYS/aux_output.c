@@ -19,18 +19,38 @@ static uint32_t flight_generation, aux_epoch, flight_epoch;
 static uint8_t flight_action;
 static int flight_steps;
 static uint32_t radio_epoch;
+static uint8_t aux_ready_types = AUX_OUTPUT_ALL;
 static portMUX_TYPE aux_lock = portMUX_INITIALIZER_UNLOCKED;
+
+uint8_t aux_output_report_mask(uint8_t id)
+{ return id == 2 ? AUX_OUTPUT_MOUSE : id == 7 ? AUX_OUTPUT_CONSUMER : id == 8 ? AUX_OUTPUT_KEYBOARD : 0; }
 
 static uint8_t release_mask(uint8_t action)
 {
     return action <= 2 || (action >= 13 && action <= 17) ? 1 : action >= 5 ? 2 : 0;
 }
 
+static uint8_t action_mask(uint8_t action)
+{ uint8_t mask = release_mask(action); return mask ? mask << 1 : AUX_OUTPUT_MOUSE; }
+
 /* Called with aux_lock held. A completed hold has no queued work until release. */
 static void release_held(void)
 {
     release_due |= held_mask;
     held_mask = 0;
+}
+
+void aux_output_set_ready(uint8_t mask)
+{
+    mask &= AUX_OUTPUT_ALL;
+    taskENTER_CRITICAL(&aux_lock);
+    if (mask != aux_ready_types) {
+        release_held(); count = 0; ++aux_epoch;
+        aux_ready_types = mask;
+        release_due |= 3; neutral_due |= 3;
+    }
+    taskEXIT_CRITICAL(&aux_lock);
+    input_wake_sender();
 }
 
 static void set_generation(uint32_t generation)
@@ -46,7 +66,11 @@ static bool enqueue(uint8_t action, int steps, uint32_t generation, uint32_t tim
     if (!action || action > 47 || (action > 6 && action < 13) || (action >= 13 && steps < 0)) return false;
     taskENTER_CRITICAL(&aux_lock);
     set_generation(generation);
-    if (repeat && (count || flight || release_due)) {
+    if (!(action_mask(action) & aux_ready_types)) {
+        taskEXIT_CRITICAL(&aux_lock);
+        return true;
+    }
+    if (repeat && (count || flight || (release_due & (aux_ready_types >> 1)))) {
         taskEXIT_CRITICAL(&aux_lock);
         return true;
     }
@@ -85,9 +109,19 @@ void aux_output_cancel_gesture(void)
     taskEXIT_CRITICAL(&aux_lock); input_wake_sender();
 }
 bool aux_output_take(aux_output_report_t *out, uint32_t generation, uint32_t time_ms)
+{ return aux_output_take_ready(out, generation, time_ms, AUX_OUTPUT_ALL); }
+
+bool aux_output_take_ready(aux_output_report_t *out, uint32_t generation, uint32_t time_ms, uint8_t mask)
 {
     taskENTER_CRITICAL(&aux_lock);
     set_generation(generation);
+    mask &= aux_ready_types;
+    if (!flight) {
+        unsigned kept = 0;
+        for (unsigned i = 0; i < count; ++i)
+            if (action_mask(entries[i].action) & mask) entries[kept++] = entries[i];
+        if (kept != count) { count = kept; ++aux_epoch; }
+    }
     unsigned expired = 0;
     while (expired < count && entries[expired].action < 13 && time_ms - entries[expired].time_ms > 100) ++expired;
     if (expired) {
@@ -95,16 +129,17 @@ bool aux_output_take(aux_output_report_t *out, uint32_t generation, uint32_t tim
         memmove(entries, entries + expired, count * sizeof(*entries));
     }
     if (!flight && count) release_held();
-    bool ok = !flight && (release_due || count);
+    uint8_t available_release = release_due & (mask >> 1);
+    bool ok = !flight && (available_release || count);
     if (ok) {
         *out = (aux_output_report_t){0};
-        out->generation = generation; out->epoch = aux_epoch; out->release = release_due != 0;
-        flight_release = release_due & 1 ? 1 : release_due & 2;
+        out->generation = generation; out->epoch = aux_epoch; out->release = available_release != 0;
+        flight_release = available_release & 1 ? 1 : available_release & 2;
         flight_generation = generation;
         flight_epoch = aux_epoch;
         flight_action = 0;
         flight_steps = 0;
-        if (release_due) { out->id = flight_release == 1 ? 7 : 8; out->length = flight_release == 1 ? 2 : 8; }
+        if (available_release) { out->id = flight_release == 1 ? 7 : 8; out->length = flight_release == 1 ? 2 : 8; }
         else {
             aux_entry_t *e = &entries[0];
             flight_action = e->action;
@@ -173,6 +208,7 @@ void aux_output_complete(bool success)
 void aux_output_reset(bool connected)
 {
     taskENTER_CRITICAL(&aux_lock);
+    aux_ready_types = AUX_OUTPUT_ALL;
     count = 0; ++aux_epoch; flight = false; release_due = connected ? 3 : 0;
     neutral_due = release_due; flight_release = 0;
     held_mask = 0;
@@ -183,11 +219,18 @@ bool aux_output_active(void)
 bool aux_output_drained(bool radio)
 {
     taskENTER_CRITICAL(&aux_lock);
-    bool done = !flight && !count && (radio ? radio_epoch == aux_epoch : !release_due);
+    bool done = !flight && !count && (radio ? radio_epoch == aux_epoch : !(release_due & (aux_ready_types >> 1)));
     taskEXIT_CRITICAL(&aux_lock); return done;
 }
 bool aux_output_release_pending(void)
 { taskENTER_CRITICAL(&aux_lock); bool due = release_due; taskEXIT_CRITICAL(&aux_lock); return due; }
+
+bool aux_output_release_pending_ready(uint8_t mask)
+{
+    taskENTER_CRITICAL(&aux_lock);
+    bool due = (release_due & ((mask & aux_ready_types) >> 1)) != 0;
+    taskEXIT_CRITICAL(&aux_lock); return due;
+}
 
 void aux_output_cancel(void)
 {

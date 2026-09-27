@@ -617,7 +617,11 @@ void i2c_queue_task(void *arg) {
                 //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
                 // }
 
-                if (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE) {
+                bool ble_custom_gestures = false;
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                ble_custom_gestures = current_mode == BLE_MODE;
+#endif
+                if (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE || ble_custom_gestures) {
                     device_config_t config; device_config_get(&config);
                     tp_multi_msg_t logical = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch) {
@@ -625,7 +629,7 @@ void i2c_queue_task(void *arg) {
                     }
                     point_result_t point = {0};
                     bool owned = point_state.owned;
-                    if (current_tp_mode == PTP_MODE) {
+                    if (current_tp_mode == PTP_MODE || ble_custom_gestures) {
                         bool portrait = device_config_rotation() & 1;
                         point = point_gesture_update(&point_state, &config, &logical,
                             device_config_x_max(), device_config_y_max(),
@@ -654,6 +658,12 @@ void i2c_queue_task(void *arg) {
                     }
                     if (publish && edge.steps)
                         input_source_gesture(frame.generation, false);
+#if CONFIG_PTP_SIMULATED_MOUSE_MODE
+                    /* A claimed BLE gesture must not seed a simulated tap or
+                     * drag when it hands off or lifts. A failed edge candidate
+                     * is still replayed below as an ordinary tap. */
+                    if (ble_custom_gestures && (edge.suppress || owned)) ptp_simulated_mouse_reset();
+#endif
                     if (edge.tap) {
                         input_report_t down = {.mode = input_mode(), .time_ms = frame.time_ms};
                         input_report_t up = down;
