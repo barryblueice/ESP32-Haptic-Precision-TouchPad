@@ -1,5 +1,6 @@
 #include "device_config.h"
 #include "input_pipeline.h"
+#include "connection.h"
 #include "I2C/TP/i2c_hid.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "NVS/nvs_handle.h"
@@ -13,7 +14,7 @@ static device_config_t active, pending;
 static portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t writer, applied;
 static bool initialized, pending_apply, pending_restart, halted, saved_restart;
-static uint32_t capabilities = 0xfff;
+static uint32_t capabilities = 0x1fff;
 
 static esp_err_t store_config(const device_config_t *c)
 {
@@ -122,11 +123,12 @@ uint16_t device_config_save(const device_config_t *c)
     if (!device_config_valid(c)) return RSTP_INVALID;
     if (!initialized || xSemaphoreTake(writer, 0) != pdTRUE) return RSTP_BUSY;
     device_config_t old; device_config_get(&old);
-    uint16_t status = RSTP_RESTART;
+    bool restart = memcmp(old.bytes, c->bytes, CFG_AUTO_SWITCH) != 0;
+    uint16_t status = restart ? RSTP_RESTART : RSTP_OK;
     if (saved_restart) status = RSTP_BUSY;
     else if (!device_config_supported(&old, c, device_config_capabilities())) status = RSTP_UNSUPPORTED;
     else if (store_config(c) != ESP_OK) status = RSTP_STORAGE;
-    else { saved_restart = true; apply_at_boundary(c, true); }
+    else { saved_restart = restart; apply_at_boundary(c, restart); }
     xSemaphoreGive(writer);
     return status;
 }
@@ -152,14 +154,21 @@ bool device_config_parser_boundary(void)
 {
     taskENTER_CRITICAL(&config_lock);
     bool change = pending_apply;
+    bool recover = false, auto_change = false;
     if (change) {
+        recover = memcmp(active.bytes, pending.bytes, CFG_AUTO_SWITCH) != 0;
+        auto_change = active.bytes[CFG_AUTO_SWITCH] != pending.bytes[CFG_AUTO_SWITCH];
         if (pending_restart) halted = true;
-        else { active = pending; mirror(&active); }
+        active = pending; mirror(&active);
         pending_apply = false;
     }
     bool stop = halted;
     taskEXIT_CRITICAL(&config_lock);
-    if (change) { input_source_recover("config"); xSemaphoreGive(applied); }
+    if (change) {
+        if (auto_change) connection_config_pending();
+        if (recover) input_source_recover("config");
+        xSemaphoreGive(applied);
+    }
     return stop;
 }
 uint8_t device_config_rotation(void)

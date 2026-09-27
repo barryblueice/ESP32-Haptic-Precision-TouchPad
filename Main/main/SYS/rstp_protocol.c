@@ -8,11 +8,12 @@ void device_config_defaults(device_config_t *c)
 {
     *c = (device_config_t){{63, 2, 80, 100, 130, 0, 1, 0}};
     rstp_put32(c->bytes + CFG_TIMEOUT, 180000);
-    for (unsigned i = CFG_EDGES; i < CFG_POINTS; i += 5) { c->bytes[i + 3] = 5; c->bytes[i + 4] = 2; }
-    for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4) { c->bytes[i + 2] = 5; c->bytes[i + 3] = 2; }
-    c->bytes[CFG_WIRELESS_LIGHT] = 20;
-    c->bytes[CFG_WIRELESS_MEDIUM] = 35;
-    c->bytes[CFG_WIRELESS_STRONG] = 70;
+    for (unsigned i = CFG_EDGES; i < CFG_POINTS; i += 5) { c->bytes[i + 3] = 5; c->bytes[i + 4] = 1; }
+    for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4) { c->bytes[i + 2] = 5; c->bytes[i + 3] = 1; }
+    c->bytes[CFG_WIRELESS_LIGHT] = 60;
+    c->bytes[CFG_WIRELESS_MEDIUM] = 80;
+    c->bytes[CFG_WIRELESS_STRONG] = 100;
+    c->bytes[CFG_AUTO_SWITCH] = 1;
 }
 bool device_config_valid(const device_config_t *c)
 {
@@ -28,7 +29,7 @@ bool device_config_valid(const device_config_t *c)
     for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4)
         if (b[i] > 1 || b[i+1] > 47 || (b[i] && !b[i+1]) ||
             !b[i+2] || b[i+2] > 30 || !b[i+3] || b[i+3] > 10) return false;
-    if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[50] > 100 || b[51]) return false;
+    if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[50] > 100 || b[51] > 1) return false;
     return true;
 }
 uint32_t rstp_capabilities_normalize(uint32_t caps)
@@ -50,10 +51,13 @@ bool device_config_load_record(device_config_t *out, const uint8_t *r, size_t si
     bool v1 = r[4] == 1 && r[6] == 32 && size == 40;
     bool v2 = r[4] == 2 && r[6] == 52 && size == 60;
     bool v3 = r[4] == 3 && r[6] == 52 && size == 60;
-    if (!v1 && !v2 && !v3) return false;
+    bool v4 = r[4] == 4 && r[6] == 52 && size == 60;
+    if (!v1 && !v2 && !v3 && !v4) return false;
+    if (v3 && r[59]) return false;
     device_config_t c; device_config_defaults(&c);
     if (v1 && (r[14] > 1 || (r[15] & 0xf0))) return false;
-    memcpy(c.bytes, r + 8, v3 ? DEVICE_CONFIG_SIZE : 32);
+    memcpy(c.bytes, r + 8, (v3 || v4) ? DEVICE_CONFIG_SIZE : 32);
+    if (!v4) c.bytes[CFG_AUTO_SWITCH] = 1;
     if (v2) {
         for (unsigned p = 0; p < 4; ++p) {
             const uint8_t *old = r + 8 + CFG_POINTS + p * 5;
@@ -70,6 +74,7 @@ bool device_config_load_record(device_config_t *out, const uint8_t *r, size_t si
 bool device_config_supported(const device_config_t *a, const device_config_t *b, uint32_t caps)
 {
     caps = rstp_capabilities_normalize(caps);
+    if (!(caps & RSTP_CAP_AUTO_SWITCH) && b->bytes[CFG_AUTO_SWITCH]) return false;
     static const uint8_t start[] = {0, 1, 2, 5, 6, 12}, end[] = {1, 2, 5, 6, 6, 32};
     for (unsigned i = 0; i < 6; ++i)
         if (!(caps & (1U << i)) && memcmp(a->bytes + start[i], b->bytes + start[i], end[i] - start[i])) return false;

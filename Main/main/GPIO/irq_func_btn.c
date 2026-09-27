@@ -7,6 +7,7 @@
 #include "esp_timer.h"
 #include "NVS/nvs_handle.h"
 #include "SYS/hid_msg.h"
+#include "SYS/connection.h"
 
 #include "GPIO/gpio_handle.h"
 
@@ -30,7 +31,11 @@ void button_handler_task(void* arg) {
 
                 if (duration >= CONFIG_FUNC_RESET_MS) {
                     ESP_LOGW(TAG, "BTN time out! Reset to default mode..", duration);
-                    nvs_write_int("current_mode", WIRED_MODE);
+                    if (connection_manual_restart(WIRED_MODE) != ESP_OK) {
+                        ESP_LOGE(TAG, "Could not save manual mode");
+                        reset_triggered = true;
+                        break;
+                    }
                     reset_triggered = true;
                     led_all_handle(LED_OFF);
                     esp_restart();
@@ -48,9 +53,13 @@ void button_handler_task(void* arg) {
                 uint64_t final_duration = (esp_timer_get_time() / 1000) - start_time;
 
                 if (final_duration >= CONFIG_FUNC_TIMEOUT_MS) {
-                    current_mode = (current_mode == BLE_MODE) ? 0 : current_mode + 1;
-                    ESP_LOGW(TAG, "BTN Pressed: %d ms. Switching mode %d", final_duration, current_mode);
-                    nvs_write_int("current_mode", current_mode);
+                    int mode = connection_mode();
+                    mode = mode == BLE_MODE ? WIRED_MODE : mode + 1;
+                    ESP_LOGW(TAG, "BTN Pressed: %llu ms. Switching mode %d", (unsigned long long)final_duration, mode);
+                    if (connection_manual_restart(mode) != ESP_OK) {
+                        ESP_LOGE(TAG, "Could not save manual mode");
+                        continue;
+                    }
 
                     led_all_handle(LED_OFF);
 

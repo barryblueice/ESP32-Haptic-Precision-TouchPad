@@ -29,6 +29,8 @@
 #include "USB/usb_config.h"
 #include "USB/usb_aux.h"
 #include "SYS/device_config.h"
+#include "SYS/connection.h"
+#include "GPIO/GPIO_handle.h"
 
 // #include "wireless/wireless.h"
 
@@ -116,7 +118,7 @@ static usb_aux_report_t usb_aux_buffer;
 static bool pump_queued, usb_configured;
 static TaskHandle_t usb_sender_task;
 static bool pump_enqueued;
-static uint32_t usb_epoch, usb_flight_epoch[3];
+static uint32_t usb_epoch, usb_flight_epoch[3], usb_route_epoch[3];
 static input_report_t usb_pending;
 static bool usb_have_pending, usb_prefer_aux = true;
 
@@ -134,6 +136,7 @@ static void usb_complete(uint8_t instance, bool success)
 {
     if (instance == 0) { usb_config_complete(success); return; }
     if (instance < 1 || instance > 2) return;
+    connection_lock();
     taskENTER_CRITICAL(&usb_tx_lock);
     bool busy = usb_busy[instance] && usb_flight_epoch[instance] == usb_epoch;
     input_report_t report = usb_flight[instance];
@@ -141,6 +144,9 @@ static void usb_complete(uint8_t instance, bool success)
     if (aux) usb_aux_flight = false;
     usb_busy[instance] = false;
     taskEXIT_CRITICAL(&usb_tx_lock);
+    bool owner = connection_selected(WIRED_MODE) && usb_route_epoch[instance] == connection_epoch();
+    if (busy && owner) connection_flight(WIRED_MODE, usb_route_epoch[instance], false);
+    if (busy && !owner) busy = false;
     if (busy && aux) { usb_aux_complete(success); if (!success) input_recover(); }
     else if (busy) {
         if (success) input_report_ack(&report);
@@ -149,6 +155,7 @@ static void usb_complete(uint8_t instance, bool success)
             if (input_report_current(&report)) input_recover();
         }
     }
+    connection_unlock();
     input_wake_sender();
 }
 
@@ -232,7 +239,9 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_FEATURE) {
         if (payload_size >= 1) {
             ptp_input_mode = payload[0] == 3 ? 3 : 0;
-            input_request_mode(ptp_input_mode == 0x03 ? PTP_MODE : MOUSE_MODE);
+            connection_lock();
+            connection_usb_mode(ptp_input_mode == 0x03 ? PTP_MODE : MOUSE_MODE);
+            connection_unlock();
             ESP_LOGI(TAG, "PTP input mode SET_FEATURE: instance=%u mode=0x%02X", instance, ptp_input_mode);
         }
     }
@@ -264,6 +273,7 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
 static void usb_session_reset(uint8_t rhport)
 {
     (void)rhport;
+    connection_lock();
     ++usb_epoch;
     usb_configured = false;
     usb_have_pending = false;
@@ -271,9 +281,9 @@ static void usb_session_reset(uint8_t rhport)
     memset(usb_busy, 0, sizeof(usb_busy));
     usb_aux_flight = false;
     usb_config_detach();
-    usb_aux_reset(false);
     ptp_input_mode = 0;
-    input_usb_reset();
+    connection_usb_reset();
+    connection_unlock();
     ESP_LOGI(TAG, "USB session reset epoch=%" PRIu32, usb_epoch);
 }
 
@@ -296,39 +306,45 @@ usbd_class_driver_t const *usbd_app_driver_get_cb(uint8_t *count)
 static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
 {
     (void)arg;
+    connection_lock();
     switch (event->id) {
     case TINYUSB_EVENT_ATTACHED:
         usb_configured = true;
         /* A new host session has no pressed keys to release. Mode requests
          * received before SET_CONFIGURATION must not be overwritten here. */
-        input_usb_link(true);
+        connection_link(WIRED_MODE, true);
         ESP_LOGI(TAG, "USB configured epoch=%" PRIu32 " mode=%u", usb_epoch, ptp_input_mode);
         break;
     case TINYUSB_EVENT_DETACHED:
         /* The class reset observer already retired the endpoint transfers. */
         usb_configured = false;
-        input_usb_link(false);
+        connection_link(WIRED_MODE, false);
         break;
     case TINYUSB_EVENT_SUSPENDED:
-        usb_aux_cancel();
-        input_usb_link(false);
+        if (connection_selected(WIRED_MODE)) usb_aux_cancel();
+        connection_link(WIRED_MODE, false);
         ESP_LOGI(TAG, "USB suspended epoch=%" PRIu32, usb_epoch);
         break;
     case TINYUSB_EVENT_RESUMED:
         /* cancel retains in-flight reports and only releases actual held keys. */
-        usb_aux_cancel();
-        if (usb_configured) input_usb_link(true);
+        if (connection_selected(WIRED_MODE)) usb_aux_cancel();
+        if (usb_configured) connection_link(WIRED_MODE, true);
         ESP_LOGI(TAG, "USB resumed epoch=%" PRIu32, usb_epoch);
         break;
     default:
         break;
     }
+    connection_unlock();
 }
 
 void usbhid_init(void) {
     usb_descriptor_init();
     ESP_ERROR_CHECK(usb_config_init());
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();
+    /* Battery power keeps the MCU alive after unplug. Let the PHY observe
+     * actual VBUS so disconnect retires the old USB host session. */
+    tusb_cfg.phy.self_powered = true;
+    tusb_cfg.phy.vbus_monitor_io = VBUS_DET_GPIO;
     tusb_cfg.descriptor.device = &desc_device;
     tusb_cfg.descriptor.full_speed_config = desc_configuration;
     tusb_cfg.descriptor.string = string_desc;
@@ -341,43 +357,53 @@ void usbhid_init(void) {
 static void usb_send_pump(void *arg)
 {
     (void)arg;
-    if (usb_configured && tud_mounted() && !tud_suspended()) {
+    connection_lock();
+    if (gpio_get_level(VBUS_DET_GPIO) && usb_configured && tud_mounted() && !tud_suspended()) {
         usb_config_send();
-        if (usb_have_pending && !input_report_current(&usb_pending)) usb_have_pending = false;
-        bool busy = usb_busy[1] || (usb_busy[2] && !usb_aux_flight);
-        bool aux_busy = usb_busy[2];
-        if (!usb_have_pending && !busy) usb_have_pending = input_take_report(&usb_pending);
-        if (!aux_busy && tud_hid_n_ready(2) &&
-            (usb_aux_release_pending() || usb_prefer_aux || !usb_have_pending) && usb_aux_take(&usb_aux_buffer, input_generation(), (uint32_t)(esp_timer_get_time() / 1000))) {
-            usb_busy[2] = true; usb_aux_flight = true;
-            usb_flight_epoch[2] = usb_epoch;
-            if (!usb_aux_report_current(&usb_aux_buffer) ||
-                !tud_hid_n_report(2, usb_aux_buffer.id, usb_aux_buffer.data, usb_aux_buffer.length)) {
-                usb_busy[2] = false; usb_aux_flight = false;
-                usb_aux_unsubmitted();
-            } else usb_prefer_aux = false;
-            aux_busy = usb_busy[2];
-        }
-        if (!busy && usb_have_pending && !(usb_pending.mode == MOUSE_MODE && aux_busy)) {
-            uint8_t instance = usb_pending.mode == PTP_MODE ? 1 : 2;
-            if (tud_hid_n_ready(instance) && input_report_current(&usb_pending)) {
-                usb_flight[instance] = usb_pending;
-                usb_flight_epoch[instance] = usb_epoch;
-                usb_busy[instance] = true;
-                bool accepted = usb_pending.mode == PTP_MODE ?
-                    tud_hid_n_report(instance, REPORTID_TOUCHPAD, &usb_pending.data.ptp, sizeof(ptp_report_t)) :
-                    tud_hid_n_report(instance, REPORTID_MOUSE, &usb_pending.data.mouse, sizeof(mouse_hid_report_t));
-                if (accepted) {
-                    input_report_submitted(&usb_pending);
-                    usb_have_pending = false; usb_prefer_aux = true;
+        if (connection_can_send(WIRED_MODE)) {
+            if (usb_have_pending && !input_report_current(&usb_pending)) usb_have_pending = false;
+            bool busy = usb_busy[1] || (usb_busy[2] && !usb_aux_flight);
+            bool aux_busy = usb_busy[2];
+            if (!usb_have_pending && !busy) usb_have_pending = input_take_report(&usb_pending);
+            if (!aux_busy && tud_hid_n_ready(2) &&
+                (usb_aux_release_pending() || usb_prefer_aux || !usb_have_pending) && usb_aux_take(&usb_aux_buffer, input_generation(), (uint32_t)(esp_timer_get_time() / 1000))) {
+                usb_busy[2] = true; usb_aux_flight = true;
+                usb_flight_epoch[2] = usb_epoch;
+                if (!usb_aux_report_current(&usb_aux_buffer) ||
+                    !tud_hid_n_report(2, usb_aux_buffer.id, usb_aux_buffer.data, usb_aux_buffer.length)) {
+                    usb_busy[2] = false; usb_aux_flight = false;
+                    usb_aux_unsubmitted();
+                } else {
+                    usb_prefer_aux = false;
+                    usb_route_epoch[2] = connection_epoch();
+                    connection_flight(WIRED_MODE, usb_route_epoch[2], true);
                 }
-                else {
-                    usb_busy[instance] = false;
-                    input_submit_failed();
+                aux_busy = usb_busy[2];
+            }
+            if (!busy && usb_have_pending && !(usb_pending.mode == MOUSE_MODE && aux_busy)) {
+                uint8_t instance = usb_pending.mode == PTP_MODE ? 1 : 2;
+                if (tud_hid_n_ready(instance) && input_report_current(&usb_pending)) {
+                    usb_flight[instance] = usb_pending;
+                    usb_flight_epoch[instance] = usb_epoch;
+                    usb_busy[instance] = true;
+                    bool accepted = usb_pending.mode == PTP_MODE ?
+                        tud_hid_n_report(instance, REPORTID_TOUCHPAD, &usb_pending.data.ptp, sizeof(ptp_report_t)) :
+                        tud_hid_n_report(instance, REPORTID_MOUSE, &usb_pending.data.mouse, sizeof(mouse_hid_report_t));
+                    if (accepted) {
+                        usb_route_epoch[instance] = connection_epoch();
+                        connection_flight(WIRED_MODE, usb_route_epoch[instance], true);
+                        input_report_submitted(&usb_pending);
+                        usb_have_pending = false; usb_prefer_aux = true;
+                    }
+                    else {
+                        usb_busy[instance] = false;
+                        input_submit_failed();
+                    }
                 }
             }
         }
     }
+    connection_unlock();
     taskENTER_CRITICAL(&usb_tx_lock);
     pump_queued = false;
     taskEXIT_CRITICAL(&usb_tx_lock);
@@ -386,10 +412,12 @@ static void usb_send_pump(void *arg)
 void usbhid_task(void *arg)
 {
     (void)arg;
-    input_register_sender();
+    input_register_transport_sender(WIRED_MODE);
     usb_sender_task = xTaskGetCurrentTaskHandle();
     while (true) {
-        input_log_stats();
+        connection_lock();
+        if (connection_selected(WIRED_MODE)) input_log_stats();
+        connection_unlock();
         taskENTER_CRITICAL(&usb_tx_lock);
         bool schedule = !pump_queued;
         if (schedule) pump_queued = true;

@@ -1,5 +1,6 @@
 #include "usb_config.h"
 #include "SYS/device_config.h"
+#include "SYS/connection.h"
 #include "SYS/input_pipeline.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -57,7 +58,9 @@ static void config_task(void *arg)
         case RSTP_INFO:
             rstp_put32(payload, device_config_capabilities()); payload[4] = 2; payload[6] = 0; payload[10] = DEVICE_CONFIG_VERSION; size = 12; break;
         case RSTP_READ: {
-            device_config_t config; device_config_get(&config); memcpy(payload, config.bytes, DEVICE_CONFIG_SIZE); size = DEVICE_CONFIG_SIZE; break;
+            device_config_t config; device_config_get(&config);
+            if (!(device_config_capabilities() & RSTP_CAP_AUTO_SWITCH)) config.bytes[CFG_AUTO_SWITCH] = 0;
+            memcpy(payload, config.bytes, DEVICE_CONFIG_SIZE); size = DEVICE_CONFIG_SIZE; break;
         }
         case RSTP_WRITE: status = device_config_save(&request.config); break;
         }
@@ -65,14 +68,15 @@ static void config_task(void *arg)
         current = cmd.epoch == epoch;
         if (current) { rstp_response(response, &request, status, payload, size); pending = true; completed = false; }
         taskEXIT_CRITICAL(&tx_lock);
-        if (!current) continue;
+        if (!current) { connection_config_complete(); continue; }
         input_wake_sender();
         while (true) {
             taskENTER_CRITICAL(&tx_lock);
             current = cmd.epoch == epoch; bool done = completed;
             taskEXIT_CRITICAL(&tx_lock);
-            if (!current) break;
+            if (!current) { connection_config_complete(); break; }
             if (done) {
+                connection_config_complete();
                 if (status == RSTP_RESTART) {
                     tud_disconnect();
                     vTaskDelay(pdMS_TO_TICKS(50));

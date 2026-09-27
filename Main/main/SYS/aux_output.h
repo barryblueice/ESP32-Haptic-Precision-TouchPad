@@ -18,6 +18,7 @@ void aux_output_complete(bool success);
 void aux_output_unsubmitted(void);
 void aux_output_reset(bool connected);
 bool aux_output_active(void);
+bool aux_output_drained(bool radio);
 bool aux_output_release_pending(void);
 /* Cancel queued steps without forgetting an accepted transfer or its release. */
 void aux_output_cancel(void);

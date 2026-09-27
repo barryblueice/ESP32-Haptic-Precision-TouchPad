@@ -180,6 +180,12 @@ void aux_output_reset(bool connected)
 }
 bool aux_output_active(void)
 { taskENTER_CRITICAL(&aux_lock); bool any = flight || release_due || count; taskEXIT_CRITICAL(&aux_lock); return any; }
+bool aux_output_drained(bool radio)
+{
+    taskENTER_CRITICAL(&aux_lock);
+    bool done = !flight && !count && (radio ? radio_epoch == aux_epoch : !release_due);
+    taskEXIT_CRITICAL(&aux_lock); return done;
+}
 bool aux_output_release_pending(void)
 { taskENTER_CRITICAL(&aux_lock); bool due = release_due; taskEXIT_CRITICAL(&aux_lock); return due; }
 

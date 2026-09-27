@@ -79,7 +79,7 @@ static void wireless_settings_process(void)
             (unsigned long)request.sequence,request.mask,result.intensity,result.level,result.status);
     }
     taskENTER_CRITICAL(&settings_lock);
-    if (peer_valid && !memcmp(peer,settings_peer,6) && request.client == newest.client) {
+    if (peer_valid && request.session == settings_session && !memcmp(peer,settings_peer,6) && request.client == newest.client) {
         completed_request = request; completed_reply = result; completed_valid = true;
         reply = result; reply_pending = true; ++reply_serial;
     }
@@ -97,6 +97,15 @@ esp_err_t wireless_settings_init(uint32_t session)
 {
     settings_session = session;
     return xTaskCreate(settings_task,"wifi_settings",4096,NULL,5,&settings_worker) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+}
+void wireless_settings_session(uint32_t session)
+{
+    taskENTER_CRITICAL(&settings_lock);
+    settings_session = session;
+    peer_valid = request_pending = completed_valid = reply_pending = reply_attempted = false;
+    newest = completed_request = completed_reply = reply = (wire_settings_t){0};
+    ++reply_serial;
+    taskEXIT_CRITICAL(&settings_lock);
 }
 
 bool wireless_settings_reply(uint8_t packet[38], uint8_t mac[6])

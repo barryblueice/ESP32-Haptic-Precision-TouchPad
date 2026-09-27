@@ -10,6 +10,8 @@
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static report_buffer_t reports;
 static TaskHandle_t parser, sender;
+static TaskHandle_t transport_senders[3];
+static bool transport_paused;
 static uint8_t ready_mask;
 static bool mode_pending;
 static uint8_t requested_mode;
@@ -68,7 +70,7 @@ static void transition_locked(const char *reason, bool reset_source)
 
 static bool output_ready_locked(uint32_t generation)
 {
-    return generation == reports.generation && !mode_pending && !reports.recovering &&
+    return !transport_paused && generation == reports.generation && !mode_pending && !reports.recovering &&
         (current_mode != _2_4_MODE || !output_wait_up) && (ready_mask & (1U << reports.mode));
 }
 
@@ -90,6 +92,7 @@ void input_pipeline_init(void)
     usb_session = physical_active = source_uncertain = false;
     host_active_mask = 0;
     physical_mode_valid = mode_retry = false;
+    transport_paused = false;
 }
 
 bool input_starting(void)
@@ -108,8 +111,55 @@ void input_register_sender(void)
 }
 void input_wake_sender(void)
 {
-    taskENTER_CRITICAL(&lock); TaskHandle_t task = sender; taskEXIT_CRITICAL(&lock);
+    TaskHandle_t tasks[3];
+    taskENTER_CRITICAL(&lock); TaskHandle_t task = sender;
+    memcpy(tasks, transport_senders, sizeof(tasks)); taskEXIT_CRITICAL(&lock);
     notify(task);
+    for (unsigned i = 0; i < 3; ++i) notify(tasks[i]);
+}
+void input_register_transport_sender(unsigned transport)
+{
+    if (transport >= 3) return;
+    taskENTER_CRITICAL(&lock);
+    transport_senders[transport] = xTaskGetCurrentTaskHandle();
+    if ((int)transport == current_mode) sender = transport_senders[transport];
+    taskEXIT_CRITICAL(&lock);
+}
+void input_transport_quiesce(void)
+{
+    taskENTER_CRITICAL(&lock);
+    transport_paused = true;
+    report_buffer_reset(&reports, reports.mode);
+    reports.release_mask = usb_session ? host_active_mask : (1U << reports.mode);
+    source_reset_locked("transport");
+    source_uncertain = output_wait_up = true;
+    startup_pending = false;
+    taskEXIT_CRITICAL(&lock);
+    input_wake_parser(); input_wake_sender();
+}
+bool input_transport_drained(void)
+{
+    taskENTER_CRITICAL(&lock); bool done = reports.release_mask == 0; taskEXIT_CRITICAL(&lock);
+    return done;
+}
+void input_transport_start(int transport, uint8_t mode, bool ready, bool initial)
+{
+    taskENTER_CRITICAL(&lock);
+    current_mode = transport;
+    sender = transport_senders[transport];
+    usb_session = transport == WIRED_MODE;
+    host_active_mask = 0;
+    transport_paused = false;
+    ready_mask = ready ? (transport == BLE_MODE ? 1 : 3) : 0;
+    requested_mode = mode; mode_pending = true; mode_retry = mode_applied = false; ++request_serial;
+    report_buffer_reset(&reports, mode);
+    reports.release_mask = 1U << mode;
+    source_reset_locked("transport_start");
+    source_uncertain = source_wait_up = output_wait_up = !initial;
+    startup_pending = initial;
+    reports.recovery_ready = initial;
+    taskEXIT_CRITICAL(&lock);
+    input_wake_parser(); input_wake_sender();
 }
 void input_wake_parser(void)
 {
@@ -151,7 +201,7 @@ bool input_source_observe(uint32_t generation, bool all_up)
 {
     taskENTER_CRITICAL(&lock);
     bool current = generation == source_generation;
-    bool admitted = current && !mode_pending && !source_wait_up;
+    bool admitted = current && !transport_paused && !mode_pending && !source_wait_up;
     if (current && all_up) source_uncertain = false;
     if (current && source_wait_up && all_up) {
         source_wait_up = false;
@@ -166,7 +216,7 @@ void input_source_button(uint32_t generation, bool down)
 {
     uint8_t setting = ptp_haptic_click_intensity_get();
     taskENTER_CRITICAL(&lock);
-    if (generation == source_generation && !source_wait_up && !mode_pending)
+    if (generation == source_generation && !transport_paused && !source_wait_up && !mode_pending)
         cs40l25_surface_button_update(down, setting);
     taskEXIT_CRITICAL(&lock);
 }
@@ -315,7 +365,7 @@ bool input_observe(uint32_t generation, bool all_up)
     taskENTER_CRITICAL(&lock);
     bool waiting = output_wait_up;
     bool observed = generation == reports.generation && report_buffer_observe(&reports, all_up);
-    bool admitted = observed && !mode_pending && (ready_mask & (1U << reports.mode));
+    bool admitted = observed && !transport_paused && !mode_pending && (ready_mask & (1U << reports.mode));
     if (current_mode == _2_4_MODE && waiting) {
         if (admitted && all_up) output_wait_up = false;
         admitted = false; /* The recovery lift must never become an offline tap. */
@@ -394,7 +444,8 @@ void input_report_ack(const input_report_t *report)
     taskENTER_CRITICAL(&lock);
     bool first = startup_pending && !report->release && report_buffer_current(&reports, report) && ready_mask;
     if (first) startup_pending = false;
-    if (usb_session && !report_active(report)) host_active_mask &= ~(1U << report->mode);
+    if (usb_session && report_buffer_current(&reports, report) && !report_active(report))
+        host_active_mask &= ~(1U << report->mode);
     report_buffer_ack(&reports, report);
     if (report_buffer_current(&reports, report) && !reports.recovering && reports.recovery_ready &&
         !mode_pending && (ready_mask & (1U << reports.mode))) output_wait_up = false;

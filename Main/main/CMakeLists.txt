@@ -42,6 +42,8 @@ set(srcs
     "SYS/rtos_queue.c"
     "SYS/report_buffer.c"
     "SYS/input_pipeline.c"
+    "SYS/connection.c"
+    "SYS/connection_policy.c"
     "SYS/rstp_protocol.c"
     "SYS/device_config.c"
     "SYS/edge_gesture.c"

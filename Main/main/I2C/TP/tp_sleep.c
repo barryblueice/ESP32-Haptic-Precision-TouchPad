@@ -5,6 +5,7 @@
 #include "freertos/FreeRTOS.h"
 #include "sdkconfig.h"
 #include "SYS/device_config.h"
+#include "SYS/connection.h"
 
 static esp_timer_handle_t timer;
 static bool enabled;
@@ -55,11 +56,13 @@ void tp_modern_sleep_record_activity(void)
     int64_t now = esp_timer_get_time();
     taskENTER_CRITICAL(&sleep_lock);
     last_activity = now;
-    if (active || wake_pending) {
+    bool woke = active || wake_pending;
+    if (woke) {
         active = wake_pending = false;
         cs40l25_surface_set_modern_sleep(false);
     }
     taskEXIT_CRITICAL(&sleep_lock);
+    if (woke) connection_wake();
     restart_timer();
 }
 
