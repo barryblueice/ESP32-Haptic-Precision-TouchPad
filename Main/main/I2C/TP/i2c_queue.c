@@ -60,9 +60,6 @@ static uint16_t last_raw_y[5] = {0};
 static uint16_t origin_x[5] = {0};
 static uint16_t origin_y[5] = {0};
 
-static int64_t last_frame_time = 0;
-static uint32_t simulated_scan_time = 0;
-
 static uint16_t get_median(uint16_t n1, uint16_t n2, uint16_t n3) {
     if ((n1 > n2) ^ (n1 > n3)) return n1;
     else if ((n2 > n1) ^ (n2 > n3)) return n2;
@@ -81,6 +78,11 @@ static bool slot_active[5] = {false};
 static edge_gesture_t edge_state;
 static point_gesture_t point_state;
 static knuckle_gesture_t knuckle_state;
+/* Bound both latency and memory: at most 16 withheld frames, plus the frame
+ * deciding handoff. Replayed frames bypass knuckle detection exactly once. */
+enum { KNUCKLE_BUFFER_FRAMES = 16 };
+static input_frame_t knuckle_frames[KNUCKLE_BUFFER_FRAMES + 1];
+static unsigned knuckle_frame_count;
 static esp_timer_handle_t point_timer;
 static void point_timer_wake(void *arg) { (void)arg; input_wake_parser(); }
 static void point_schedule(void)
@@ -338,23 +340,16 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
 
 }
 
-void update_simulated_scan_time(tp_multi_msg_t *msg) {
-    int64_t now = esp_timer_get_time();
-
-    if (last_frame_time != 0) {
-        uint32_t delta = (uint32_t)((now - last_frame_time) / 100);
-
-        simulated_scan_time += delta;
-    }
-
-    msg->scan_time = (uint16_t)(simulated_scan_time & 0xFFFF);
-
-    last_frame_time = now;
+void update_simulated_scan_time(tp_multi_msg_t *msg, uint32_t capture_ms) {
+    /* Preserve physical contact duration when a buffered prefix is replayed
+     * in one parser iteration. HID scan time is in 100 us units. */
+    msg->scan_time = (uint16_t)(capture_ms * 10U);
 }
 
 static void reset_input_state(void)
 {
     knuckle_gesture_reset(&knuckle_state);
+    knuckle_frame_count = 0;
     edge_gesture_reset(&edge_state);
     point_gesture_reset(&point_state);
     if (point_timer) esp_timer_stop(point_timer);
@@ -376,7 +371,6 @@ static void reset_input_state(void)
     memset(last_confidence, 0, sizeof(last_confidence));
     memset(consecutive_errors, 0, sizeof(consecutive_errors));
     memset(slot_active, 0, sizeof(slot_active));
-    last_frame_time = 0;
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
     ptp_simulated_mouse_reset();
 #endif
@@ -418,7 +412,8 @@ void i2c_queue_task(void *arg) {
         if (output_generation != input_generation()) {
             output_generation = input_generation();
             knuckle_state.pending = false;
-            if (knuckle_state.active) knuckle_state.rejected = true;
+            knuckle_frame_count = 0;
+            if (knuckle_state.active) knuckle_state.cancelled = knuckle_state.rejected = true;
             /* Preserve local contact/force/region ownership across radio recovery. */
             usb_aux_cancel();
             if (last_all_up || input_starting()) {
@@ -428,17 +423,26 @@ void i2c_queue_task(void *arg) {
 #endif
             }
         }
+        bool buffered_timeout = false;
         if (!input_next_frame(&frame)) {
             uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-            point_result_t repeat = point_gesture_tick(&point_state, now);
-            if (repeat.steps && input_output_ready(output_generation)) {
-                if (aux_output_repeat(repeat.action, repeat.steps, output_generation, now))
-                    input_source_gesture(generation, true);
-                else input_recover();
+            if (knuckle_frame_count && now - knuckle_frames[0].time_ms >= KNUCKLE_DOWN_MAX_MS) {
+                /* No new controller report is required to release a hold.
+                 * Reuse the last buffered frame as the batch's final frame. */
+                frame = knuckle_frames[--knuckle_frame_count];
+                knuckle_state.rejected = true;
+                buffered_timeout = true;
+            } else {
+                point_result_t repeat = point_gesture_tick(&point_state, now);
+                if (repeat.steps && input_output_ready(output_generation)) {
+                    if (aux_output_repeat(repeat.action, repeat.steps, output_generation, now))
+                        input_source_gesture(generation, true);
+                    else input_recover();
+                }
+                point_schedule();
+                ulTaskNotifyTake(pdTRUE, poll_ticks);
+                continue;
             }
-            point_schedule();
-            ulTaskNotifyTake(pdTRUE, poll_ticks);
-            continue;
         }
         /* A reset may have raced with dequeuing the next captured frame. */
         if (generation != frame.generation) {
@@ -447,7 +451,7 @@ void i2c_queue_task(void *arg) {
             previous_format = -1;
             previous_mode = current_tp_mode;
         }
-        if ((uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
+        if (!buffered_timeout && (uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
             input_source_recover("raw_age");
             continue;
         }
@@ -462,25 +466,60 @@ void i2c_queue_task(void *arg) {
         bool local_ready = input_source_observe(frame.generation, all_up);
         bool publish = input_observe(report_generation, all_up);
         last_all_up = all_up;
-        if (!local_ready || (!publish && current_mode != _2_4_MODE)) continue;
-        {
-
-            // printf("Raw Data: ");
-            // for(int i=0; i<64; i++) printf("%02x ", tp_packet[i]);
-            // printf("\n");
-
-            int format = tp_packet[0] == 0x40;
-            if ((previous_format != -1 && previous_format != format) || previous_mode != current_tp_mode) {
-                input_source_recover("format");
+        if (!local_ready || (!publish && current_mode != _2_4_MODE)) {
+            knuckle_frame_count = 0;
+            continue;
+        }
+        int format = tp_packet[0] == 0x40;
+        if ((previous_format != -1 && previous_format != format) || previous_mode != current_tp_mode) {
+            input_source_recover("format");
+            continue;
+        }
+        previous_format = format;
+        previous_mode = current_tp_mode;
+        knuckle_result_t knock = {0};
+        if (format) {
+            if (!publish) {
+                knuckle_frame_count = 0;
+                knuckle_state.pending = false;
+                if (knuckle_state.active) knuckle_state.cancelled = knuckle_state.rejected = true;
+            }
+            if (knuckle_frame_count == KNUCKLE_BUFFER_FRAMES) knuckle_state.rejected = true;
+            knock = knuckle_gesture_update(&knuckle_state, tp_packet, frame.time_ms);
+            if (!publish) {
+                knuckle_state.pending = false;
+                if (knuckle_state.active) knuckle_state.cancelled = knuckle_state.rejected = true;
+                knock.screenshot = false;
+            }
+            if (publish && knock.suppress && knuckle_state.active && !knuckle_state.rejected) {
+                knuckle_frames[knuckle_frame_count++] = frame;
                 continue;
             }
-            previous_format = format;
-            previous_mode = current_tp_mode;
+        }
+        unsigned batch_count = 1;
+        if (knock.replay && knuckle_frame_count) {
+            knuckle_frames[knuckle_frame_count++] = frame;
+            batch_count = knuckle_frame_count;
+        } else if (knock.replay) {
+            knuckle_frames[0] = frame;
+        }
+        knuckle_frame_count = 0;
+        for (unsigned batch = 0; batch < batch_count; ++batch) {
+            if (knock.replay) {
+                frame = knuckle_frames[batch];
+                if (frame.generation != input_source_generation() ||
+                    !input_output_ready(frame.output_generation)) break;
+                tp_packet = frame.bytes;
+            }
+            tp_msg = (tp_multi_msg_t){0};
+            /* Buffering is intentional, not transport backlog. Keep original
+             * capture times for gesture logic, stamp newly released output now. */
+            uint32_t report_time_ms = knock.replay ? (uint32_t)(esp_timer_get_time() / 1000) : frame.time_ms;
             if (tp_packet[0] == 0x40) {
                 int active_finger_count = 0;
                 bool published_pair = false;
 
-                update_simulated_scan_time(&tp_msg);
+                update_simulated_scan_time(&tp_msg, frame.time_ms);
 
                 for (int id = 0; id < 5; id++) {
                     int offset = 4 + (id * 8);
@@ -622,13 +661,6 @@ void i2c_queue_task(void *arg) {
                 //     esp_timer_start_once(timeout_watchdog_timer, WATCHDOG_TIMEOUT_US);
                 // }
 
-                knuckle_result_t knock = knuckle_gesture_update(&knuckle_state, tp_packet, frame.time_ms);
-                /* Never pair knocks across an offline/recovery interval. */
-                if (!publish) {
-                    knuckle_state.pending = false;
-                    if (knuckle_state.active) knuckle_state.rejected = true;
-                    knock.screenshot = false;
-                }
                 if (knock.suppress) {
                     edge_gesture_reset(&edge_state);
                     point_gesture_reset(&point_state);
@@ -667,9 +699,9 @@ void i2c_queue_task(void *arg) {
                         if (point.cancel) aux_output_cancel_gesture();
                         if (point.handoff) edge_gesture_reset(&edge_state);
                         if (publish && point.steps && !(point.hold ?
-                            aux_output_hold(point.action, point.steps, report_generation, frame.time_ms) : point.initial ?
-                            aux_output_once(point.action, point.steps, report_generation, frame.time_ms) :
-                            aux_output_repeat(point.action, point.steps, report_generation, frame.time_ms))) {
+                            aux_output_hold(point.action, point.steps, report_generation, report_time_ms) : point.initial ?
+                            aux_output_once(point.action, point.steps, report_generation, report_time_ms) :
+                            aux_output_repeat(point.action, point.steps, report_generation, report_time_ms))) {
                             input_recover(); publish = false;
                         }
                         if (publish && point.steps)
@@ -682,7 +714,7 @@ void i2c_queue_task(void *arg) {
                     edge.suppress |= point.suppress;
                     if (owned) edge.tap = false;
                     if (edge.cancelled) aux_output_cancel_gesture();
-                    if (publish && edge.steps && !usb_aux_steps(edge.action, edge.steps, report_generation, frame.time_ms)) {
+                    if (publish && edge.steps && !usb_aux_steps(edge.action, edge.steps, report_generation, report_time_ms)) {
                         input_recover(); publish = false;
                     }
                     if (publish && edge.steps)
@@ -694,7 +726,7 @@ void i2c_queue_task(void *arg) {
                     if (ble_custom_gestures && (edge.suppress || owned)) ptp_simulated_mouse_reset();
 #endif
                     if (edge.tap) {
-                        input_report_t down = {.mode = input_mode(), .time_ms = frame.time_ms};
+                        input_report_t down = {.mode = input_mode(), .time_ms = report_time_ms};
                         input_report_t up = down;
                         if (down.mode == PTP_MODE) {
                             if (publish) {
@@ -718,7 +750,7 @@ void i2c_queue_task(void *arg) {
                 if (point_state.owned) ptp_reset_force_click(&tp_msg);
                 else ptp_update_force_click_button(&tp_msg, active_finger_count);
                 tp_msg.actual_count = active_finger_count > 0 ? active_finger_count : 1;
-                input_report_t report = {.mode = input_mode(), .time_ms = frame.time_ms};
+                input_report_t report = {.mode = input_mode(), .time_ms = report_time_ms};
                 bool tap = false;
                 if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE

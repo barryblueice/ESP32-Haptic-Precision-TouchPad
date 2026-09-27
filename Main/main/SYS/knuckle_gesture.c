@@ -24,7 +24,7 @@ knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64
     if (!s->active) {
         if (!count) return r;
         s->active = true; s->down_at = s->last_at = now;
-        s->id = id; s->claimed = false;
+        s->id = id; s->claimed = s->cancelled = false;
         /* Onset admission uses the learned classifier and support envelope.
          * Once passed through, a contact is never stolen from the host later. */
         unsigned pressure = p[4 + 8*id + 5];
@@ -54,6 +54,10 @@ knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64
             if (f[5] > s->peak_pressure) s->peak_pressure = f[5];
         }
     }
+    if (s->rejected && s->claimed && !s->cancelled) {
+        r.replay = true;
+        s->claimed = false;
+    }
     r.suppress = s->claimed;
     if (s->rejected) s->pending = false;
     if (count) return r;
@@ -70,9 +74,15 @@ knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64
         } else {
             s->pending = true; s->first_x = s->x; s->first_y = s->y; s->lifted_at = now;
         }
-    } else s->pending = false;
-    /* A rejected claimed contact remains hidden until this final lift; it
-     * must not turn into a delayed mouse click or drag. */
+    } else {
+        s->pending = false;
+        if (s->claimed && !s->cancelled) {
+            r.replay = true;
+            r.suppress = false;
+        }
+    }
+    /* A failed candidate is replayed once. Recovery-cancelled contacts stay
+     * hidden through the real lift so old input cannot enter a new session. */
     s->active = s->claimed = false;
     return r;
 }

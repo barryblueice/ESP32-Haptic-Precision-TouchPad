@@ -13,14 +13,15 @@ enum {
     KNUCKLE_MOVE_MAX = 60, KNUCKLE_PAIR_DISTANCE = 160
 };
 typedef struct {
-    bool active, claimed, rejected, pending;
+    bool active, claimed, rejected, pending, cancelled;
     uint8_t id;
     uint16_t x, y, first_x, first_y;
     uint32_t down_at, last_at, lifted_at;
     uint32_t pressure_sum, weighted_area_sum;
     uint8_t peak_pressure, samples;
 } knuckle_gesture_t;
-typedef struct { bool suppress, screenshot; } knuckle_result_t;
+/* replay returns the previously withheld prefix to ordinary gesture parsing. */
+typedef struct { bool suppress, screenshot, replay; } knuckle_result_t;
 void knuckle_gesture_reset(knuckle_gesture_t *state);
 /* Raw 64-byte Surface packet, before filtering or force-click synthesis.
  * Only a single contact is supported; screenshot fires on the second lift. */
