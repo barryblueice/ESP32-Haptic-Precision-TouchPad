@@ -63,3 +63,4 @@ main/sdkconfig.old
 esp32-haptic-precision-touchpad.code-workspace
 Main/*bak*.zip
 Main/dependencies.lock
+Main/AGENTS.md

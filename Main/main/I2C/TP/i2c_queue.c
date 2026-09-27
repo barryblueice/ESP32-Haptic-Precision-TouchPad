@@ -695,7 +695,6 @@ void i2c_queue_task(void *arg) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                             edge.tap_down.actual_count = 1;
                             parse_ptp_simulated_mouse_report(&edge.tap_down, &down.data.mouse);
-                            input_source_button(frame.generation, down.data.mouse.buttons != 0);
 #endif
                         }
                     }
@@ -712,9 +711,9 @@ void i2c_queue_task(void *arg) {
                 if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                     parse_ptp_simulated_mouse_report(&tp_msg, &report.data.mouse);
-                    input_source_button(frame.generation, report.data.mouse.buttons != 0);
+                    /* Only force clicks drive haptics; taps and tap-drags are virtual buttons. */
+                    input_source_button(frame.generation, tp_msg.button_mask != 0);
                     tap = ptp_simulated_mouse_click_needs_release();
-                    if (tap) input_source_button(frame.generation, false);
 #else
                     continue;
 #endif

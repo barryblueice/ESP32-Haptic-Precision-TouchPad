@@ -58,11 +58,15 @@ Uncertain accepted transfer failures schedule a release. Queue entries older
 than 100 ms expire rather than replaying stale input; completed held keys do not
 expire while the contact remains valid.
 
-Only PTP mode gains corner gestures on USB, BLE and 2.4 GHz. Mouse mode retains
+Only PTP mode gains corner gestures on USB and 2.4 GHz. Mouse mode retains
 its previous behavior (including existing USB edges in simulated mouse mode).
-The existing BLE mouse build remains the default. Enable `BLE_ENABLE_PTP_MODE`
-for BLE PTP and use a compatible host; new gesture support does not automatically
-switch a mouse build into PTP.
+BLE always presents a mouse HID device. In `Mouse Mode Select`, choose
+`PTP_SIMULATED_MOUSE_MODE` (the project default) for locally interpreted touch
+and scroll/drag gestures, or `ORI_MOUSE_MODE` for the controller's native mouse
+reports. This existing choice is shared by the mouse paths of all transports;
+it is a compile-time setting, not a new runtime/NVS option. USB and 2.4 GHz keep
+their PTP support. BLE retains battery reporting and haptic strength Feature 0x41,
+but has no PTP, corner-key, keyboard or Consumer input collections.
 
 ## Saving and upgrading
 
@@ -83,10 +87,12 @@ switch a mouse build into PTP.
 - The receiver updates the haptic PTP descriptor before acknowledging a new
   portrait/landscape orientation; changing dimensions disconnects/re-enumerates
   USB. The receiver does not rotate already transformed coordinates again.
-- BLE initializes its descriptor from the saved orientation. After upgrading or
-  changing descriptor dimensions, remove the old host pairing and pair again for
-  validation. PTP needs all input subscriptions and an ATT MTU of at least 37;
-  undersized packets are not truncated into invalid HID input.
+- BLE uses the same mouse descriptor in both mouse implementations; saved rotation
+  is applied in input processing. A connection is ready after the host subscribes
+  to the mouse input characteristic. Its five-byte payload fits the default
+  ATT MTU of 23; no MTU exchange or auxiliary subscriptions are required.
+- Existing bonds are retained. A host previously paired with a BLE PTP firmware
+  may cache its old GATT services; remove that pairing and pair again for validation.
 
 ## Radio extension ABI
 
@@ -187,14 +193,15 @@ input transitions, not a measurement of motor playback.
 
 Use the **same ESP-IDF setup selected in VS Code**, and the existing `build`
 directories. Do not run `fullclean` or change SDK paths to test these changes.
-This workspace uses `D:/Espressif/v6.0/esp-idf` with the compiler/Python from
-`C:/Espressif/tools`; these paths were checked against both CMake caches.
+The current Main build uses `D:/Espressif/v6.1/esp-idf` with compiler/Python from
+`C:/Espressif/tools`. Consult each project's CMake cache for its selected setup.
 
 From Main, with native Windows clang available (not esp-clang):
 
 ```powershell
 python tests/run_host_tests.py --clang $env:HOST_CLANG
 python tests/run_ble_tests.py $env:HOST_CLANG
+python tests/run_ble_gatt_tests.py $env:HOST_CLANG
 python tests/run_receiver_tests.py $env:HOST_CLANG
 python tests/run_input_irq_tests.py $env:HOST_CLANG
 python tests/run_wireless_haptic_tests.py $env:HOST_CLANG
@@ -205,17 +212,29 @@ The receiver's existing `tools/receiver/host_checks.py` also invokes the expande
 receiver suite and preserves its existing result-file location.
 
 In the VS Code ESP-IDF terminal, run `idf.py build` separately in Main and 2.4G.
-For BLE PTP compile/link verification without rebuilding SDK libraries or changing
-the default sdkconfig, run `python tests/build_ble_variant.py` after the normal
-Main build. It reads the existing compile commands, recompiles seven project
-objects, replaces those members in a copy of libmain, and links against the
-cached SDK libraries. Its test image is under `build/validation/ble-ptp`.
+For both BLE mouse implementations, run `python tests/build_ble_variant.py` after
+the normal Main build. It recompiles **all Main project objects** for each mouse
+configuration (including the controller mode command and input parser), creates
+separate archives, links against the cached SDK libraries and checks partition
+size. It does not edit sdkconfig or replace the default firmware. Images:
 
-Automated validation covers 23 core scenarios, 38 receiver scenarios (including
-27 existing regressions) and 4 BLE scenarios. These contain the 32 sleep/mask
+- Simulated mouse: `build/validation/ble-simulated-mouse/firmware.bin`
+- Native mouse: `build/validation/ble-native-mouse/firmware.bin`
+
+The core, receiver and BLE suites cover the 32 sleep/mask
 combinations, 64 start-point/mask combinations, all 12 corner bindings, physical
 circle boundaries, rotations, handoff, repetition, cancellation, migration and
-commit failure, queued releases, receiver synchronization and BLE backpressure.
+commit failure, queued releases and receiver synchronization. BLE tests run the
+production sender, input pipeline and report buffer. They cover subscription at
+default MTU, exact mouse payloads, ordered tap/release notifications, congestion,
+failed submissions and completions, stale connection/handle events, reconnect
+cleanup and expiration of queued input.
+The GATT suite compiles the production attribute tables and profile callback with
+the selected SDK's attribute-table validator. It reproduces rejection of the old
+1024-byte Report Map capacity, verifies the actual 101-byte mouse map, and checks
+normal Battery/HID startup, failed creation with null handles, malformed success
+events and immediate API failures. Failed creation must log an error without
+accessing handles or starting another service.
 The core suite also checks initial confidence recovery, contact replacement and
 array reordering, and a physical-circle grid against an independent integer oracle
 for all four corners, radii 1–30%, and both surface orientations. Hold cases check
@@ -226,11 +245,13 @@ Five touch IRQ scenarios cover a pending signal before interrupt enable, idle an
 duplicate wakes, coalesced reports, an enable-time edge race, and bounded batches
 with read-error retry.
 
-The wireless haptic suite adds 17 production-C scenarios covering the parser,
+The wireless haptic suite adds 26 production-C scenarios covering the parser,
 pressure algorithm, haptic event queue, host report queue and ESP-NOW sender.
 These include offline feedback, reconnect without replay, control/pointer/action
 failures, queue pressure, source recovery, mode changes, sleep/fault/zero strength,
-simulated taps/drags and native mouse buttons. Hardware acceptance still requires
+silent simulated taps/tap-drags, force feedback during a tap-drag, VBUS pressure
+thresholds, and native mouse buttons. Simulated mouse haptics follow the pressure
+button state; gesture-generated clicks do not trigger vibration. Hardware acceptance still requires
 continuous clicks, held dragging, receiver disconnect/reconnect, idle wake, and
 a USB comparison on the actual touchpad; host tests do not verify motor output.
 
@@ -267,7 +288,7 @@ conversion mask `0x5` plus sleep gives byte 6 `0x0b`.
 ### Hardware acceptance still required
 
 No device was flashed or hardware behavior certified by these software checks.
-For each transport in PTP mode, verify:
+For USB and 2.4 GHz in PTP mode, verify:
 
 1. USB save/readback/reconnect and power-cycle retention of all four switches.
 2. Each corner and circle boundary in all four orientations; disabled corners
@@ -278,10 +299,15 @@ For each transport in PTP mode, verify:
    Lifting stops both; reconnect, mode changes and recovery leave no stuck keys.
 5. Per-point conversion threshold and edge takeover, including motion into another
    corner and conversion where no edge is enabled.
-6. BLE pairing, full PTP input, all auxiliary subscriptions and congestion recovery;
-   receiver direction synchronization and USB re-enumeration.
+6. Receiver direction synchronization and USB re-enumeration.
+
+For BLE, separately validate both mouse builds: the host identifies a mouse;
+simulated mode supports movement, tapping, two-finger scrolling and dragging;
+native mode supports movement and buttons. Check pairing/reconnect, battery,
+haptic strength, saved rotation, congestion recovery and release after disconnect.
+These hardware checks have not been performed as part of the mouse-only change.
 
 Primary images: `Main/build/ESP32_HAPTIC_PRECISION_TOUCHPAD.bin` and
-`2.4G/build/ESP32-Haptic-2.4G-Receiver.bin`. The BLE PTP validation image is separate
-from the default BLE mouse build. Do not interpret successful host tests as
+`2.4G/build/ESP32-Haptic-2.4G-Receiver.bin`. Both BLE mouse validation images are
+separate from the default firmware. Do not interpret successful host tests as
 successful hardware acceptance.

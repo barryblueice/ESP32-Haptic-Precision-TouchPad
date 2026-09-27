@@ -33,15 +33,17 @@ Backspace、Delete、Insert、Home、End、Page Up/Down、Print Screen、F1～F1
 
 ## 验证
 
-83 项主机测试通过：核心及配置 33、BLE 5、接收器 39、无线设置同步 6。
+功能键原有验证包含核心及配置 33、接收器 39、无线设置同步 6 项主机测试。
+蓝牙现仅提供鼠标 HID，不提供这些扩展功能键；BLE 测试已改为鼠标发送与恢复测试。
 新增测试遍历全部 35 个动作，覆盖四点存储恢复、v2 迁移、越界和能力拒绝、
 HID Usage/修饰键、重复、释放重试、拥塞、快速抬手、点击转边缘、断开清理及无线传输。
-主固件、BLE PTP 变体与 2.4G 接收器均通过编译、链接和分区大小检查。
-构建沿用 ESP-IDF 6.0，固件路径：
+主固件与 2.4G 接收器的功能键构建验证记录保留；蓝牙鼠标变体的构建和验收
+参见 [RSTP_V2.md](RSTP_V2.md#verification)。固件路径：
 
 - 主固件：`build/ESP32_HAPTIC_PRECISION_TOUCHPAD.bin`
-- BLE PTP 变体：`build/validation/ble-ptp/firmware.bin`
+- BLE 模拟鼠标：`build/validation/ble-simulated-mouse/firmware.bin`
+- BLE 原生鼠标：`build/validation/ble-native-mouse/firmware.bin`
 - 接收器：`../2.4G/build/ESP32-Haptic-2.4G-Receiver.bin`
 
 这些是生产 C 代码与模拟 RTOS/NVS/传输边界的测试；未刷写设备。
-实际主机按键效果、真实断电保存、三种链路下的释放及重复仍需硬件验收。
+实际主机按键效果、真实断电保存、USB／2.4G 下的功能键释放及重复仍需硬件验收。

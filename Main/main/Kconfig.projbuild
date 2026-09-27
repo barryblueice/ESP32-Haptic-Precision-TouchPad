@@ -44,7 +44,7 @@ menu "TouchPad Configuration"
             prompt "TouchPad Rotation"
             default TP_ROTATION_LANDSCAPE
             help
-            Initial RSTP orientation; saved settings apply to USB, BLE PTP and the paired 2.4G receiver.
+            Initial RSTP orientation; saved settings apply to USB, BLE mouse and the paired 2.4G receiver.
 
         config TP_ROTATION_LANDSCAPE
             bool "Landscape"
@@ -93,24 +93,11 @@ menu "TouchPad Configuration"
                 Enable this option to make the LED blink when FUNC key is pressed and reaches the FUNC_TIMEOUT_MS duration. This can provide a visual indication that the mode switching is about to occur.
 
         choice
-            prompt "BLE HID Mode Select"
-            default BLE_ENABLE_MOUSE_MODE
-            help
-            Select TouchPad model what you used. Different model may use different solution to translate hid data.
-
-        config BLE_ENABLE_MOUSE_MODE
-            bool "Mouse Mode (Recommended for Best Compatibility)"
-
-        config BLE_ENABLE_PTP_MODE
-            bool "PTP Mode (Still unavailable, under development)"
-
-        endchoice
-
-        choice
             prompt "Mouse Mode Select"
             default ORI_MOUSE_MODE
             help
-            Select Mouse Mode what you used.
+            Select the shared mouse implementation for USB, BLE and 2.4G.
+            BLE always presents a mouse HID device; PTP simulation runs locally.
 
         config ORI_MOUSE_MODE
             bool "Original Mouse Mode (Best Compatibility but with basic move only)"

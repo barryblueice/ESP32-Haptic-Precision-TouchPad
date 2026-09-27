@@ -78,7 +78,6 @@ static esp_ble_adv_params_t hidd_adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param) {
 
     switch(event) {
@@ -159,20 +158,13 @@ void ble_hid_conn_task(void *pvParameters) {
     }
 }
 
-
 void ble_bluedroid_init() {
 
     esp_err_t ret;
 
     led_send_command(GPIO_LED_3, LED_CMD_BLINK, 100, 1000, 2, true);
 
-    #if CONFIG_BLE_ENABLE_PTP_MODE
-        input_request_mode(PTP_MODE);
-    #else
-        input_request_mode(MOUSE_MODE);
-    #endif
-
-
+    input_request_mode(MOUSE_MODE);
 
     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
