@@ -88,6 +88,9 @@ tools/
 /.kilo/
 /tests/
 
+# Local knuckle training tools, datasets and reports
+/main/SYS/knuckle_training/
+
 # Keep Main Markdown documentation local except README files
 *.[mM][dD]
 !README.md
