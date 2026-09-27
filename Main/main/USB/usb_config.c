@@ -59,7 +59,9 @@ static void config_task(void *arg)
             rstp_put32(payload, device_config_capabilities()); payload[4] = 2; payload[6] = 0; payload[10] = DEVICE_CONFIG_VERSION; size = 12; break;
         case RSTP_READ: {
             device_config_t config; device_config_get(&config);
-            if (!(device_config_capabilities() & RSTP_CAP_AUTO_SWITCH)) config.bytes[CFG_AUTO_SWITCH] = 0;
+            uint32_t caps = device_config_capabilities();
+            if (!(caps & RSTP_CAP_AUTO_SWITCH)) config.bytes[CFG_FEATURE_FLAGS] &= ~CFG_FLAG_AUTO_SWITCH;
+            if (!(caps & RSTP_CAP_CUSTOM_GESTURE_HAPTICS)) config.bytes[CFG_FEATURE_FLAGS] |= CFG_FLAG_CUSTOM_GESTURE_HAPTICS;
             memcpy(payload, config.bytes, DEVICE_CONFIG_SIZE); size = DEVICE_CONFIG_SIZE; break;
         }
         case RSTP_WRITE: status = device_config_save(&request.config); break;

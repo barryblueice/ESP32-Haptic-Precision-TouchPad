@@ -5,6 +5,8 @@
 void cs40l25_surface_init(void);
 /* Nonblocking task-context APIs; producers never access the bus. */
 void cs40l25_surface_button_update(bool down, uint8_t setting);
+/* Test feedback for custom point (true) / edge step (false) only. */
+void cs40l25_surface_gesture(bool point);
 void cs40l25_surface_cancel_click(void);
 void cs40l25_surface_set_modern_sleep(bool sleep_active);
 bool cs40l25_surface_is_modern_sleep(void);

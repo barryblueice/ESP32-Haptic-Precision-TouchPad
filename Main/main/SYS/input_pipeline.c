@@ -1,4 +1,5 @@
 #include "input_pipeline.h"
+#include "device_config.h"
 #include "rtos_queue.h"
 #include "I2C/TP/i2c_hid.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
@@ -218,6 +219,15 @@ void input_source_button(uint32_t generation, bool down)
     taskENTER_CRITICAL(&lock);
     if (generation == source_generation && !transport_paused && !source_wait_up && !mode_pending)
         cs40l25_surface_button_update(down, setting);
+    taskEXIT_CRITICAL(&lock);
+}
+
+void input_source_gesture(uint32_t generation, bool point)
+{
+    if (!(device_config_value(CFG_FEATURE_FLAGS) & CFG_FLAG_CUSTOM_GESTURE_HAPTICS)) return;
+    taskENTER_CRITICAL(&lock);
+    if (generation == source_generation && !transport_paused && !source_wait_up && !mode_pending)
+        cs40l25_surface_gesture(point);
     taskEXIT_CRITICAL(&lock);
 }
 

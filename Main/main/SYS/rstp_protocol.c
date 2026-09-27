@@ -13,7 +13,7 @@ void device_config_defaults(device_config_t *c)
     c->bytes[CFG_WIRELESS_LIGHT] = 60;
     c->bytes[CFG_WIRELESS_MEDIUM] = 80;
     c->bytes[CFG_WIRELESS_STRONG] = 100;
-    c->bytes[CFG_AUTO_SWITCH] = 1;
+    c->bytes[CFG_FEATURE_FLAGS] = CFG_FLAG_AUTO_SWITCH | CFG_FLAG_CUSTOM_GESTURE_HAPTICS;
 }
 bool device_config_valid(const device_config_t *c)
 {
@@ -29,7 +29,7 @@ bool device_config_valid(const device_config_t *c)
     for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4)
         if (b[i] > 1 || b[i+1] > 47 || (b[i] && !b[i+1]) ||
             !b[i+2] || b[i+2] > 30 || !b[i+3] || b[i+3] > 10) return false;
-    if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[50] > 100 || b[51] > 1) return false;
+    if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[50] > 100 || b[51] > 3) return false;
     return true;
 }
 uint32_t rstp_capabilities_normalize(uint32_t caps)
@@ -52,12 +52,14 @@ bool device_config_load_record(device_config_t *out, const uint8_t *r, size_t si
     bool v2 = r[4] == 2 && r[6] == 52 && size == 60;
     bool v3 = r[4] == 3 && r[6] == 52 && size == 60;
     bool v4 = r[4] == 4 && r[6] == 52 && size == 60;
-    if (!v1 && !v2 && !v3 && !v4) return false;
-    if (v3 && r[59]) return false;
+    bool v5 = r[4] == 5 && r[6] == 52 && size == 60;
+    if (!v1 && !v2 && !v3 && !v4 && !v5) return false;
+    if ((v3 && r[59]) || (v4 && r[59] > 1)) return false;
     device_config_t c; device_config_defaults(&c);
     if (v1 && (r[14] > 1 || (r[15] & 0xf0))) return false;
-    memcpy(c.bytes, r + 8, (v3 || v4) ? DEVICE_CONFIG_SIZE : 32);
-    if (!v4) c.bytes[CFG_AUTO_SWITCH] = 1;
+    memcpy(c.bytes, r + 8, (v3 || v4 || v5) ? DEVICE_CONFIG_SIZE : 32);
+    if (!v4 && !v5) c.bytes[CFG_FEATURE_FLAGS] = CFG_FLAG_AUTO_SWITCH;
+    if (!v5) c.bytes[CFG_FEATURE_FLAGS] |= CFG_FLAG_CUSTOM_GESTURE_HAPTICS;
     if (v2) {
         for (unsigned p = 0; p < 4; ++p) {
             const uint8_t *old = r + 8 + CFG_POINTS + p * 5;
@@ -74,7 +76,9 @@ bool device_config_load_record(device_config_t *out, const uint8_t *r, size_t si
 bool device_config_supported(const device_config_t *a, const device_config_t *b, uint32_t caps)
 {
     caps = rstp_capabilities_normalize(caps);
-    if (!(caps & RSTP_CAP_AUTO_SWITCH) && b->bytes[CFG_AUTO_SWITCH]) return false;
+    if (!(caps & RSTP_CAP_AUTO_SWITCH) && (b->bytes[CFG_FEATURE_FLAGS] & CFG_FLAG_AUTO_SWITCH)) return false;
+    if (!(caps & RSTP_CAP_CUSTOM_GESTURE_HAPTICS) &&
+        !(b->bytes[CFG_FEATURE_FLAGS] & CFG_FLAG_CUSTOM_GESTURE_HAPTICS)) return false;
     static const uint8_t start[] = {0, 1, 2, 5, 6, 12}, end[] = {1, 2, 5, 6, 6, 32};
     for (unsigned i = 0; i < 6; ++i)
         if (!(caps & (1U << i)) && memcmp(a->bytes + start[i], b->bytes + start[i], end[i] - start[i])) return false;

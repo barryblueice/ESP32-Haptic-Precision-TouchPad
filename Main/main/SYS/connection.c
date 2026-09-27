@@ -53,7 +53,7 @@ void connection_init(int boot)
         handoff.inverse == ~HANDOFF_MAGIC && handoff.mode == boot && handoff.high <= 1;
     bool high = handoff.high == 1;
     handoff.magic = handoff.inverse = 0;
-    connection_policy_init(&policy, boot, device_config_value(CFG_AUTO_SWITCH) != 0, manual, high);
+    connection_policy_init(&policy, boot, (device_config_value(CFG_FEATURE_FLAGS) & CFG_FLAG_AUTO_SWITCH) != 0, manual, high);
     if (boot == BLE_MODE) route = BLE_MODE;
     sampled_at = (uint32_t)(esp_timer_get_time() / 1000) - 10U;
 }
@@ -103,7 +103,7 @@ void connection_poll(void)
     bool wait = config_wait, wake = wake_event; wake_event = false;
     taskEXIT_CRITICAL(&event_lock);
     if (wake) connection_policy_wake(&policy);
-    if (!wait) connection_policy_enable(&policy, device_config_value(CFG_AUTO_SWITCH) != 0);
+    if (!wait) connection_policy_enable(&policy, (device_config_value(CFG_FEATURE_FLAGS) & CFG_FLAG_AUTO_SWITCH) != 0);
     bool high = gpio_get_level(VBUS_DET_GPIO) != 0;
     if (!high && links[WIRED_MODE]) connection_link(WIRED_MODE, false);
     int target = connection_policy_sample(&policy, high, now);

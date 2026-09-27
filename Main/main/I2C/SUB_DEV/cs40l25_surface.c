@@ -1,6 +1,7 @@
 #include "cs40l25_surface.h"
 #include "surface_haptic_hw.h"
 #include "surface_haptic_settings.h"
+#include "SYS/device_config.h"
 #include "mcu-drivers/cs40l25/bsp/bsp_dut.h"
 #include <inttypes.h>
 #include "esp_log.h"
@@ -41,6 +42,15 @@ void cs40l25_surface_button_update(bool down, uint8_t setting)
         if (down) ++button_presses; else ++button_releases;
     }
     surface_runtime_button(&runtime, down, setting, now);
+    taskEXIT_CRITICAL(&lock);
+}
+
+void cs40l25_surface_gesture(bool point)
+{
+    if (ptp_haptic_click_intensity_get() == 0) return;
+    uint32_t now = now_ms();
+    taskENTER_CRITICAL(&lock);
+    surface_runtime_gesture(&runtime, point, now);
     taskEXIT_CRITICAL(&lock);
 }
 
@@ -133,17 +143,24 @@ static void worker(void *arg)
                     }
                 }
                 uint8_t live_setting = ptp_haptic_click_intensity_get();
+                bool gesture_enabled = (device_config_value(CFG_FEATURE_FLAGS) & CFG_FLAG_CUSTOM_GESTURE_HAPTICS) != 0;
                 uint32_t dispatch_time = now_ms();
                 taskENTER_CRITICAL(&lock);
                 if (live_setting == 0 || (uint32_t)(dispatch_time - event.time_ms) > SURFACE_EVENT_MAX_AGE_MS) {
-                    surface_runtime_cancel(&runtime);
+                    // Dropping a test gesture must never cancel an ordinary click.
+                    if (!event.gesture) surface_runtime_cancel(&runtime);
                 }
-                bool current = surface_runtime_current(&runtime, &event);
+                bool current = live_setting != 0 &&
+                    (!event.gesture || gesture_enabled) &&
+                    (uint32_t)(dispatch_time - event.time_ms) <= SURFACE_EVENT_MAX_AGE_MS &&
+                    surface_runtime_current(&runtime, &event);
                 taskEXIT_CRITICAL(&lock);
                 if (current) {
                     last_waveform = event.release ? event.pair.release_index : event.pair.press_index;
                     if (!heartbeat_pending) heartbeat_start = now_ms();
                     uint32_t status = surface_haptic_play_event(&event.pair, event.release);
+                    if (event.gesture) ESP_LOGI(TAG, "custom %s index=%u result=%" PRIu32,
+                        last_waveform == SURFACE_GESTURE_POINT_WAVE ? "point" : "edge", last_waveform, status);
                     ESP_LOGD(TAG, "setting=%u %s index=%u result=%" PRIu32,
                              event.setting, event.release ? "RELEASE" : "PRESS", last_waveform, status);
                     if (status != BSP_STATUS_OK) { fault("playback", last_waveform); break; }

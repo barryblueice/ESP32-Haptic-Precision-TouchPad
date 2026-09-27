@@ -426,8 +426,11 @@ void i2c_queue_task(void *arg) {
         if (!input_next_frame(&frame)) {
             uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
             point_result_t repeat = point_gesture_tick(&point_state, now);
-            if (repeat.steps && input_output_ready(output_generation) &&
-                !aux_output_repeat(repeat.action, repeat.steps, output_generation, now)) input_recover();
+            if (repeat.steps && input_output_ready(output_generation)) {
+                if (aux_output_repeat(repeat.action, repeat.steps, output_generation, now))
+                    input_source_gesture(generation, true);
+                else input_recover();
+            }
             point_schedule();
             ulTaskNotifyTake(pdTRUE, poll_ticks);
             continue;
@@ -636,6 +639,8 @@ void i2c_queue_task(void *arg) {
                             aux_output_repeat(point.action, point.steps, report_generation, frame.time_ms))) {
                             input_recover(); publish = false;
                         }
+                        if (publish && point.steps)
+                            input_source_gesture(frame.generation, true);
                         point_schedule();
                     }
                     edge_result_t edge = {0};
@@ -647,6 +652,8 @@ void i2c_queue_task(void *arg) {
                     if (publish && edge.steps && !usb_aux_steps(edge.action, edge.steps, report_generation, frame.time_ms)) {
                         input_recover(); publish = false;
                     }
+                    if (publish && edge.steps)
+                        input_source_gesture(frame.generation, false);
                     if (edge.tap) {
                         input_report_t down = {.mode = input_mode(), .time_ms = frame.time_ms};
                         input_report_t up = down;

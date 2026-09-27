@@ -27,6 +27,7 @@ void input_source_recover(const char *reason);
 uint32_t input_source_generation(void);
 bool input_source_observe(uint32_t generation, bool all_up);
 void input_source_button(uint32_t generation, bool down);
+void input_source_gesture(uint32_t generation, bool point);
 bool input_output_ready(uint32_t generation);
 void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
                    uint32_t output_generation, uint32_t time_ms);

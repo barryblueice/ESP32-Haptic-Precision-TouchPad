@@ -4,6 +4,10 @@
 
 #define SURFACE_EVENT_CAPACITY 8U
 #define SURFACE_EVENT_MAX_AGE_MS 100U
+/* Temporary custom-gesture feedback, using existing click waveforms. */
+#define SURFACE_GESTURE_INTERVAL_MS 60U
+#define SURFACE_GESTURE_POINT_WAVE 21U
+#define SURFACE_GESTURE_EDGE_WAVE 17U
 
 typedef enum {
     SURFACE_INITIALIZING, SURFACE_READY, SURFACE_SLEEPING,
@@ -14,7 +18,7 @@ typedef struct {
     uint32_t click_id, generation, time_ms;
     surface_haptic_pair_t pair;
     uint8_t setting;
-    bool release;
+    bool release, gesture;
 } surface_haptic_event_t;
 
 /* Caller serializes access. No RTOS or hardware dependencies. */
@@ -26,11 +30,15 @@ typedef struct {
     bool down, blocked;
     surface_haptic_pair_t pair;
     uint8_t setting;
+    surface_haptic_event_t gesture_event;
+    uint32_t gesture_at;
+    bool gesture_pending, gesture_throttled;
 } surface_haptic_runtime_t;
 
 void surface_runtime_cancel(surface_haptic_runtime_t *r);
 void surface_runtime_state(surface_haptic_runtime_t *r, surface_haptic_state_t state);
 void surface_runtime_button(surface_haptic_runtime_t *r, bool down, uint8_t setting, uint32_t now);
+void surface_runtime_gesture(surface_haptic_runtime_t *r, bool point, uint32_t now);
 bool surface_runtime_pop(surface_haptic_runtime_t *r, uint32_t now, surface_haptic_event_t *event);
 bool surface_runtime_current(const surface_haptic_runtime_t *r, const surface_haptic_event_t *event);
 

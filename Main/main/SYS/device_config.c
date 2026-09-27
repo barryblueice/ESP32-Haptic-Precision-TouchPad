@@ -14,7 +14,7 @@ static device_config_t active, pending;
 static portMUX_TYPE config_lock = portMUX_INITIALIZER_UNLOCKED;
 static SemaphoreHandle_t writer, applied;
 static bool initialized, pending_apply, pending_restart, halted, saved_restart;
-static uint32_t capabilities = 0x1fff;
+static uint32_t capabilities = 0x3fff;
 
 static esp_err_t store_config(const device_config_t *c)
 {
@@ -123,7 +123,7 @@ uint16_t device_config_save(const device_config_t *c)
     if (!device_config_valid(c)) return RSTP_INVALID;
     if (!initialized || xSemaphoreTake(writer, 0) != pdTRUE) return RSTP_BUSY;
     device_config_t old; device_config_get(&old);
-    bool restart = memcmp(old.bytes, c->bytes, CFG_AUTO_SWITCH) != 0;
+    bool restart = memcmp(old.bytes, c->bytes, CFG_FEATURE_FLAGS) != 0;
     uint16_t status = restart ? RSTP_RESTART : RSTP_OK;
     if (saved_restart) status = RSTP_BUSY;
     else if (!device_config_supported(&old, c, device_config_capabilities())) status = RSTP_UNSUPPORTED;
@@ -156,8 +156,9 @@ bool device_config_parser_boundary(void)
     bool change = pending_apply;
     bool recover = false, auto_change = false;
     if (change) {
-        recover = memcmp(active.bytes, pending.bytes, CFG_AUTO_SWITCH) != 0;
-        auto_change = active.bytes[CFG_AUTO_SWITCH] != pending.bytes[CFG_AUTO_SWITCH];
+        recover = memcmp(active.bytes, pending.bytes, CFG_FEATURE_FLAGS) != 0;
+        auto_change = ((active.bytes[CFG_FEATURE_FLAGS] ^ pending.bytes[CFG_FEATURE_FLAGS]) &
+                       CFG_FLAG_AUTO_SWITCH) != 0;
         if (pending_restart) halted = true;
         active = pending; mirror(&active);
         pending_apply = false;
