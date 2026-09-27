@@ -1,8 +1,6 @@
 #include <stdio.h>
 #include <string.h>
-#include "esp_gatt_defs.h"
-
-#include "BLE/BLE_bluedroid.h"
+#include "BLE/ble_hid.h"
 
 const uint8_t ble_mouse_hid_report_descriptor[] = {
     0x05, 0x01,        // Usage Page (Generic Desktop)
@@ -53,5 +51,5 @@ const uint8_t ble_mouse_hid_report_descriptor[] = {
 
 const uint16_t ble_mouse_hid_report_len = sizeof(ble_mouse_hid_report_descriptor);
 
-_Static_assert(sizeof(ble_mouse_hid_report_descriptor) <= ESP_GATT_MAX_ATTR_LEN,
+_Static_assert(sizeof(ble_mouse_hid_report_descriptor) <= 512,
                "BLE report map exceeds the GATT attribute limit");

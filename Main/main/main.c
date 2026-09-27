@@ -29,8 +29,7 @@
 
 #include "WIFI/wireless_wifi.h"
 
-#include "BLE/ble_bluedroid.h"
-#include "BLE/ble_hid_dev.h"
+#include "BLE/ble_hid.h"
 
 #define TAG "SurfaceTouch"
 
@@ -75,8 +74,7 @@ void app_main(void) {
     if (current_mode == BLE_MODE) {
 
         ESP_LOGW(TAG, "Starting in BLE Mode...");
-        hidd_le_prepare_gatt_table();
-        ble_bluedroid_init();
+        ESP_ERROR_CHECK(ble_hid_init());
         ESP_ERROR_CHECK(xTaskCreatePinnedToCore(ble_hid_task, "ble_hid_task", 4096, NULL, 12, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     } else {
 
