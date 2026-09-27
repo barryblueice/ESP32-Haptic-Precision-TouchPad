@@ -80,7 +80,6 @@ static point_gesture_t point_state;
 static knuckle_gesture_t knuckle_state;
 /* Bound both latency and memory: at most 16 withheld frames, plus the frame
  * deciding handoff. Replayed frames bypass knuckle detection exactly once. */
-enum { KNUCKLE_BUFFER_FRAMES = 16 };
 static input_frame_t knuckle_frames[KNUCKLE_BUFFER_FRAMES + 1];
 static unsigned knuckle_frame_count;
 static esp_timer_handle_t point_timer;
@@ -426,7 +425,7 @@ void i2c_queue_task(void *arg) {
         bool buffered_timeout = false;
         if (!input_next_frame(&frame)) {
             uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-            if (knuckle_frame_count && now - knuckle_frames[0].time_ms >= KNUCKLE_DOWN_MAX_MS) {
+            if (knuckle_frame_count && knuckle_buffer_expired(knuckle_frames[0].time_ms, now)) {
                 /* No new controller report is required to release a hold.
                  * Reuse the last buffered frame as the batch's final frame. */
                 frame = knuckle_frames[--knuckle_frame_count];
@@ -484,8 +483,8 @@ void i2c_queue_task(void *arg) {
                 knuckle_state.pending = false;
                 if (knuckle_state.active) knuckle_state.cancelled = knuckle_state.rejected = true;
             }
-            if (knuckle_frame_count == KNUCKLE_BUFFER_FRAMES) knuckle_state.rejected = true;
-            knock = knuckle_gesture_update(&knuckle_state, tp_packet, frame.time_ms);
+            knock = knuckle_gesture_update_buffered(&knuckle_state, tp_packet,
+                frame.time_ms, knuckle_frame_count, knuckle_gesture_active_classifier());
             if (!publish) {
                 knuckle_state.pending = false;
                 if (knuckle_state.active) knuckle_state.cancelled = knuckle_state.rejected = true;

@@ -1,7 +1,50 @@
 #include "knuckle_gesture.h"
 #include "knuckle_model.h"
+#include "knuckle_model_v2.h"
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
+
+const knuckle_classifier_t *knuckle_gesture_active_classifier(void)
+{
+    return &knuckle_active_classifier;
+}
+
+void knuckle_features_add(knuckle_features_t *f, unsigned z, unsigned area, uint32_t now)
+{
+    if (!f->started) { f->started = true; f->start_at = f->peak_at = now; }
+    else if (now != f->last_at && z > f->previous) {
+        float rise = (float)(z - f->previous) / (uint32_t)(now - f->last_at);
+        if (rise > f->max_rise) f->max_rise = rise;
+    }
+    if (z > f->peak) { f->peak = z; f->peak_at = now; }
+    f->pressure_sum += z;
+    f->area_sum += z * area;
+    f->area_square_sum += (uint64_t)z * area * area;
+    f->previous = z; f->last_at = now;
+}
+
+void knuckle_features_finish(const knuckle_features_t *f, uint32_t lift_at, float out[6])
+{
+    double mean = f->pressure_sum ? (double)f->area_sum / f->pressure_sum : 0;
+    double variance = f->pressure_sum ? (double)f->area_square_sum / f->pressure_sum - mean * mean : 0;
+    out[0] = f->peak; out[1] = (float)mean;
+    out[2] = (uint32_t)(lift_at - f->start_at);
+    out[3] = (uint32_t)(f->peak_at - f->start_at);
+    out[4] = f->max_rise;
+    out[5] = variance > 0 ? sqrtf((float)variance) : 0;
+}
+
+bool knuckle_classifier_accepts(const knuckle_classifier_t *model, bool complete, const float *x)
+{
+    const knuckle_candidate_head_t *h = complete ? &model->complete : &model->onset;
+    float score = h->bias;
+    for (unsigned i = 0; i < (complete ? 6U : 2U); ++i) {
+        if (!(x[i] >= h->low[i] && x[i] <= h->high[i])) return false;
+        score += h->weight[i] * x[i];
+    }
+    return score > 0; /* Unknown/boundary contacts belong to ordinary touch. */
+}
 
 void knuckle_gesture_reset(knuckle_gesture_t *s) { memset(s, 0, sizeof(*s)); }
 
@@ -13,6 +56,24 @@ static bool knuckle_model_accepts(const knuckle_model_head_t *model, float press
 }
 
 knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64], uint32_t now)
+{
+    return knuckle_gesture_update_with_classifier(s, p, now, NULL);
+}
+
+bool knuckle_buffer_expired(uint32_t first_at, uint32_t now)
+{
+    return now - first_at >= KNUCKLE_DOWN_MAX_MS;
+}
+
+knuckle_result_t knuckle_gesture_update_buffered(knuckle_gesture_t *s, const uint8_t p[64],
+    uint32_t now, unsigned buffered, const knuckle_classifier_t *model)
+{
+    if (buffered >= KNUCKLE_BUFFER_FRAMES) s->rejected = true;
+    return knuckle_gesture_update_with_classifier(s, p, now, model);
+}
+
+knuckle_result_t knuckle_gesture_update_with_classifier(knuckle_gesture_t *s,
+    const uint8_t p[64], uint32_t now, const knuckle_classifier_t *model)
 {
     knuckle_result_t r = {0};
     if (!KNUCKLE_ENABLED || p[0] != 0x40 || p[1]) {
@@ -29,7 +90,10 @@ knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64
          * Once passed through, a contact is never stolen from the host later. */
         unsigned pressure = p[4 + 8*id + 5];
         unsigned area = (unsigned)p[4 + 8*id + 6] * p[4 + 8*id + 7];
-        s->rejected = count != 1 || !knuckle_model_accepts(&knuckle_model_onset, pressure, area);
+        float onset[2] = {pressure, area};
+        s->rejected = count != 1 || !(model ? knuckle_classifier_accepts(model, false, onset) :
+            knuckle_model_accepts(&knuckle_model_onset, pressure, area));
+        if (model) s->features = (knuckle_features_t){0};
         s->pressure_sum = s->weighted_area_sum = 0;
         s->peak_pressure = s->samples = 0;
         s->x = p[5 + 8*id] | ((uint16_t)p[6 + 8*id] << 8);
@@ -52,6 +116,7 @@ knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64
             s->pressure_sum += f[5];
             s->weighted_area_sum += (uint32_t)f[5] * area;
             if (f[5] > s->peak_pressure) s->peak_pressure = f[5];
+            if (model) knuckle_features_add(&s->features, f[5], area, now);
         }
     }
     if (s->rejected && s->claimed && !s->cancelled) {
@@ -64,9 +129,15 @@ knuckle_result_t knuckle_gesture_update(knuckle_gesture_t *s, const uint8_t p[64
     /* Classify the complete contact, not each frame. A low-Z, large-area
      * release tail contributes less to weighted area instead of vetoing it.
      * With <=64 samples, even 255*255 area and Z=255 fit uint32_t sums. */
-    if (!s->rejected && now - s->down_at >= KNUCKLE_DOWN_MIN_MS && s->pressure_sum &&
-        knuckle_model_accepts(&knuckle_model_complete, s->peak_pressure,
-            (float)s->weighted_area_sum / s->pressure_sum)) {
+    bool accepted = false;
+    if (!s->rejected && now - s->down_at >= KNUCKLE_DOWN_MIN_MS && s->pressure_sum) {
+        if (model) {
+            float features[6]; knuckle_features_finish(&s->features, now, features);
+            accepted = knuckle_classifier_accepts(model, true, features);
+        } else accepted = knuckle_model_accepts(&knuckle_model_complete, s->peak_pressure,
+            (float)s->weighted_area_sum / s->pressure_sum);
+    }
+    if (accepted) {
         if (s->pending && s->down_at - s->lifted_at >= KNUCKLE_GAP_MIN_MS &&
             abs((int)s->x - s->first_x) <= KNUCKLE_PAIR_DISTANCE &&
             abs((int)s->y - s->first_y) <= KNUCKLE_PAIR_DISTANCE) {
