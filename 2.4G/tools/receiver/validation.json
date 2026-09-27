@@ -1,11 +1,11 @@
 {
-  "time_utc": "2026-09-13T12:44:50.350330+00:00",
+  "time_utc": "2026-09-27T13:32:55.700948+00:00",
   "flashed": false,
+  "build_directory": "build",
   "board_validation": "not performed",
   "checks": {
     "host": {
       "passed": true,
-      "count": 22,
       "cases": [
         "check_wire_compatibility",
         "check_mouse_edges_and_accumulation",
@@ -25,31 +25,107 @@
         "check_set_report_routing_and_dfu",
         "check_radio_serialization_and_retry",
         "check_receive_validation_fifo_overflow",
-        "check_heartbeat_is_not_neutral_and_gpio_unchanged",
+        "check_heartbeat_is_not_neutral_and_gpio_connected",
+        "check_gpio_startup_timeout_and_reconnect",
+        "check_gpio_vbus_and_invalid_packets_do_not_connect",
+        "check_gpio_input_traffic_and_clock_wrap",
+        "check_gpio_receive_bypasses_full_and_delayed_queue",
+        "check_gpio_packets_before_led_initialization",
         "check_link_loss_recovery",
         "check_nvs_first_boot_and_errors",
-        "check_initialization_resource_failures"
+        "check_initialization_resource_failures",
+        "check_surface_ack_and_rotation",
+        "check_usb_input_mode_feature_roundtrip",
+        "check_usb_mount_keeps_negotiated_ptp",
+        "check_wire_actions_dedup_and_release",
+        "check_wire_function_keys_and_release",
+        "check_session_replays_host_mode",
+        "check_duplicate_surface_preserves_input",
+        "check_session_change_with_key_in_flight",
+        "check_wire_function_action_validation",
+        "check_aux_completion_and_failure",
+        "check_wire_hold_until_cancel",
+        "check_receiver_hold_recovery",
+        "check_settings_old_ack_during_session_transition",
+        "check_settings_query_then_atomic_set",
+        "check_settings_retry_and_newer_edits",
+        "check_settings_busy_storage_and_peer_validation",
+        "check_settings_reconnect_and_usb_padding",
+        "check_settings_radio_serialization_and_receive_routing",
+        "check_windows_feature_descriptor_ranges"
       ],
-      "clang": "D:\\Swift\\Toolchains\\6.0.0+Asserts\\usr\\bin\\clang.EXE"
+      "count": 46,
+      "clang": "I:\\Documents\\test\\esp32-haptic-precision-touchpad\\Main\\build\\host-clang.cmd",
+      "clang_args": []
     },
     "build": true,
     "descriptor_variants": 4,
-    "variant_config_unchanged": true
+    "variant_config_unchanged": true,
+    "original_config_and_cache_unchanged": true,
+    "sources_unchanged_during_validation": true
   },
-  "idf_path": "D:\\Espressif\\v6.0\\esp-idf",
-  "python": "C:\\Espressif\\tools\\python\\v6.0\\venv\\Scripts\\python.exe",
+  "passed": true,
+  "idf_path": "D:\\Espressif\\v6.1\\esp-idf",
+  "python": "C:\\Espressif\\tools\\python\\v6.1\\venv\\Scripts\\python.exe",
+  "build_command": [
+    "C:/Espressif/tools/ninja/1.12.1/ninja.exe",
+    "-C",
+    "I:\\Documents\\test\\esp32-haptic-precision-touchpad\\2.4G\\build"
+  ],
   "artifacts": [
     {
       "path": "build\\ESP32-Haptic-2.4G-Receiver.bin",
-      "bytes": 792000,
-      "sha256": "22d91e6ea78f6748c9959eb1d1de566a8c14c48195f3a2bed3b8c04dfc09c927"
+      "bytes": 878048,
+      "sha256": "34a4db0cf5c4a59a4bd74e2665193dad2282b0f6696167764aca43127a20f089"
     },
     {
       "path": "build\\ESP32-Haptic-2.4G-Receiver.elf",
-      "bytes": 8497472,
-      "sha256": "f94db42d8347994177fbf1aff82b3b0fa96243bc6030f6551c7cfaebe3465573"
+      "bytes": 9227696,
+      "sha256": "4de2511ef3b27059a8f9b5fb77970640b91eec449b8ab64bda4e6cbfa6107966"
     }
   ],
-  "passed": true,
-  "source_sha256": "350d3677dba445413061110f239b58cfb7c96f5c7ed4ce56c49eed192d489c36"
+  "build_inputs": {
+    "2.4G/build/CMakeCache.txt": "6748bf3671652f30c9a36b7af395400967e31e22d37a420b787f694ce641e4d0",
+    "2.4G/sdkconfig": "eb4fb8fae83917281a074e86ecc1586fae1825694469ec8777ad99e66b89411d"
+  },
+  "source_files": {
+    "2.4G/CMakeLists.txt": "2673d393ad35c98502069167e3ff1f03061f5e6022ba4e4b06535ca702d7dd74",
+    "2.4G/dependencies.lock": "1c488524cabbe95e8d150cf28c8036719b298bf0f2b718e861be95b25a6c2f42",
+    "2.4G/main/CMakeLists.txt": "08e9f91bce2af76879ce866f9aeb92c6a4ef1f154926a8aac2888af40daa1a92",
+    "2.4G/main/idf_component.yml": "f1e670e4f585c0817370d7c32b2a6b84ebb85b7963560ec78a486e71a210ca35",
+    "2.4G/main/input/input_pipeline.c": "1cb63ca7bc78045b59e196e073df3c2ab8f279446696884ce7fea4659db8c45e",
+    "2.4G/main/input/input_pipeline.h": "87af85f6f34656463756dfdde62735c162be8526c02c98fff913c79259de62e5",
+    "2.4G/main/input/report_buffer.c": "f92babe9312430a8d89239e1c77056b0f7b5eb7546ebd74f2336b25130d18b60",
+    "2.4G/main/input/report_buffer.h": "3c0507acbcd78e7e8990072ca02e8663335aa8d6130f84cd9e111d8bae8def6f",
+    "2.4G/main/Kconfig.projbuild": "a77d90e8158eb986870fbb9ec08736edbacc91f41d5fc01f3c1e4188c19f9344",
+    "2.4G/main/main.c": "b7291b2790bc9369edb489a0314f20b743219e312501ee5abb2f404e86a597a3",
+    "2.4G/main/nvs/ptp_nvs.c": "3466e13a65381c6c70527c381178d0fe5e4961d2e9a97478ebc2388491dc0146",
+    "2.4G/main/nvs/ptp_nvs.h": "b1016edb135b76ead51d234dcbd17c9336704cb14b66cee14431757898b8027a",
+    "2.4G/main/protocol.c": "19eafd3e8b91c8c597115c1174aae14eee76454c428971597be20c710dcfcf65",
+    "2.4G/main/protocol.h": "d3e9e70bf69d6c7fdba02725e785f55623d572dc3819731beba455954593f8f2",
+    "2.4G/main/usb/usb_descriptor.c": "ffdb7206d91a08f76e1078fc73be3f98b1fe3064b0bb974844a984c8c07a19b6",
+    "2.4G/main/usb/usbhid.c": "dd3918102f09bba57b22b927996079820b0a445af2a170bac7fb3bcd8b2bf09a",
+    "2.4G/main/usb/usbhid.h": "adce28d6f81b03551c01052bed408e6d53722fafb7137c690717a57630ec3bd4",
+    "2.4G/main/wireless/broadcast.c": "215204073ac8d974aa8203119f74f46c94cde1a79c2f82c74c5e6b4afef8540d",
+    "2.4G/main/wireless/heartbeat.c": "3c32558aa3b740ede066eef696dec679f8a65cc9da89429755d3042421c1baf3",
+    "2.4G/main/wireless/receiver_extension.c": "dfa1bc541ea85045cf8bd35e9c4a9462bdc3e70ebd3f4921c23baa98522d6369",
+    "2.4G/main/wireless/receiver_extension.h": "97034a526b6a47202906f55e2eae7ff541775c052f8a61279efa7b5508e4a634",
+    "2.4G/main/wireless/receiver_settings.c": "04b8b9102c50f6db2a7f9bee59d21cf7a243dffa5dfd8e8e8ccdf413b79beca2",
+    "2.4G/main/wireless/receiver_settings.h": "040f3d1f61d991045d6030525f3f95530faa0674e57f42793c44c4d3c83ecb1e",
+    "2.4G/main/wireless/wifi_receive.c": "a6de5251d1a6c12a7e4d37da58d0e43ad5acd6e34b8fd7b6cdd7a77bde0d279f",
+    "2.4G/main/wireless/wireless.h": "c5099980af81818e51d7d9e887b1a4625990849dddc8ae2e9a4988a67aa928a9",
+    "2.4G/sdkconfig": "eb4fb8fae83917281a074e86ecc1586fae1825694469ec8777ad99e66b89411d",
+    "2.4G/sdkconfig.defaults": "4bd86b68f66a543c5615f78edb669af5860936aaace2deb42e7cd1b0e1ad1cab",
+    "2.4G/tools/receiver/host_cases.c": "c275d70b940c3af5a04f4bec205cfc9a18d64ebe05fa73f59a31e620d577f47e",
+    "2.4G/tools/receiver/host_checks.py": "0b8f2f45b28e7279aa495f4dd867ed8cd1f2c04e6be58faef58ddcb35583de38",
+    "2.4G/tools/receiver/host_runtime.h": "76cc2066ec012156f2ae33f89764af87e52e2225c4c99b9418376890b580e698",
+    "2.4G/tools/receiver/receiver_cases.c": "c9497006e5daacbaad2499e314b0fb6de24ab77ade84e2947e5b4ecdcdecbf79",
+    "2.4G/tools/receiver/receiver_settings_cases.c": "82efb1649f6e6b3149b08f7af348e690bfea94d609606c55d908d94b829d79f5",
+    "2.4G/tools/receiver/verify.py": "3684daafecad96c0c43d9bbdef9c06d3bf6ac2e20e48c5856b4875574bb1310a",
+    "Main/main/SYS/aux_descriptor.inc": "0044ae018e32e577d73dcf17b3a69fde4b351094715240dd4d162aec2d49bc57",
+    "Main/main/SYS/aux_output.c": "4284a32a7e062f07ceb64f9520ff414ce3847d2d25471b37a2df98bab371df7f",
+    "Main/main/SYS/aux_output.h": "908b4b0556ab7d978faf2aa7310de10251423fac0766fde38b5fab8568b820f1",
+    "Main/main/SYS/wireless_extension.h": "79ee3b6bf6f904c438f06bc153557a05b557828f44577d148d3ca8092906f8e2"
+  },
+  "source_sha256": "dc41bf9546683c50edeeb73d3a15bc50bf465d0c05823e83f6df88b6a61409b5"
 }

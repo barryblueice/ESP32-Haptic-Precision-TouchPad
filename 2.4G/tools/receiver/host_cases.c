@@ -24,6 +24,13 @@ static void reset_all(void)
     nvs_init_result = nvs_erase_result = nvs_open_result = nvs_get_result = nvs_set_result = nvs_commit_result = 0;
     nvs_inits = nvs_erases = nvs_opens = nvs_sets = nvs_commits = nvs_closes = 0;
     input_init();
+    requested = applied = ack_flight = (wire_surface_t){0};
+    pending_apply = ready = ack_pending = flight_ack = false;
+    last_sequence = last_seen = 0; memset(peer,0,6);
+    aux_output_reset(false);
+    count=0; flight=false; held_mask=release_due=neutral_due=0; aux_epoch=radio_epoch=0;
+    aux_generation=input_generation(); usb_aux_flight=false; prefer_aux=true;
+    descriptor_rotation=surface_rotation=disconnect_count=0;
 }
 static input_report_t sample(report_kind_t kind, uint8_t buttons, bool tip)
 {
@@ -302,7 +309,9 @@ EXPORT int check_usb_detach_suspend_resume(void)
     tud_hid_report_complete_cb(REPORT_HAPTIC, NULL, 0);
     event(TINYUSB_EVENT_ATTACHED);
     CHECK(input_mode() == TP_MOUSE_MODE && usb_ready);
-    usbhid_step(); CHECK(usb_flight.release && !lock_error);
+    usbhid_step();
+    while(usb_aux_flight) { usb_complete(REPORT_MOUSE,true); usbhid_step(); }
+    CHECK(usb_flight.release && !lock_error);
     return 0;
 }
 EXPORT int check_usb_bus_reset_reconfigure(void)
@@ -311,6 +320,9 @@ EXPORT int check_usb_bus_reset_reconfigure(void)
     feed(sample(REPORT_MOUSE, 1, false)); usbhid_step();
     CHECK(usb_busy);
     /* TinyUSB resets classes on BUS_RESET without calling tud_umount_cb. */
+    uint8_t count;
+    usbd_class_driver_t const *driver=usbd_app_driver_get_cb(&count);
+    CHECK(count==1);driver->reset(0);
     event(TINYUSB_EVENT_ATTACHED);
     CHECK(!usb_busy && !usb_have_pending && reports.recovering);
     usbhid_step();
@@ -331,7 +343,7 @@ EXPORT int check_get_report_bounds_and_interface_collision(void)
         memset(bytes, 0xaa, sizeof(bytes));
         got = tud_hid_get_report_cb(REPORT_HAPTIC, 6, HID_REPORT_TYPE_FEATURE, bytes + 1, len);
         CHECK(got == (len ? 1 : 0) && bytes[got + 1] == 0xaa);
-        if (len) CHECK(bytes[1] == 3);
+        if (len) CHECK(bytes[1] == 0);
         memset(bytes, 0xaa, sizeof(bytes));
         got = tud_hid_get_report_cb(REPORT_HAPTIC, 0x42, HID_REPORT_TYPE_FEATURE, bytes + 1, len);
         CHECK(got == (len < 15 ? len : 15) && bytes[0] == 0xaa && bytes[got + 1] == 0xaa);

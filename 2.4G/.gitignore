@@ -15,4 +15,5 @@ log/
 test/
 storage/
 build/
+build-idf61/
 managed_components/

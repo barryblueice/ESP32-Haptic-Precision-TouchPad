@@ -12,6 +12,7 @@
 #include "tinyusb_default_config.h"
 #include "tusb.h"
 #include "class/hid/hid_device.h"
+#include "device/usbd_pvt.h"
 #include "sdkconfig.h"
 #include <string.h>
 
@@ -82,7 +83,7 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t id, hid_report_type_t t
     bool haptic = instance == REPORT_HAPTIC, legacy = instance == REPORT_LEGACY;
     if (!haptic && !legacy) return 0;
     if ((haptic && id == REPORTID_HAPTIC_FEATURE) || (legacy && id == REPORTID_LEGACY_FEATURE)) {
-        buffer[0] = 3;
+        buffer[0] = input_mode() == TP_PTP_MODE ? 3 : 0;
         return 1;
     }
     if (id == REPORTID_MAX_COUNT) { buffer[0] = 0x15; return 1; }
@@ -123,8 +124,11 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t id, hid_report_type_t type,
     if (type == HID_REPORT_TYPE_FEATURE) {
         if ((haptic && id == REPORTID_HAPTIC_FEATURE) ||
             (!haptic && id == REPORTID_LEGACY_FEATURE)) {
+            for (unsigned i=1;i<size;++i) if (buffer[i]) return;
             input_set_mode(buffer[0] == 3 ? TP_PTP_MODE : TP_MOUSE_MODE);
             wireless_request_mode();
+            ESP_LOGI("USB", "Input mode SET_FEATURE: instance=%u value=%u mode=%u",
+                     instance, buffer[0], input_mode());
         } else if (haptic && id == REPORTID_BUTTON_PRESS_THRESHOLD) {
             for (unsigned i=1;i<size;++i) if (buffer[i]) return;
             receiver_settings_set(WIRE_SETTING_LEVEL,buffer[0]);
@@ -139,20 +143,51 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t id, hid_report_type_t type,
     }
 }
 
+/* TinyUSB resets its class drivers on BUS_RESET, even without DETACHED.
+ * Reset the host's mode here, before any subsequent mode negotiation. */
+static void usb_session_reset(uint8_t rhport)
+{
+    (void)rhport;
+    xSemaphoreTake(usb_mutex, portMAX_DELAY);
+    input_set_usb(false);
+    input_set_mode(TP_MOUSE_MODE);
+    usb_busy = usb_aux_flight = usb_have_pending = false;
+    aux_output_reset(false);
+    receiver_ext_usb_ready(false);
+    xSemaphoreGive(usb_mutex);
+    wireless_request_mode();
+}
+
+static void usb_session_init(void) { usb_session_reset(0); }
+static uint16_t usb_session_open(uint8_t rhport, tusb_desc_interface_t const *desc, uint16_t len)
+{
+    (void)rhport; (void)desc; (void)len;
+    return 0; /* Observe resets; the built-in HID driver owns every interface. */
+}
+usbd_class_driver_t const *usbd_app_driver_get_cb(uint8_t *count)
+{
+    static const usbd_class_driver_t driver = {
+        .name = "receiver-session", .init = usb_session_init,
+        .reset = usb_session_reset, .open = usb_session_open,
+    };
+    *count = 1;
+    return &driver;
+}
+
 static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
 {
     (void)arg;
     xSemaphoreTake(usb_mutex, portMAX_DELAY);
     switch (event->id) {
     case TINYUSB_EVENT_ATTACHED:
-        /* A bus reset can reconfigure without a preceding DETACHED callback.
-         * Mount means TinyUSB has reopened/reset the endpoint state. */
+        /* The reset observer retired the previous host session. Preserve any
+         * mode request already received by the new session. */
         usb_busy = usb_aux_flight = false;
         aux_output_reset(true);
         usb_have_pending = false;
-        input_set_mode(TP_MOUSE_MODE);
         input_set_usb(true);
         wireless_request_mode();
+        ESP_LOGI("USB", "USB configured: mode=%u", input_mode());
         break;
     case TINYUSB_EVENT_DETACHED:
         input_set_usb(false);
@@ -203,6 +238,9 @@ static void usbhid_step(void)
         }
         surface_rotation = surface.rotation;
         receiver_ext_applied(&surface);
+        /* Main starts each radio session in PTP mode. Replay the host's
+         * selection even when USB remained attached throughout the switch. */
+        wireless_request_mode();
     }
     receiver_ext_usb_ready(tud_mounted() && !tud_suspended());
     xSemaphoreTake(usb_mutex, portMAX_DELAY);

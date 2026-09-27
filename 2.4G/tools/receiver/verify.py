@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -49,20 +50,42 @@ def run_logged(name, command, env, logs, cwd=ROOT):
     print(name + ": passed", flush=True)
 
 
-def build_commands(env, python):
+def build_commands(env, python, build):
     """Reuse VS Code's existing cache; never silently switch an existing build."""
-    cache_path = ROOT / "build/CMakeCache.txt"
+    cache_path = build / "CMakeCache.txt"
+    legacy_cache = ROOT / "build/CMakeCache.txt"
+    legacy_ccache = (re.search(r"^CCACHE_ENABLE:[^=]+=(.+)$", legacy_cache.read_text(), re.M)
+                     if legacy_cache.exists() else None)
+    desired_ccache = None if not legacy_ccache else legacy_ccache[1].strip().lower() in ["true", "on", "1", "yes"]
+    ninja = shutil.which("ninja", path=env["PATH"])
     if cache_path.exists():
         cache = cache_path.read_text()
-        project = json.loads((ROOT / "build/project_description.json").read_text())
+        project = json.loads((build / "project_description.json").read_text())
         if (Path(project["idf_path"]).resolve() != Path(env["IDF_PATH"]).resolve()
                 or Path(project["project_path"]).resolve() != ROOT.resolve()
                 or project["target"] != "esp32s2"):
             raise RuntimeError("Existing build does not match VS Code's ESP-IDF/project/ESP32-S2 target; cache preserved")
         ninja = re.search(r"^CMAKE_MAKE_PROGRAM:[^=]+=(.+)$", cache, re.M)[1]
-        return [ninja, "-C", str(ROOT / "build")], [ninja, "-C", str(ROOT / "build"), "size"]
-    idf = [python, str(Path(env["IDF_PATH"]) / "tools/idf.py"), "-B", "build"]
-    return idf + ["-D", "IDF_TARGET=esp32s2", "build"], idf + ["size"]
+        current_ccache = re.search(r"^CCACHE_ENABLE:[^=]+=(.+)$", cache, re.M)
+        current_ccache = bool(current_ccache and current_ccache[1].strip().lower() in ["true", "on", "1", "yes"])
+        if desired_ccache is None or current_ccache == desired_ccache:
+            return [ninja, "-C", str(build)], [ninja, "-C", str(build), "size"]
+    if not ninja:
+        raise RuntimeError("Ninja is missing from the selected ESP-IDF environment")
+    idf = [python, str(Path(env["IDF_PATH"]) / "tools/idf.py"), "-B", str(build)]
+    # idf.py appends CCACHE_ENABLE after -D options; use its actual CLI switch.
+    if desired_ccache is not None:
+        idf += ["--ccache" if desired_ccache else "--no-ccache"]
+    definitions = ["-D", "IDF_TARGET=esp32s2"]
+    if build != (ROOT / "build").resolve():
+        # Isolate SDK migration outputs from the existing development build.
+        for name in ["sdkconfig", "dependencies.lock"]:
+            destination = build / name
+            if not destination.exists():
+                shutil.copyfile(ROOT / name, destination)
+        definitions += ["-D", "SDKCONFIG=" + (build / "sdkconfig").as_posix(),
+                        "-D", "RECEIVER_DEPENDENCIES_LOCK=" + (build / "dependencies.lock").as_posix()]
+    return idf + definitions + ["build"], [ninja, "-C", str(build), "size"]
 
 
 def windows_arguments(command):
@@ -77,8 +100,8 @@ def windows_arguments(command):
         ctypes.windll.kernel32.LocalFree(ctypes.cast(argv, ctypes.c_void_p))
 
 
-def variants(env, logs):
-    commands = json.loads((ROOT / "build/compile_commands.json").read_text())
+def variants(env, logs, build):
+    commands = json.loads((build / "compile_commands.json").read_text())
     entry = next(c for c in commands if c["file"].replace("\\", "/").endswith("/main/usb/usb_descriptor.c"))
     args = entry.get("arguments") or windows_arguments(entry["command"])
     clean, skip = [], False
@@ -100,56 +123,102 @@ def variants(env, logs):
                        clean + ["-fsyntax-only", "-include", str(header)], env, logs, entry["directory"])
 
 
+def hashes(paths):
+    return {p.relative_to(ROOT.parent).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in sorted(paths) if p.is_file()}
+
+
+def sources():
+    paths = [p for p in (ROOT / "main").rglob("*") if p.suffix in [".c", ".h", ".inc", ".yml"]
+             or p.name in ["CMakeLists.txt", "Kconfig.projbuild"]]
+    paths += [ROOT / name for name in ["CMakeLists.txt", "sdkconfig", "sdkconfig.defaults", "dependencies.lock"]]
+    paths += [p for p in HERE.iterdir() if p.suffix in [".py", ".c", ".h"]]
+    paths += [ROOT.parent / "Main/main/SYS" / name for name in
+              ["aux_output.c", "aux_output.h", "aux_descriptor.inc", "wireless_extension.h"]]
+    return hashes(paths)
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--host-only", action="store_true")
-    parser.add_argument("--build-only", action="store_true")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--host-only", action="store_true")
+    mode.add_argument("--build-only", action="store_true")
+    parser.add_argument("--build-dir", type=Path, default=ROOT / "build")
+    parser.add_argument("--host-clang", default=os.environ.get("HOST_CLANG"))
+    parser.add_argument("--host-clang-arg", action="append", default=[])
     options = parser.parse_args()
-    logs = ROOT / "build/receiver_validation"
+    build = options.build_dir.resolve()
+    if not build.is_relative_to(ROOT) or build == ROOT:
+        parser.error("--build-dir must be a subdirectory of the receiver project")
+    logs = build / "receiver_validation"
     logs.mkdir(parents=True, exist_ok=True)
+    protected = [ROOT / name for name in ["sdkconfig", "sdkconfig.defaults", "dependencies.lock"]]
+    if build != (ROOT / "build").resolve():
+        protected += [ROOT / "build" / name for name in ["CMakeCache.txt", "project_description.json", "build.ninja"]]
+    protected_before = hashes(protected)
+    source_before = sources()
     summary = {"time_utc": datetime.now(timezone.utc).isoformat(), "flashed": False,
-               "board_validation": "not performed", "checks": {}}
+               "build_directory": build.relative_to(ROOT).as_posix(),
+               "board_validation": "not performed", "checks": {}, "passed": False}
     try:
         if not options.build_only:
-            run_logged("host", [sys.executable, "-B", str(HERE / "host_checks.py")], os.environ.copy(), logs)
-            summary["checks"]["host"] = json.loads((logs / "host_result.json").read_text())
+            command = [sys.executable, "-B", str(HERE / "host_checks.py"), "--build-dir", str(build)]
+            if options.host_clang:
+                command += ["--clang", options.host_clang]
+            command += ["--clang-arg=" + arg for arg in options.host_clang_arg]
+            run_logged("host", command, os.environ.copy(), logs)
+            summary["checks"]["host"] = json.loads((build / "receiver-host-tests/result.json").read_text())
         if not options.host_only:
             env, python = environment()
             summary.update(idf_path=env["IDF_PATH"], python=python)
-            build_command, size_command = build_commands(env, python)
+            build_command, size_command = build_commands(env, python, build)
             summary["build_command"] = build_command
             run_logged("build", build_command, env, logs)
             summary["checks"]["build"] = True
-            config_hash = hashlib.sha256((ROOT / "sdkconfig").read_bytes()).hexdigest()
-            variants(env, logs)
+            project = json.loads((build / "project_description.json").read_text())
+            config = Path(project["config_file"])
+            config_hash = hashlib.sha256(config.read_bytes()).hexdigest()
+            variants(env, logs, build)
             summary["checks"]["descriptor_variants"] = 4
             summary["checks"]["variant_config_unchanged"] = (
-                hashlib.sha256((ROOT / "sdkconfig").read_bytes()).hexdigest() == config_hash)
+                hashlib.sha256(config.read_bytes()).hexdigest() == config_hash)
             if not summary["checks"]["variant_config_unchanged"]:
                 raise RuntimeError("Descriptor checks unexpectedly changed sdkconfig")
             run_logged("size", size_command, env, logs)
             summary["artifacts"] = [
                 {"path": str(p.relative_to(ROOT)), "bytes": p.stat().st_size,
                  "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
-                for p in sorted((ROOT / "build").glob("ESP32-Haptic-2.4G-Receiver.*"))
+                for p in sorted(build.glob("ESP32-Haptic-2.4G-Receiver.*"))
                 if p.suffix in [".bin", ".elf"]]
+            if len(summary["artifacts"]) != 2:
+                raise RuntimeError("Expected both receiver BIN and ELF artifacts")
+            summary["build_inputs"] = hashes([config, build / "dependencies.lock", build / "CMakeCache.txt"])
+            if build != (ROOT / "build").resolve():
+                # Ignore only the IDF entry: other resolved versions and hashes must stay pinned.
+                check_lock = (
+                    "import sys,yaml; "
+                    "a=yaml.safe_load(open(sys.argv[1]))['dependencies']; "
+                    "b=yaml.safe_load(open(sys.argv[2]))['dependencies']; "
+                    "a.pop('idf',None); b.pop('idf',None); assert a==b, 'Managed dependencies changed'"
+                )
+                run_logged("dependency_versions", [python, "-c", check_lock,
+                           str(ROOT / "dependencies.lock"), str(build / "dependencies.lock")], env, logs)
+                summary["checks"]["dependency_versions_unchanged"] = True
+        summary["checks"]["original_config_and_cache_unchanged"] = hashes(protected) == protected_before
+        summary["checks"]["sources_unchanged_during_validation"] = sources() == source_before
+        if not all(summary["checks"][name] for name in
+                   ["original_config_and_cache_unchanged", "sources_unchanged_during_validation"]):
+            raise RuntimeError("Source/configuration changed during validation; results cannot be certified")
         summary["passed"] = True
     except Exception as error:
         summary.update(passed=False, error=str(error))
         raise
     finally:
-        fingerprint = hashlib.sha256()
-        for path in sorted((ROOT / "main").rglob("*")):
-            if path.is_file():
-                fingerprint.update(path.relative_to(ROOT).as_posix().encode())
-                fingerprint.update(path.read_bytes())
-        for name in ["CMakeLists.txt", "sdkconfig.defaults", "dependencies.lock"]:
-            fingerprint.update(name.encode())
-            fingerprint.update((ROOT / name).read_bytes())
-        summary["source_sha256"] = fingerprint.hexdigest()
-        (logs / "result.json").write_text(json.dumps(summary, indent=2) + "\n")
+        summary["source_files"] = source_before
+        summary["source_sha256"] = hashlib.sha256(json.dumps(source_before, sort_keys=True).encode()).hexdigest()
+        (logs / "result.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8", newline="\n")
         if not options.host_only and not options.build_only:
-            (HERE / "validation.json").write_text(json.dumps(summary, indent=2) + "\n")
+            (HERE / "validation.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8", newline="\n")
 
 
 if __name__ == "__main__":

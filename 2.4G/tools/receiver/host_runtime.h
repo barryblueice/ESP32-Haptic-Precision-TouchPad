@@ -100,7 +100,7 @@ static int esp_wifi_set_mode(int value) { (void)value; return sdk(); }
 static int esp_wifi_start(void) { return sdk(); }
 static int esp_wifi_set_channel(int ch, int second) { (void)ch; (void)second; return sdk(); }
 static int esp_wifi_set_ps(int ps) { (void)ps; return sdk(); }
-typedef struct { int unused; } esp_now_recv_info_t;
+typedef struct { uint8_t src_addr[6]; } esp_now_recv_info_t;
 typedef struct { int unused; } esp_now_send_info_t;
 typedef int esp_now_send_status_t;
 #define ESP_NOW_SEND_SUCCESS 0
@@ -122,7 +122,7 @@ static int radio_result, radio_count;
 static uint8_t radio_byte;
 static const uint8_t *radio_pointer;
 static int esp_now_send(const uint8_t *addr, const uint8_t *data, size_t size) {
-    (void)addr; if (size != 1) ++lock_error;
+    (void)addr; if (size != 1 && size != 38) ++lock_error;
     ++radio_count; radio_byte = *data; radio_pointer = data; return radio_result;
 }
 typedef int hid_report_type_t;
@@ -131,6 +131,13 @@ typedef int hid_report_type_t;
 #define HID_REPORT_TYPE_FEATURE 3
 enum { TINYUSB_EVENT_ATTACHED, TINYUSB_EVENT_DETACHED, TINYUSB_EVENT_SUSPENDED, TINYUSB_EVENT_RESUMED };
 typedef struct { int id; } tinyusb_event_t;
+typedef struct { int unused; } tusb_desc_interface_t;
+typedef struct {
+    const char *name;
+    void (*init)(void);
+    void (*reset)(uint8_t);
+    uint16_t (*open)(uint8_t, const tusb_desc_interface_t *, uint16_t);
+} usbd_class_driver_t;
 typedef struct {
     int bLength,bDescriptorType,bcdUSB,bMaxPacketSize0,idVendor,idProduct,bcdDevice;
     int iManufacturer,iProduct,iSerialNumber,bNumConfigurations;
@@ -157,7 +164,7 @@ static bool tud_hid_n_report(uint8_t instance, uint8_t id, const void *data, uin
     ++usb_count; usb_instance = instance; usb_id = id; usb_size = size; memcpy(usb_bytes, data, size);
     return usb_accept;
 }
-const uint8_t haptic_ptp_hid_report_descriptor[] = {0};
+uint8_t haptic_ptp_hid_report_descriptor[] = {0};
 const uint8_t legacy_ptp_hid_report_descriptor[] = {0};
 const uint8_t mouse_hid_report_descriptor[] = {0};
 const uint8_t generic_hid_report_descriptor[] = {0};
