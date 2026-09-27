@@ -83,3 +83,7 @@ _fw_screen/
 _archive/
 docs/
 tools/
+
+# Local agent workspaces and tests
+/.kilo/
+/tests/
