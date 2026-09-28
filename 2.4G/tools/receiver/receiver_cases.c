@@ -174,7 +174,7 @@ EXPORT int check_wire_function_action_validation(void)
     }
     a.action=13;a.steps=-1;wire_action_encode(packet,&a);CHECK(!wireless_decode(packet,38,&out));
     a.steps=1;a.hold=true;wire_action_encode(packet,&a);CHECK(!wireless_decode(packet,38,&out));
-    a.hold=false;a.action=48;wire_action_encode(packet,&a);CHECK(!wireless_decode(packet,38,&out));
+    a.hold=false;a.action=48;wire_action_encode(packet,&a);CHECK(wireless_decode(packet,38,&out));
     a.action=49;wire_action_encode(packet,&a);CHECK(!wireless_decode(packet,38,&out));
     a.action=255;wire_action_encode(packet,&a);CHECK(!wireless_decode(packet,38,&out));
     return 0;

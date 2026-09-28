@@ -14,6 +14,40 @@ static bool control_pending, control_in_flight, control_done, control_success, r
 static uint8_t flight_mode;
 static bool flight_ack, flight_settings;
 static uint8_t ack_packet[38], ack_mac[6];
+enum { PROBE_REPLY_CAPACITY = 8 };
+typedef struct {
+    uint8_t mac[6];
+    wire_probe_t token;
+    uint32_t received_at;
+} probe_reply_t;
+static probe_reply_t probe_replies[PROBE_REPLY_CAPACITY];
+static unsigned probe_head, probe_count;
+static bool flight_probe, probe_peer_temporary, prefer_probe = true;
+static uint32_t probe_failures;
+
+bool wireless_probe_enqueue(const uint8_t mac[6], const wire_probe_t *token, uint32_t now)
+{
+    taskENTER_CRITICAL(&control_lock);
+    bool queued = probe_count < PROBE_REPLY_CAPACITY;
+    if (queued) {
+        probe_reply_t *reply = &probe_replies[(probe_head + probe_count++) % PROBE_REPLY_CAPACITY];
+        memcpy(reply->mac, mac, 6);
+        reply->token = *token;
+        reply->received_at = now;
+    }
+    taskEXIT_CRITICAL(&control_lock);
+    if (queued) wireless_wake_worker();
+    return queued;
+}
+
+/* Only the worker owns radio peers; never call the SDK inside control_lock. */
+static void probe_peer_release(void)
+{
+    if (probe_peer_temporary) {
+        if (esp_now_del_peer(ack_mac) != ESP_OK) ++probe_failures;
+        probe_peer_temporary = false;
+    }
+}
 
 void wireless_register_worker(void)
 {
@@ -48,12 +82,15 @@ static void mode_send_complete(const esp_now_send_info_t *info, esp_now_send_sta
 void wireless_control_step(uint32_t now)
 {
     /* Only the wireless worker submits; the byte remains stable until callback. */
-    bool submit = false;
+    bool submit = false, probe_completed = false;
     taskENTER_CRITICAL(&control_lock);
     if (control_in_flight && control_done) {
         control_done = false;
         control_in_flight = false;
-        if (flight_settings) {
+        if (flight_probe) {
+            probe_completed = true;
+            if (!control_success) ++probe_failures;
+        } else if (flight_settings) {
             if (!control_success) ++control_failures;
         } else if (flight_ack) {
             receiver_ext_ack_complete(control_success);
@@ -66,33 +103,73 @@ void wireless_control_step(uint32_t now)
             retry_wait = true;
         }
     }
-    bool ack = !control_in_flight && receiver_ext_ack(ack_packet,ack_mac);
-    bool settings = !control_in_flight && !control_pending && !ack &&
-        (!retry_wait || (uint32_t)(now-retry_at) >= 20U) && receiver_settings_next(ack_packet,ack_mac,now);
-    if (!control_in_flight && (control_pending || ack || settings) && (!retry_wait || (uint32_t)(now - retry_at) >= 20U)) {
-        flight_serial = requested_serial;
-        flight_ack = ack; flight_settings = settings;
-        control_in_flight = true;
-        control_done = false;
-        retry_wait = false;
-        submit = true;
+    taskEXIT_CRITICAL(&control_lock);
+    if (probe_completed) probe_peer_release();
+
+    taskENTER_CRITICAL(&control_lock);
+    if (!control_in_flight) {
+        /* A callback can enqueue after the caller sampled now. Treat that
+         * small negative age as fresh, including across the clock wrap. */
+        while (probe_count && (int32_t)(now - probe_replies[probe_head].received_at) >= PROBE_WINDOW_MS) {
+            probe_head = (probe_head + 1) % PROBE_REPLY_CAPACITY;
+            --probe_count;
+        }
+        bool probe = probe_count && prefer_probe;
+        bool ack = false, settings = false, ordinary = false;
+        if (!probe && (!retry_wait || (uint32_t)(now - retry_at) >= 20U)) {
+            ack = receiver_ext_ack(ack_packet, ack_mac);
+            settings = !control_pending && !ack && receiver_settings_next(ack_packet, ack_mac, now);
+            ordinary = control_pending || ack || settings;
+        }
+        if (!ordinary && probe_count) probe = true;
+        if (probe || ordinary) {
+            if (probe) {
+                const probe_reply_t *reply = &probe_replies[probe_head];
+                memcpy(ack_mac, reply->mac, 6);
+                wire_probe_encode(ack_packet, WIRE_PROBE_ACK, &reply->token);
+                probe_head = (probe_head + 1) % PROBE_REPLY_CAPACITY;
+                --probe_count;
+            } else {
+                retry_wait = false;
+            }
+            flight_serial = requested_serial;
+            flight_ack = ack; flight_settings = settings; flight_probe = probe;
+            prefer_probe = !probe;
+            control_in_flight = true;
+            control_done = false;
+            submit = true;
+        }
     }
     taskEXIT_CRITICAL(&control_lock);
     if (submit) {
         flight_mode = (uint8_t)input_mode();
-        if ((flight_ack || flight_settings) && !esp_now_is_peer_exist(ack_mac)) {
+        bool unicast = flight_ack || flight_settings || flight_probe;
+        esp_err_t result = ESP_OK;
+        if (unicast && !esp_now_is_peer_exist(ack_mac)) {
             esp_now_peer_info_t peer = {.channel = ESPNOW_CHANNEL, .ifidx = WIFI_IF_STA};
             memcpy(peer.peer_addr,ack_mac,6);
-            (void)esp_now_add_peer(&peer);
+            esp_err_t added = esp_now_add_peer(&peer);
+            if (flight_probe) {
+                probe_peer_temporary = added == ESP_OK;
+                result = added;
+            }
         }
-        if (esp_now_send((flight_ack || flight_settings) ? ack_mac : broadcast_mac,
-                         (flight_ack || flight_settings) ? ack_packet : &flight_mode, (flight_ack || flight_settings) ? 38 : 1) != ESP_OK) {
+        if (result == ESP_OK) {
+            result = esp_now_send(unicast ? ack_mac : broadcast_mac,
+                                  unicast ? ack_packet : &flight_mode, unicast ? 38 : 1);
+        }
+        if (result != ESP_OK) {
             taskENTER_CRITICAL(&control_lock);
             control_in_flight = false;
-            ++control_failures;
-            retry_at = now;
-            retry_wait = true;
+            if (flight_probe) {
+                ++probe_failures;
+            } else {
+                ++control_failures;
+                retry_at = now;
+                retry_wait = true;
+            }
             taskEXIT_CRITICAL(&control_lock);
+            if (flight_probe) probe_peer_release();
         }
     }
     static uint32_t logged_at, logged_failures;
@@ -100,6 +177,12 @@ void wireless_control_step(uint32_t now)
         ESP_LOGW("WIRELESS", "Mode command failures: %lu", (unsigned long)control_failures);
         logged_at = now;
         logged_failures = control_failures;
+    }
+    static uint32_t probe_logged_at, probe_logged_failures;
+    if ((uint32_t)(now - probe_logged_at) >= 5000U && probe_failures != probe_logged_failures) {
+        ESP_LOGW("WIRELESS", "Probe reply failures: %lu", (unsigned long)probe_failures);
+        probe_logged_at = now;
+        probe_logged_failures = probe_failures;
     }
 }
 void broadcast_init(void)

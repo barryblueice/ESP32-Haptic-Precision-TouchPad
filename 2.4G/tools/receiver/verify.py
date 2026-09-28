@@ -134,7 +134,7 @@ def sources():
     paths += [ROOT / name for name in ["CMakeLists.txt", "sdkconfig", "sdkconfig.defaults", "dependencies.lock"]]
     paths += [p for p in HERE.iterdir() if p.suffix in [".py", ".c", ".h"]]
     paths += [ROOT.parent / "Main/main/SYS" / name for name in
-              ["aux_output.c", "aux_output.h", "aux_descriptor.inc", "wireless_extension.h"]]
+              ["aux_output.c", "aux_output.h", "aux_descriptor.inc", "wireless_extension.h", "wireless_probe.h"]]
     return hashes(paths)
 
 

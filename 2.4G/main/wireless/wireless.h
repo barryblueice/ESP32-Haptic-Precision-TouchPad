@@ -1,5 +1,6 @@
 #pragma once
 #include "protocol.h"
+#include "SYS/wireless_probe.h"
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -10,6 +11,7 @@ extern const uint8_t broadcast_mac[6];
 void wireless_init(void);
 void broadcast_init(void);
 void wireless_request_mode(void);
+bool wireless_probe_enqueue(const uint8_t mac[6], const wire_probe_t *token, uint32_t now);
 void wireless_control_step(uint32_t now);
 void wireless_register_worker(void);
 void wireless_wake_worker(void);

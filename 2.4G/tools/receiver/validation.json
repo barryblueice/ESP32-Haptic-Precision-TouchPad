@@ -1,5 +1,5 @@
 {
-  "time_utc": "2026-09-27T13:32:55.700948+00:00",
+  "time_utc": "2026-09-28T14:46:22.647321+00:00",
   "flashed": false,
   "build_directory": "build",
   "board_validation": "not performed",
@@ -52,9 +52,22 @@
         "check_settings_busy_storage_and_peer_validation",
         "check_settings_reconnect_and_usb_padding",
         "check_settings_radio_serialization_and_receive_routing",
+        "check_probe_document_fixture_and_usb_independence",
+        "check_probe_strict_validation",
+        "check_probe_fifo_copies_and_duplicate_requests",
+        "check_probe_overflow_preserves_input",
+        "check_probe_expiry_and_clock_wrap",
+        "check_probe_conn_off_never_lights",
+        "check_probe_enqueue_after_worker_clock_sample",
+        "check_probe_many_sources_do_not_fill_peer_table",
+        "check_probe_conn_on_does_not_refresh_or_extinguish",
+        "check_probe_peer_failure_cleanup_and_reuse",
+        "check_probe_serialization_and_completion_isolation",
+        "check_probe_preserves_control_retry_deadline",
+        "check_probe_during_active_drag_and_hold",
         "check_windows_feature_descriptor_ranges"
       ],
-      "count": 46,
+      "count": 59,
       "clang": "I:\\Documents\\test\\esp32-haptic-precision-touchpad\\Main\\build\\host-clang.cmd",
       "clang_args": []
     },
@@ -75,13 +88,13 @@
   "artifacts": [
     {
       "path": "build\\ESP32-Haptic-2.4G-Receiver.bin",
-      "bytes": 878048,
-      "sha256": "34a4db0cf5c4a59a4bd74e2665193dad2282b0f6696167764aca43127a20f089"
+      "bytes": 879360,
+      "sha256": "c34872b2ae3aaf1576ec2c344862eab1667dc5410fbf6ece1c9b4948353ca0b2"
     },
     {
       "path": "build\\ESP32-Haptic-2.4G-Receiver.elf",
-      "bytes": 9227696,
-      "sha256": "4de2511ef3b27059a8f9b5fb77970640b91eec449b8ab64bda4e6cbfa6107966"
+      "bytes": 9234732,
+      "sha256": "e785287a037c7bb88c4da88021710bbed88701ecb682b4ee7ba3ca9ace9f563c"
     }
   ],
   "build_inputs": {
@@ -106,26 +119,28 @@
     "2.4G/main/usb/usb_descriptor.c": "ffdb7206d91a08f76e1078fc73be3f98b1fe3064b0bb974844a984c8c07a19b6",
     "2.4G/main/usb/usbhid.c": "dd3918102f09bba57b22b927996079820b0a445af2a170bac7fb3bcd8b2bf09a",
     "2.4G/main/usb/usbhid.h": "adce28d6f81b03551c01052bed408e6d53722fafb7137c690717a57630ec3bd4",
-    "2.4G/main/wireless/broadcast.c": "215204073ac8d974aa8203119f74f46c94cde1a79c2f82c74c5e6b4afef8540d",
+    "2.4G/main/wireless/broadcast.c": "6a19e032550212f8f91ca826506b9b3c16eb1891c875873e25986b378c3fe0f8",
     "2.4G/main/wireless/heartbeat.c": "3c32558aa3b740ede066eef696dec679f8a65cc9da89429755d3042421c1baf3",
     "2.4G/main/wireless/receiver_extension.c": "dfa1bc541ea85045cf8bd35e9c4a9462bdc3e70ebd3f4921c23baa98522d6369",
     "2.4G/main/wireless/receiver_extension.h": "97034a526b6a47202906f55e2eae7ff541775c052f8a61279efa7b5508e4a634",
     "2.4G/main/wireless/receiver_settings.c": "04b8b9102c50f6db2a7f9bee59d21cf7a243dffa5dfd8e8e8ccdf413b79beca2",
     "2.4G/main/wireless/receiver_settings.h": "040f3d1f61d991045d6030525f3f95530faa0674e57f42793c44c4d3c83ecb1e",
-    "2.4G/main/wireless/wifi_receive.c": "a6de5251d1a6c12a7e4d37da58d0e43ad5acd6e34b8fd7b6cdd7a77bde0d279f",
-    "2.4G/main/wireless/wireless.h": "c5099980af81818e51d7d9e887b1a4625990849dddc8ae2e9a4988a67aa928a9",
+    "2.4G/main/wireless/wifi_receive.c": "171ed70bc3e48cfa9218b5458447e6b9d8dab9809e1756b195c39a3025280255",
+    "2.4G/main/wireless/wireless.h": "c697f50e30296576ff29230bf6b1d5d4c5224d2c8848a10bebd71abcea0eb537",
     "2.4G/sdkconfig": "eb4fb8fae83917281a074e86ecc1586fae1825694469ec8777ad99e66b89411d",
     "2.4G/sdkconfig.defaults": "4bd86b68f66a543c5615f78edb669af5860936aaace2deb42e7cd1b0e1ad1cab",
-    "2.4G/tools/receiver/host_cases.c": "c275d70b940c3af5a04f4bec205cfc9a18d64ebe05fa73f59a31e620d577f47e",
-    "2.4G/tools/receiver/host_checks.py": "0b8f2f45b28e7279aa495f4dd867ed8cd1f2c04e6be58faef58ddcb35583de38",
-    "2.4G/tools/receiver/host_runtime.h": "76cc2066ec012156f2ae33f89764af87e52e2225c4c99b9418376890b580e698",
-    "2.4G/tools/receiver/receiver_cases.c": "c9497006e5daacbaad2499e314b0fb6de24ab77ade84e2947e5b4ecdcdecbf79",
+    "2.4G/tools/receiver/host_cases.c": "5bc77c029457d0af4a8dccf28ab967df3946c4d423d8c74ba82893877f2d7b0d",
+    "2.4G/tools/receiver/host_checks.py": "47d7cd27481fecfe182434c960eb399a6f5d76ad0b9be64306ebefbf02e28678",
+    "2.4G/tools/receiver/host_runtime.h": "739bf764be71d306c9aa80dd078f6690a35d70d186f800f51ffe021242788259",
+    "2.4G/tools/receiver/receiver_cases.c": "2c5ac85cb508cac6fe59de9378398af845ac031ec19bc262df949a02ac96179d",
+    "2.4G/tools/receiver/receiver_probe_cases.c": "a85c5766d3e88a783aaf55bcb0a49aba8563715f4ba01481ab6dbb28d4610875",
     "2.4G/tools/receiver/receiver_settings_cases.c": "82efb1649f6e6b3149b08f7af348e690bfea94d609606c55d908d94b829d79f5",
-    "2.4G/tools/receiver/verify.py": "3684daafecad96c0c43d9bbdef9c06d3bf6ac2e20e48c5856b4875574bb1310a",
+    "2.4G/tools/receiver/verify.py": "e0c22de20a64ed81a06143b7b29c98b9f7f4032be488a0b4a74caf0726123877",
     "Main/main/SYS/aux_descriptor.inc": "0044ae018e32e577d73dcf17b3a69fde4b351094715240dd4d162aec2d49bc57",
-    "Main/main/SYS/aux_output.c": "4284a32a7e062f07ceb64f9520ff414ce3847d2d25471b37a2df98bab371df7f",
-    "Main/main/SYS/aux_output.h": "908b4b0556ab7d978faf2aa7310de10251423fac0766fde38b5fab8568b820f1",
-    "Main/main/SYS/wireless_extension.h": "79ee3b6bf6f904c438f06bc153557a05b557828f44577d148d3ca8092906f8e2"
+    "Main/main/SYS/aux_output.c": "4231efc68f31ed75c818a0fe29736256375af264e5d2655e09a8e77e818c39a8",
+    "Main/main/SYS/aux_output.h": "bcd2afff02a9a1c492db875c2ee611d05e2779369e4d14bbefdc19bb4d9442b9",
+    "Main/main/SYS/wireless_extension.h": "f77b34fd7b1aff73313a4434528f2415bc265a3ededa79c119e262109d81aa44",
+    "Main/main/SYS/wireless_probe.h": "af95f081c02a394258da326c2ffc44d58e0bb7aaa1927616ad0a21ab7673f7e1"
   },
-  "source_sha256": "dc41bf9546683c50edeeb73d3a15bc50bf465d0c05823e83f6df88b6a61409b5"
+  "source_sha256": "460a3c0b3a505ea0ba608a8bb76d9ee23a05e3a74581b21dc8497670b029e8d6"
 }

@@ -18,6 +18,12 @@ static QueueHandle_t receive_queue;
 
 static void wifi_now_recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int len)
 {
+    wire_probe_t token;
+    if (info && wire_probe_decode(data, len, WIRE_PROBE, &token)) {
+        /* Presence is not input liveness: never touch heartbeat/conn or HID. */
+        wireless_probe_enqueue(info->src_addr, &token, input_now_ms());
+        return;
+    }
     receive_frame_t frame = {.generation = input_generation(), .time_ms = input_now_ms()};
     if (!info || !wireless_decode(data, len, &frame.packet)) {
         input_invalid_packet();

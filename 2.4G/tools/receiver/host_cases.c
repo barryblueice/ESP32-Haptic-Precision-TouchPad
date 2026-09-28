@@ -8,6 +8,10 @@ static void reset_all(void)
     requested_serial = flight_serial = retry_at = control_failures = 0;
     control_pending = control_in_flight = control_done = control_success = retry_wait = false;
     flight_mode = 0;
+    flight_probe = probe_peer_temporary = false; prefer_probe = true;
+    probe_head = probe_count = probe_failures = 0;
+    radio_peer_count = peer_adds = peer_deletes = 0; peer_add_result = ESP_OK;
+    radio_size = 0;
     radio_result = radio_count = 0;
     usb_pending = usb_flight = (input_report_t){0};
     usb_have_pending = usb_busy = dfu_requested = false;

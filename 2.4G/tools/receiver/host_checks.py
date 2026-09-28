@@ -45,7 +45,7 @@ files=['main/protocol.h','main/input/report_buffer.h','main/input/input_pipeline
        'main/wireless/receiver_extension.h','main/wireless/receiver_settings.h','main/protocol.c','main/input/report_buffer.c',
        'main/input/input_pipeline.c','main/wireless/broadcast.c','main/wireless/heartbeat.c',
        'main/wireless/wifi_receive.c','main/usb/usbhid.c','main/nvs/ptp_nvs.c','main/main.c']
-code=runtime+'\n'+body(ROOT/'main/SYS/wireless_extension.h')+'\n'+body(ROOT/'main/SYS/aux_output.h')+'\n'
+code=runtime+'\n'+body(ROOT/'main/SYS/wireless_extension.h')+'\n'+body(ROOT/'main/SYS/wireless_probe.h')+'\n'+body(ROOT/'main/SYS/aux_output.h')+'\n'
 def source(name):
     return receiver/name
 code+='\n'.join(body(source(f)) for f in files)
@@ -63,6 +63,7 @@ static void receiver_settings_reset_for_test(void) {
 cases=(receiver/'tools/receiver/host_cases.c').read_text(encoding='utf-8')
 cases+='\n'+(HERE/'receiver_cases.c').read_text(encoding='utf-8')
 cases+='\n'+(HERE/'receiver_settings_cases.c').read_text(encoding='utf-8')
+cases+='\n'+(HERE/'receiver_probe_cases.c').read_text(encoding='utf-8')
 code+='\n'+cases
 code=code.replace('while (true)','while (test_steps-- > 0)')
 out=options.build_dir.resolve()/'receiver-host-tests';out.mkdir(parents=True,exist_ok=True)

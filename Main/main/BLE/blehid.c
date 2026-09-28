@@ -1,6 +1,7 @@
 #include "BLE/ble_hid.h"
 #include "SYS/input_pipeline.h"
 #include "SYS/aux_output.h"
+#include "SYS/connection.h"
 #include "esp_timer.h"
 
 static portMUX_TYPE ble_tx_lock = portMUX_INITIALIZER_UNLOCKED;
@@ -20,7 +21,9 @@ static bool ready_locked(void)
 static void update_link(void)
 {
     taskENTER_CRITICAL(&ble_tx_lock); bool ready = ready_locked(); taskEXIT_CRITICAL(&ble_tx_lock);
-    input_set_link(ready ? (1U << MOUSE_MODE) : 0);
+    connection_lock();
+    connection_link(BLE_MODE, ready);
+    connection_unlock();
     input_wake_sender();
 }
 uint32_t ble_input_connection(bool up, uint16_t conn)
@@ -71,7 +74,7 @@ void ble_input_complete(uint16_t conn, uint32_t epoch, uint16_t handle, ble_tx_r
 }
 void ble_hid_task(void *arg)
 {
-    (void)arg; input_register_sender();
+    (void)arg; input_register_transport_sender(BLE_MODE);
     input_report_t pending = {0};
     aux_output_report_t auxiliary = {0};
     bool have_pending = false, have_auxiliary = false, prefer_auxiliary = true;

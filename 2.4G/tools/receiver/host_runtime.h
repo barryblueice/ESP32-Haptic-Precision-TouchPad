@@ -106,10 +106,31 @@ typedef int esp_now_send_status_t;
 #define ESP_NOW_SEND_SUCCESS 0
 typedef struct { uint8_t peer_addr[6]; int channel, ifidx; bool encrypt; } esp_now_peer_info_t;
 static bool peer_added, send_registered, recv_registered;
+static esp_now_peer_info_t radio_peers[20];
+static unsigned radio_peer_count, peer_adds, peer_deletes;
+static int peer_add_result;
 static int esp_now_init(void) { return sdk(); }
-static bool esp_now_is_peer_exist(const uint8_t *addr) { (void)addr; return false; }
+static bool esp_now_is_peer_exist(const uint8_t *addr) {
+    for (unsigned i=0; i<radio_peer_count; ++i)
+        if (!memcmp(radio_peers[i].peer_addr,addr,6)) return true;
+    return false;
+}
 static int esp_now_add_peer(const esp_now_peer_info_t *p) {
-    (void)p; int result = sdk(); if (!result) peer_added = true; return result;
+    ++peer_adds;
+    int result = sdk();
+    if (!result) result = peer_add_result;
+    if (!result && (radio_peer_count == 20 || esp_now_is_peer_exist(p->peer_addr))) result = ESP_FAIL;
+    if (!result) { peer_added = true; radio_peers[radio_peer_count++] = *p; }
+    return result;
+}
+static int esp_now_del_peer(const uint8_t *addr) {
+    ++peer_deletes;
+    for (unsigned i=0; i<radio_peer_count; ++i) {
+        if (!memcmp(radio_peers[i].peer_addr,addr,6)) {
+            radio_peers[i] = radio_peers[--radio_peer_count]; return ESP_OK;
+        }
+    }
+    return ESP_FAIL;
 }
 static int esp_now_register_send_cb(void (*cb)(const esp_now_send_info_t *, esp_now_send_status_t)) {
     (void)cb; int result = sdk(); if (!result) send_registered = true; return result;
@@ -121,8 +142,11 @@ static int esp_now_register_recv_cb(void (*cb)(const esp_now_recv_info_t *, cons
 static int radio_result, radio_count;
 static uint8_t radio_byte;
 static const uint8_t *radio_pointer;
+static uint8_t radio_destination[6], radio_bytes[38];
+static size_t radio_size;
 static int esp_now_send(const uint8_t *addr, const uint8_t *data, size_t size) {
-    (void)addr; if (size != 1 && size != 38) ++lock_error;
+    if (size != 1 && size != 38) { ++lock_error; return ESP_FAIL; }
+    memcpy(radio_destination,addr,6); memcpy(radio_bytes,data,size); radio_size=size;
     ++radio_count; radio_byte = *data; radio_pointer = data; return radio_result;
 }
 typedef int hid_report_type_t;

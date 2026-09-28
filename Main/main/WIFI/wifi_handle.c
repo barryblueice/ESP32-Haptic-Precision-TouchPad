@@ -54,6 +54,13 @@ static wire_surface_t surface;
 static uint32_t acknowledged_at;
 static bool acknowledged;
 static uint8_t acknowledged_peer[6];
+void wireless_receiver_probe_ack(const uint8_t *mac, const uint8_t *data, unsigned size)
+{
+    if (!mac || (mac[0] & 1)) return;
+    const uint8_t broadcast[6] = {255,255,255,255,255,255};
+    if (memcmp(receiver_mac, broadcast, 6) && memcmp(receiver_mac, mac, 6)) return;
+    connection_probe_receive(data, size);
+}
 void wireless_surface_ack(const uint8_t *mac, const uint8_t *data, unsigned size)
 {
     wire_surface_t ack;
@@ -103,6 +110,7 @@ void wireless_wifi_init(void)
     if (!surface.session) surface.session = 1;
     ESP_ERROR_CHECK(wireless_settings_init(surface.session));
     wireless_espnow_init();
+    connection_probe_ready(esp_random());
 
 }
 
@@ -116,7 +124,7 @@ void wifi_send_task(void *arg)
     bool have_pending = false, in_flight = false, link_ready = false, prefer_aux = true;
     uint32_t input_epoch = 0;
     uint32_t surface_epoch = connection_epoch();
-    unsigned kind = 0; /* 0 pointer, 1 heartbeat, 2 surface, 3 action, 4 settings ACK */
+    unsigned kind = 0; /* 0 pointer, 1 heartbeat, 2 surface, 3 action, 4 settings ACK, 5 probe */
     uint32_t heartbeat_at = 0, surface_at = 0, sequence = 0;
     bool first_surface = true;
     while (true) {
@@ -160,16 +168,17 @@ void wifi_send_task(void *arg)
                 link_ready = false; connection_link(_2_4_MODE, false);
                 first_surface = true; have_pending = false; sequence = 0;
             }
-            if (!connection_selected(_2_4_MODE)) {
-                /* USB/startup waiting must not emit even control packets.
-                 * Route changes wake this task; first_surface starts discovery
-                 * immediately on the next 2.4G selection. */
+            bool discovery = connection_probe_packet(packet);
+            if (!discovery && !connection_selected(_2_4_MODE)) {
+                /* Only independent receiver discovery is allowed on USB. */
                 connection_unlock();
-                ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(100));
+                ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(10));
                 continue;
             }
             bool send = true;
-            if (first_surface || now - surface_at >= 1000) {
+            if (discovery) {
+                kind = 5;
+            } else if (first_surface || now - surface_at >= 1000) {
                 kind = 2; wire_surface_encode(packet, WIRE_SURFACE, &surface);
             } else if (now - heartbeat_at >= 1000) {
                 kind = 1; wireless_msg_t heartbeat; wireless_make_heartbeat(&heartbeat); memcpy(packet, &heartbeat, 38);
