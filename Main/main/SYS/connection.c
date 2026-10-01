@@ -122,7 +122,11 @@ void connection_link(int transport, bool ready)
 }
 void connection_usb_reset(void)
 {
-    links[WIRED_MODE] = false; usb_mode = MOUSE_MODE;
+    /* A bus reset tears down the host session, not the Input Mode the host
+     * already negotiated. Keep usb_mode so a resume that never resends the
+     * Input Mode feature does not fall back to mouse (and does not churn the
+     * touch controller). */
+    links[WIRED_MODE] = false;
     flights[WIRED_MODE] = 0;
     if (connection_selected(WIRED_MODE)) { input_usb_reset(); aux_output_reset(false); }
     input_wake_parser();

@@ -263,11 +263,19 @@ void input_usb_reset(void)
     taskENTER_CRITICAL(&lock);
     usb_session = true;
     ready_mask = host_active_mask = 0;
-    requested_mode = MOUSE_MODE;
-    mode_pending = true;
-    mode_retry = false;
-    ++request_serial;
-    report_buffer_reset(&reports, MOUSE_MODE);
+    /* A bus reset or resume destroys pending host reports, not the Input Mode
+     * the host negotiated. Forcing mouse here flipped the controller and
+     * stalled input on every wake, so keep the mode that is already applied
+     * (or still pending) and only bootstrap mouse when nothing was chosen. */
+    if (!mode_pending && !mode_applied) {
+        requested_mode = MOUSE_MODE;
+        mode_pending = true;
+        mode_retry = false;
+        ++request_serial;
+        report_buffer_reset(&reports, MOUSE_MODE);
+    } else {
+        report_buffer_reset(&reports, reports.mode);
+    }
     transition_locked("usb_reset", true);
     taskEXIT_CRITICAL(&lock);
     input_wake_parser(); input_wake_sender();
