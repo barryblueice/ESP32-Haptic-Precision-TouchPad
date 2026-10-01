@@ -29,7 +29,7 @@ bool device_config_valid(const device_config_t *c)
     for (unsigned i = CFG_POINTS; i < CFG_WIRELESS_LIGHT; i += 4)
         if (b[i] > 1 || b[i+1] > 47 || (b[i] && !b[i+1]) ||
             !b[i+2] || b[i+2] > 30 || !b[i+3] || b[i+3] > 10) return false;
-    if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[50] > 100 || b[51] > 3) return false;
+    if (!b[48] || b[48] > b[49] || b[49] > b[50] || b[51] > 3) return false;
     return true;
 }
 uint32_t rstp_capabilities_normalize(uint32_t caps)
