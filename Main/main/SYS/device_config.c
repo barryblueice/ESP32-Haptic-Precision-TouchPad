@@ -121,7 +121,7 @@ static void apply_at_boundary(const device_config_t *c, bool restart)
 uint16_t device_config_save(const device_config_t *c)
 {
     if (!device_config_valid(c)) return RSTP_INVALID;
-    if (!initialized || xSemaphoreTake(writer, 0) != pdTRUE) return RSTP_BUSY;
+    if (!initialized || xSemaphoreTake(writer, portMAX_DELAY) != pdTRUE) return RSTP_BUSY;
     device_config_t old; device_config_get(&old);
     bool restart = memcmp(old.bytes, c->bytes, CFG_FEATURE_FLAGS) != 0;
     uint16_t status = restart ? RSTP_RESTART : RSTP_OK;
@@ -136,7 +136,7 @@ esp_err_t device_config_set_controls(uint8_t mask, uint8_t intensity, uint8_t le
 {
     if (!mask || mask > 3 || ((mask & 1) && intensity > 100) || ((mask & 2) && (level < 1 || level > 3)))
         return ESP_ERR_INVALID_ARG;
-    if (!initialized || xSemaphoreTake(writer, 0) != pdTRUE) return ESP_ERR_INVALID_STATE;
+    if (!initialized || xSemaphoreTake(writer, portMAX_DELAY) != pdTRUE) return ESP_ERR_INVALID_STATE;
     device_config_t c; device_config_get(&c);
     if (mask & 1) c.bytes[CFG_INTENSITY] = intensity;
     if (mask & 2) c.bytes[CFG_LEVEL] = level;

@@ -29,10 +29,15 @@ void usb_config_receive(const uint8_t *data, uint16_t size)
 }
 void usb_config_legacy(uint8_t id, uint8_t value)
 {
-    if (!commands) return;
+    if (!commands) {
+        ESP_LOGW("RSTP", "Feature unavailable: queue not ready id=0x%02X value=%u", id, value);
+        return;
+    }
     config_command_t cmd = {.legacy_id = id, .data = {value}};
     taskENTER_CRITICAL(&tx_lock); cmd.epoch = epoch; taskEXIT_CRITICAL(&tx_lock);
-    (void)xQueueSend(commands, &cmd, 0);
+    if (xQueueSend(commands, &cmd, 0) != pdTRUE) {
+        ESP_LOGW("RSTP", "Feature command dropped: queue full id=0x%02X value=%u", id, value);
+    }
 }
 void usb_config_dfu(void) { usb_config_legacy(0xff, 0); }
 static void config_task(void *arg)
@@ -48,6 +53,7 @@ static void config_task(void *arg)
             else {
                 esp_err_t err = device_config_set_legacy(cmd.legacy_id == 0x40 ? CFG_LEVEL : CFG_INTENSITY, cmd.data[0], true);
                 if (err != ESP_OK) ESP_LOGW("RSTP", "Feature rejected: %s", esp_err_to_name(err));
+                else ESP_LOGI("RSTP", "Feature applied: id=0x%02X value=%u", cmd.legacy_id, cmd.data[0]);
             }
             continue;
         }
