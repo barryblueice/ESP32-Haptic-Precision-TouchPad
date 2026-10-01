@@ -118,6 +118,8 @@ static usb_aux_report_t usb_aux_buffer;
 static bool pump_queued, usb_configured;
 static TaskHandle_t usb_sender_task;
 static bool pump_enqueued;
+static bool usb_remote_wakeup_enabled, usb_remote_wakeup_requested;
+static bool usb_remote_wakeup_attempted;
 static uint32_t usb_epoch, usb_flight_epoch[3], usb_route_epoch[3];
 static input_report_t usb_pending;
 static bool usb_have_pending, usb_prefer_aux = true;
@@ -130,6 +132,19 @@ void tud_event_hook_cb(uint8_t rhport, uint32_t eventid, bool in_isr)
     (void)rhport;
     if (!in_isr && eventid == USBD_EVENT_FUNC_CALL &&
         xTaskGetCurrentTaskHandle() == usb_sender_task) pump_enqueued = true;
+}
+
+void usbhid_remote_wakeup_request(void)
+{
+    TaskHandle_t sender;
+    taskENTER_CRITICAL(&usb_tx_lock);
+    sender = usb_sender_task;
+    if (sender != NULL && !usb_remote_wakeup_attempted)
+        usb_remote_wakeup_requested = true;
+    else
+        sender = NULL;
+    taskEXIT_CRITICAL(&usb_tx_lock);
+    if (sender != NULL) xTaskNotifyGive(sender);
 }
 
 static void usb_complete(uint8_t instance, bool success)
@@ -274,6 +289,11 @@ static void usb_session_reset(uint8_t rhport)
 {
     (void)rhport;
     connection_lock();
+    taskENTER_CRITICAL(&usb_tx_lock);
+    usb_remote_wakeup_enabled = false;
+    usb_remote_wakeup_requested = false;
+    usb_remote_wakeup_attempted = false;
+    taskEXIT_CRITICAL(&usb_tx_lock);
     ++usb_epoch;
     usb_configured = false;
     usb_have_pending = false;
@@ -321,11 +341,20 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         connection_link(WIRED_MODE, false);
         break;
     case TINYUSB_EVENT_SUSPENDED:
+        taskENTER_CRITICAL(&usb_tx_lock);
+        usb_remote_wakeup_enabled = event->suspended.remote_wakeup;
+        usb_remote_wakeup_attempted = false;
+        taskEXIT_CRITICAL(&usb_tx_lock);
         if (connection_selected(WIRED_MODE)) usb_aux_cancel();
         connection_link(WIRED_MODE, false);
         ESP_LOGI(TAG, "USB suspended epoch=%" PRIu32, usb_epoch);
         break;
     case TINYUSB_EVENT_RESUMED:
+        taskENTER_CRITICAL(&usb_tx_lock);
+        usb_remote_wakeup_enabled = false;
+        usb_remote_wakeup_requested = false;
+        usb_remote_wakeup_attempted = false;
+        taskEXIT_CRITICAL(&usb_tx_lock);
         /* cancel retains in-flight reports and only releases actual held keys. */
         if (connection_selected(WIRED_MODE)) usb_aux_cancel();
         if (usb_configured) connection_link(WIRED_MODE, true);
@@ -357,6 +386,25 @@ void usbhid_init(void) {
 static void usb_send_pump(void *arg)
 {
     (void)arg;
+    bool suspended = tud_suspended();
+    bool wake_requested = false;
+    bool wake_enabled = false;
+    taskENTER_CRITICAL(&usb_tx_lock);
+    if (!suspended) {
+        usb_remote_wakeup_requested = false;
+    } else if (usb_remote_wakeup_requested && !usb_remote_wakeup_attempted) {
+        usb_remote_wakeup_requested = false;
+        usb_remote_wakeup_attempted = true;
+        wake_requested = true;
+        wake_enabled = usb_remote_wakeup_enabled;
+    }
+    taskEXIT_CRITICAL(&usb_tx_lock);
+    if (wake_requested) {
+        if (wake_enabled && tud_remote_wakeup())
+            ESP_LOGI(TAG, "USB remote wake requested by touch");
+        else
+            ESP_LOGI(TAG, "USB remote wake unavailable: host did not authorize it");
+    }
     connection_lock();
     if (gpio_get_level(VBUS_DET_GPIO) && usb_configured && tud_mounted() && !tud_suspended()) {
         usb_config_send();
@@ -413,7 +461,9 @@ void usbhid_task(void *arg)
 {
     (void)arg;
     input_register_transport_sender(WIRED_MODE);
+    taskENTER_CRITICAL(&usb_tx_lock);
     usb_sender_task = xTaskGetCurrentTaskHandle();
+    taskEXIT_CRITICAL(&usb_tx_lock);
     while (true) {
         connection_lock();
         if (connection_selected(WIRED_MODE)) input_log_stats();

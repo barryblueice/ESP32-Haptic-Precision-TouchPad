@@ -19,6 +19,7 @@
 #include "SYS/point_gesture.h"
 #include "SYS/knuckle_gesture.h"
 #include "USB/usb_aux.h"
+#include "USB/usbhid.h"
 #include "SYS/hid_msg.h"
 
 #include "I2C/I2C_handle.h"
@@ -465,6 +466,7 @@ void i2c_queue_task(void *arg) {
         bool local_ready = input_source_observe(frame.generation, all_up);
         bool publish = input_observe(report_generation, all_up);
         last_all_up = all_up;
+        if (!all_up && current_mode == WIRED_MODE) usbhid_remote_wakeup_request();
         if (!local_ready || (!publish && current_mode != _2_4_MODE)) {
             knuckle_frame_count = 0;
             continue;

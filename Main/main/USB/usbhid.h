@@ -6,6 +6,7 @@
 
 void usbhid_task(void *arg);
 void usbhid_init(void);
+void usbhid_remote_wakeup_request(void);
 
 extern uint8_t ptp_hid_report_descriptor[];
 void usb_descriptor_init(void);
