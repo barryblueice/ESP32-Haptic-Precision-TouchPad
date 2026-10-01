@@ -320,6 +320,16 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 }
 
+/* The host keeps its negotiated Input Mode across bus resets, suspend/resume
+ * and even a VBUS cut during system sleep, but our local session state does
+ * not. Replay the last selection whenever the link comes back so a wake or
+ * re-enumeration that never resends SET_FEATURE cannot silently fall back to
+ * mouse mode. A future host still negotiates its own mode after this replay. */
+static void usb_replay_input_mode(void)
+{
+    connection_usb_mode(ptp_input_mode == 0x03 ? PTP_MODE : MOUSE_MODE);
+}
+
 /* TinyUSB does not call umount on BUS_RESET. An application driver which
  * claims no interfaces observes configuration_reset in USB task context. */
 static void usb_session_reset(uint8_t rhport)
@@ -338,7 +348,7 @@ static void usb_session_reset(uint8_t rhport)
     memset(usb_busy, 0, sizeof(usb_busy));
     usb_aux_flight = false;
     usb_config_detach();
-    ptp_input_mode = 0;
+    /* Keep ptp_input_mode: this same host may resume without renegotiating. */
     connection_usb_reset();
     connection_unlock();
     ESP_LOGI(TAG, "USB session reset epoch=%" PRIu32, usb_epoch);
@@ -370,10 +380,14 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         /* A new host session has no pressed keys to release. Mode requests
          * received before SET_CONFIGURATION must not be overwritten here. */
         connection_link(WIRED_MODE, true);
+        usb_replay_input_mode();
         ESP_LOGI(TAG, "USB configured epoch=%" PRIu32 " mode=%u", usb_epoch, ptp_input_mode);
         break;
     case TINYUSB_EVENT_DETACHED:
-        /* The class reset observer already retired the endpoint transfers. */
+        /* The class reset observer already retired the endpoint transfers.
+         * Keep ptp_input_mode across detach: a system-sleep VBUS cut looks
+         * like an unplug here, yet the same host resumes expecting its
+         * previously negotiated Input Mode. */
         usb_configured = false;
         connection_link(WIRED_MODE, false);
         break;
@@ -395,6 +409,8 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         /* cancel retains in-flight reports and only releases actual held keys. */
         if (connection_selected(WIRED_MODE)) usb_aux_cancel();
         if (usb_configured) connection_link(WIRED_MODE, true);
+        /* Selective suspend resumes without a fresh SET_FEATURE. */
+        usb_replay_input_mode();
         ESP_LOGI(TAG, "USB resumed epoch=%" PRIu32, usb_epoch);
         break;
     default:
