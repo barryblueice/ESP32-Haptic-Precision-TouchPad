@@ -3,6 +3,7 @@
 #include "wireless.h"
 #include <stddef.h>
 #include "input/input_pipeline.h"
+#include "usb/usbhid.h"
 #include "freertos/queue.h"
 #include "esp_now.h"
 #include "esp_wifi.h"
@@ -56,7 +57,14 @@ static void wireless_receive_step(void)
         if (p->type == ALIVE_MODE) {
             if (!p->payload.alive.vbus_level) wireless_request_mode();
         }
-        if (wireless_report_kind(p->type) || p->type == ALIVE_MODE) input_link_seen(frame.time_ms);
+        report_kind_t kind = wireless_report_kind(p->type);
+        /* Real contact on the paired pad wakes a suspended host; heartbeats and
+         * all-up (release) frames must not. */
+        if (kind != REPORT_NONE) {
+            input_report_t probe = {.kind = kind, .data = p->payload};
+            if (!report_all_up(&probe)) usbhid_remote_wakeup_request();
+        }
+        if (kind != REPORT_NONE || p->type == ALIVE_MODE) input_link_seen(frame.time_ms);
         input_receive(p, frame.generation, frame.time_ms);
     }
     input_check_link(input_now_ms());

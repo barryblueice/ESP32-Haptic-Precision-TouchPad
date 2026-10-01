@@ -215,13 +215,33 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
     return 0;
 }
 
+/* Report IDs declared by the PTP interface's HID report descriptor. Windows
+ * may deliver SET_REPORT with the report ID folded into the payload's first
+ * byte instead of in wValue, so only unwrap IDs this interface owns. */
+static bool usb_owns_report_id(uint8_t report_id)
+{
+    switch (report_id) {
+    case REPORTID_TOUCHPAD:
+    case REPORTID_MAX_COUNT:
+    case REPORTID_PTPHQA:
+    case REPORTID_FEATURE:
+    case REPORTID_FUNCTION_SWITCH:
+    case REPORTID_BUTTON_PRESS_THRESHOLD:
+    case REPORTID_HAPTIC_INTENSITY:
+        return true;
+    default:
+        return false;
+    }
+}
+
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type, uint8_t const *buffer, uint16_t bufsize) {
     if (instance == 0) {
         if (report_type == HID_REPORT_TYPE_OUTPUT && report_id == 0) usb_config_receive(buffer, bufsize);
         return;
     }
     if (instance != 1 || report_type != HID_REPORT_TYPE_FEATURE) return;
-    if (bufsize == 0 || buffer == NULL) {
+    if (buffer == NULL) return;
+    if (bufsize == 0) {
         ESP_LOGW(TAG, "SET_REPORT empty: instance=%u report_id=0x%02X type=%u", instance, report_id, report_type);
         return;
     }
@@ -230,18 +250,16 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     uint8_t const *payload = buffer;
     uint16_t payload_size = bufsize;
 
-    if (report_id == 0 && bufsize > 1) {
-        switch (buffer[0]) {
-            case REPORTID_FEATURE:
-            case REPORTID_BUTTON_PRESS_THRESHOLD:
-            case REPORTID_HAPTIC_INTENSITY:
-                effective_report_id = buffer[0];
-                payload = &buffer[1];
-                payload_size = bufsize - 1;
-                break;
-
-            default:
-                break;
+    if (report_id == 0) {
+        if (bufsize >= 2 && usb_owns_report_id(buffer[0])) {
+            effective_report_id = buffer[0];
+            payload = &buffer[1];
+            payload_size = bufsize - 1;
+        } else if (buffer[0] == REPORTID_DFU_CMD) {
+            /* Leave the folded DFU command to the check below unchanged. */
+        } else {
+            ESP_LOGW(TAG, "SET_REPORT rejected: missing report ID instance=%u size=%u", instance, bufsize);
+            return;
         }
     }
 
@@ -249,7 +267,12 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
         ESP_LOGW(TAG, "SET_REPORT empty payload: instance=%u report_id=0x%02X type=%u", instance, effective_report_id, report_type);
         return;
     }
-    for (unsigned i = 1; i < payload_size; ++i) if (payload[i]) return;
+    for (unsigned i = 1; i < payload_size; ++i) {
+        if (payload[i]) {
+            ESP_LOGW(TAG, "SET_REPORT rejected: trailing data report_id=0x%02X size=%u", effective_report_id, payload_size);
+            return;
+        }
+    }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_FEATURE) {
         if (payload_size >= 1) {
@@ -262,7 +285,10 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-        if (payload[0] < 1 || payload[0] > 3) return;
+        if (payload[0] < 1 || payload[0] > 3) {
+            ESP_LOGW(TAG, "SET_REPORT rejected: invalid button threshold=0x%02X", payload[0]);
+            return;
+        }
         usb_config_legacy(REPORTID_BUTTON_PRESS_THRESHOLD, payload[0]);
 
         ESP_LOGI(TAG,
@@ -273,8 +299,19 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
     }
 
     if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id == REPORTID_HAPTIC_INTENSITY) {
-        if (payload[0] > 100) return;
+        if (payload[0] > 100) {
+            ESP_LOGW(TAG, "SET_REPORT rejected: invalid haptic intensity=%u", payload[0]);
+            return;
+        }
         usb_config_legacy(REPORTID_HAPTIC_INTENSITY, payload[0]);
+        ESP_LOGI(TAG, "Feature applied: id=0x%02X intensity=%u", effective_report_id, payload[0]);
+    }
+
+    if (report_type == HID_REPORT_TYPE_FEATURE && effective_report_id != REPORTID_FEATURE &&
+        effective_report_id != REPORTID_BUTTON_PRESS_THRESHOLD &&
+        effective_report_id != REPORTID_HAPTIC_INTENSITY &&
+        effective_report_id != REPORTID_DFU_CMD) {
+        ESP_LOGD(TAG, "SET_REPORT ignored: id=0x%02X instance=%u", effective_report_id, instance);
     }
 
     if (report_id == REPORTID_DFU_CMD ||

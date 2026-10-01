@@ -25,6 +25,26 @@ static bool usb_aux_flight, prefer_aux = true;
 static aux_output_report_t auxiliary;
 static uint8_t surface_rotation;
 
+/* Remote wakeup has its own spinlock: a request can arrive from the wireless
+ * task while it holds the input pipeline lock, whereas the remaining USB state
+ * is owned by usb_mutex. usb_mutex may nest this lock, never the reverse. */
+static portMUX_TYPE wake_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool usb_remote_wakeup_enabled, usb_remote_wakeup_requested, usb_remote_wakeup_attempted;
+
+void usbhid_remote_wakeup_request(void)
+{
+    taskENTER_CRITICAL(&wake_lock);
+    if (!usb_remote_wakeup_attempted) usb_remote_wakeup_requested = true;
+    taskEXIT_CRITICAL(&wake_lock);
+    input_wake_sender();
+}
+
+static void usb_wakeup_clear(void)
+{
+    taskENTER_CRITICAL(&wake_lock);
+    usb_remote_wakeup_enabled = usb_remote_wakeup_requested = usb_remote_wakeup_attempted = false;
+    taskEXIT_CRITICAL(&wake_lock);
+}
 
 tusb_desc_device_t const desc_device = {
     .bLength = sizeof(tusb_desc_device_t), .bDescriptorType = TUSB_DESC_DEVICE,
@@ -104,10 +124,30 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t id, hid_report_type_t t
     return 0;
 }
 
+/* Report IDs this interface owns. Windows may deliver SET_REPORT with the
+ * report ID folded into the payload's first byte instead of in wValue. */
+static bool usb_owns_report_id(uint8_t instance, uint8_t id)
+{
+    if (id == REPORTID_MOUSE || id == REPORTID_MAX_COUNT || id == REPORTID_FUNCTION_SWITCH) return true;
+    if (instance == REPORT_HAPTIC)
+        return id == REPORTID_HAPTIC_TOUCHPAD || id == REPORTID_HAPTIC_PTPHQA ||
+               id == REPORTID_HAPTIC_FEATURE || id == REPORTID_BUTTON_PRESS_THRESHOLD ||
+               id == REPORTID_HAPTIC_INTENSITY || id == REPORTID_HAPTIC_WAVEFORM_LIST ||
+               id == REPORTID_HAPTIC_MANUAL_TRIGGER;
+    if (instance == REPORT_LEGACY)
+        return id == REPORTID_LEGACY_TOUCHPAD || id == REPORTID_LEGACY_PTPHQA ||
+               id == REPORTID_LEGACY_FEATURE;
+    return false;
+}
+
 void tud_hid_set_report_cb(uint8_t instance, uint8_t id, hid_report_type_t type,
                            uint8_t const *buffer, uint16_t size)
 {
-    if (!buffer || !size) return;
+    if (!buffer) return;
+    if (!size) {
+        ESP_LOGW("USB", "Feature rejected: empty SET_REPORT instance=%u id=0x%02X", instance, id);
+        return;
+    }
     /* The generic interface is the only DFU command endpoint. */
     if (instance == 0 && type == HID_REPORT_TYPE_OUTPUT &&
         (id == REPORTID_DFU_CMD || (id == 0 && buffer[0] == REPORTID_DFU_CMD))) {
@@ -118,23 +158,43 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t id, hid_report_type_t type,
         return;
     }
     if (instance != REPORT_HAPTIC && instance != REPORT_LEGACY) return;
-    if (id == 0) { id = *buffer++; --size; }
-    if (!size) return;
+    if (id == 0) {
+        /* Only strip a leading byte that really is a report ID we own, so a
+         * value byte is never mistaken for one. */
+        if (size >= 2 && usb_owns_report_id(instance, buffer[0])) { id = *buffer++; --size; }
+        else {
+            ESP_LOGW("USB", "Feature rejected: missing report ID instance=%u size=%u", instance, size);
+            return;
+        }
+    }
+    if (!size) {
+        ESP_LOGW("USB", "Feature rejected: empty payload id=0x%02X", id);
+        return;
+    }
     bool haptic = instance == REPORT_HAPTIC;
+    bool trailing = false;
+    for (unsigned i = 1; i < size; ++i) if (buffer[i]) trailing = true;
     if (type == HID_REPORT_TYPE_FEATURE) {
         if ((haptic && id == REPORTID_HAPTIC_FEATURE) ||
             (!haptic && id == REPORTID_LEGACY_FEATURE)) {
-            for (unsigned i=1;i<size;++i) if (buffer[i]) return;
+            if (trailing) { ESP_LOGW("USB", "Feature rejected: trailing data id=0x%02X", id); return; }
             input_set_mode(buffer[0] == 3 ? TP_PTP_MODE : TP_MOUSE_MODE);
             wireless_request_mode();
-            ESP_LOGI("USB", "Input mode SET_FEATURE: instance=%u value=%u mode=%u",
-                     instance, buffer[0], input_mode());
+            ESP_LOGI("USB", "Feature applied: id=0x%02X mode=%u", id, input_mode());
         } else if (haptic && id == REPORTID_BUTTON_PRESS_THRESHOLD) {
-            for (unsigned i=1;i<size;++i) if (buffer[i]) return;
-            receiver_settings_set(WIRE_SETTING_LEVEL,buffer[0]);
+            if (trailing) { ESP_LOGW("USB", "Feature rejected: trailing data id=0x%02X", id); return; }
+            if (receiver_settings_set(WIRE_SETTING_LEVEL, buffer[0]))
+                ESP_LOGI("USB", "Feature applied: id=0x%02X level=%u", id, buffer[0]);
+            else
+                ESP_LOGW("USB", "Feature rejected: id=0x%02X invalid level=%u", id, buffer[0]);
         } else if (haptic && id == REPORTID_HAPTIC_INTENSITY) {
-            for (unsigned i=1;i<size;++i) if (buffer[i]) return;
-            receiver_settings_set(WIRE_SETTING_INTENSITY,buffer[0]);
+            if (trailing) { ESP_LOGW("USB", "Feature rejected: trailing data id=0x%02X", id); return; }
+            if (receiver_settings_set(WIRE_SETTING_INTENSITY, buffer[0]))
+                ESP_LOGI("USB", "Feature applied: id=0x%02X intensity=%u", id, buffer[0]);
+            else
+                ESP_LOGW("USB", "Feature rejected: id=0x%02X invalid intensity=%u", id, buffer[0]);
+        } else {
+            ESP_LOGD("USB", "Feature ignored: id=0x%02X instance=%u", id, instance);
         }
     } else if (haptic && type == HID_REPORT_TYPE_OUTPUT &&
                id == REPORTID_HAPTIC_MANUAL_TRIGGER && size >= 7) {
@@ -149,6 +209,7 @@ static void usb_session_reset(uint8_t rhport)
 {
     (void)rhport;
     xSemaphoreTake(usb_mutex, portMAX_DELAY);
+    usb_wakeup_clear();
     input_set_usb(false);
     input_set_mode(TP_MOUSE_MODE);
     usb_busy = usb_aux_flight = usb_have_pending = false;
@@ -196,16 +257,27 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         usb_busy = usb_aux_flight = false;
         aux_output_reset(false);
         usb_have_pending = false;
+        usb_wakeup_clear();
         wireless_request_mode();
         break;
     case TINYUSB_EVENT_SUSPENDED:
         aux_output_cancel();
         receiver_ext_usb_ready(false);
         input_set_usb(false);
+        /* Record whether the host authorized this device to wake it, and arm a
+         * fresh single attempt for this suspend. */
+        taskENTER_CRITICAL(&wake_lock);
+        usb_remote_wakeup_enabled = event->suspended.remote_wakeup;
+        usb_remote_wakeup_requested = false;
+        usb_remote_wakeup_attempted = false;
+        taskEXIT_CRITICAL(&wake_lock);
+        ESP_LOGI("USB", "USB suspended, remote wakeup %s",
+                 event->suspended.remote_wakeup ? "authorized" : "not authorized");
         break;
     case TINYUSB_EVENT_RESUMED:
         aux_output_resume();
         input_set_usb(true);
+        usb_wakeup_clear();
         wireless_request_mode();
         break;
     default: break;
@@ -221,8 +293,29 @@ static void enter_dfu_mode(void)
     esp_restart();
 }
 
+/* At most one remote-wakeup attempt per host suspend, issued in task context. */
+static void usb_wakeup_step(void)
+{
+    if (!tud_suspended()) return;
+    bool attempt = false, authorized = false;
+    taskENTER_CRITICAL(&wake_lock);
+    if (usb_remote_wakeup_requested && !usb_remote_wakeup_attempted) {
+        usb_remote_wakeup_requested = false;
+        usb_remote_wakeup_attempted = true;
+        attempt = true;
+        authorized = usb_remote_wakeup_enabled;
+    }
+    taskEXIT_CRITICAL(&wake_lock);
+    if (!attempt) return;
+    if (authorized && tud_remote_wakeup())
+        ESP_LOGI("USB", "Remote wake requested by touchpad input");
+    else
+        ESP_LOGI("USB", "Remote wake unavailable: host did not authorize it");
+}
+
 static void usbhid_step(void)
 {
+    usb_wakeup_step();
     wire_surface_t surface;
     if (receiver_ext_apply(&surface)) {
         input_recover(); aux_output_cancel();

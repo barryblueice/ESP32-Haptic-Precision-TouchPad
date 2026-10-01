@@ -20,16 +20,22 @@ uint8_t receiver_settings_get(uint8_t field)
     uint8_t value = field == WIRE_SETTING_INTENSITY ? actual_intensity : actual_level;
     taskEXIT_CRITICAL(&receiver_settings_lock); return value;
 }
-void receiver_settings_set(uint8_t field, uint8_t value)
+bool receiver_settings_set(uint8_t field, uint8_t value)
 {
     if ((field != WIRE_SETTING_INTENSITY && field != WIRE_SETTING_LEVEL) ||
-        (field == WIRE_SETTING_INTENSITY ? value > 100 : value < 1 || value > 3)) return;
+        (field == WIRE_SETTING_INTENSITY ? value > 100 : value < 1 || value > 3)) return false;
     taskENTER_CRITICAL(&receiver_settings_lock);
     if (field == WIRE_SETTING_INTENSITY) { wanted_intensity=value; ++revision[0]; }
     else { wanted_level=value; ++revision[1]; }
     dirty |= field;
+    bool deferred = !settings_synced || transaction_pending;
     taskEXIT_CRITICAL(&receiver_settings_lock);
+    /* Accepted values are pending state, never a one-shot write: a missing or
+     * busy peer defers them instead of dropping the host's setting. */
+    ESP_LOGI("SETTINGS", "%s %s=%u", deferred ? "Deferred" : "Queued",
+             field == WIRE_SETTING_INTENSITY ? "intensity" : "level", value);
     wireless_wake_worker();
+    return true;
 }
 bool receiver_settings_next(uint8_t packet[38], uint8_t mac[6], uint32_t now)
 {

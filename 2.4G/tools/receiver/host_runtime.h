@@ -154,7 +154,7 @@ typedef int hid_report_type_t;
 #define HID_REPORT_TYPE_OUTPUT 2
 #define HID_REPORT_TYPE_FEATURE 3
 enum { TINYUSB_EVENT_ATTACHED, TINYUSB_EVENT_DETACHED, TINYUSB_EVENT_SUSPENDED, TINYUSB_EVENT_RESUMED };
-typedef struct { int id; } tinyusb_event_t;
+typedef struct { int id; struct { bool remote_wakeup; } suspended; } tinyusb_event_t;
 typedef struct { int unused; } tusb_desc_interface_t;
 typedef struct {
     const char *name;
@@ -183,6 +183,9 @@ static uint8_t usb_instance, usb_id, usb_bytes[64];
 static uint16_t usb_size;
 static bool tud_mounted(void) { return mounted; }
 static bool tud_suspended(void) { return suspended; }
+static bool remote_wakeup_result;
+static unsigned remote_wakeup_calls;
+static bool tud_remote_wakeup(void) { ++remote_wakeup_calls; return remote_wakeup_result; }
 static bool tud_hid_n_ready(uint8_t instance) { (void)instance; return endpoint_ready; }
 static bool tud_hid_n_report(uint8_t instance, uint8_t id, const void *data, uint16_t size) {
     ++usb_count; usb_instance = instance; usb_id = id; usb_size = size; memcpy(usb_bytes, data, size);

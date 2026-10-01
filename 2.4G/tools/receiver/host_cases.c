@@ -16,6 +16,8 @@ static void reset_all(void)
     usb_pending = usb_flight = (input_report_t){0};
     usb_have_pending = usb_busy = dfu_requested = false;
     usb_mutex = (void *)1;
+    usb_remote_wakeup_enabled = usb_remote_wakeup_requested = usb_remote_wakeup_attempted = false;
+    remote_wakeup_result = true; remote_wakeup_calls = 0;
     mounted = endpoint_ready = usb_accept = true;
     suspended = false;
     usb_count = dfu_writes = restarts = 0;

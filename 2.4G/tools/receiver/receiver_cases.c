@@ -224,3 +224,57 @@ EXPORT int check_receiver_hold_recovery(void)
     }
     return 0;
 }
+
+/* --- Remote wakeup (ported from Main's USB remote-wakeup fix) ------------- */
+
+static const uint8_t wake_test_mac[6] = {2,3,4,5,6,7};
+
+static void wake_event_suspend(bool authorized)
+{
+    tinyusb_event_t e = {.id = TINYUSB_EVENT_SUSPENDED};
+    e.suspended.remote_wakeup = authorized;
+    mounted = true; suspended = true;
+    tinyusb_event_cb(&e, NULL);
+}
+static void wake_event_resume(void)
+{
+    tinyusb_event_t e = {.id = TINYUSB_EVENT_RESUMED};
+    suspended = false;
+    tinyusb_event_cb(&e, NULL);
+}
+static void wake_report_feed(const mouse_hid_report_t *mouse)
+{
+    uint32_t type = MOUSE_MODE;
+    uint8_t packet[38] = {0};
+    memcpy(packet, &type, sizeof(type));
+    memcpy(packet + 4, mouse, sizeof(*mouse));
+    esp_now_recv_info_t info = {0};
+    memcpy(info.src_addr, wake_test_mac, 6);
+    wifi_now_recv_cb(&info, packet, (int)(4 + sizeof(*mouse)));
+    wireless_receive_step();
+}
+
+EXPORT int check_remote_wakeup_on_received_contact(void)
+{
+    reset_all(); wireless_init(); fake_now = 0;
+    /* Release/report frames without contact must never request a wakeup. */
+    wake_event_suspend(true);
+    mouse_hid_report_t mouse = {0};
+    wake_report_feed(&mouse); usbhid_step();
+    CHECK(remote_wakeup_calls == 0 && suspended);
+    /* Real contact signals the host exactly once per suspend. */
+    mouse.buttons = 1;
+    wake_report_feed(&mouse); usbhid_step();
+    CHECK(remote_wakeup_calls == 1);
+    wake_report_feed(&mouse); usbhid_step();
+    CHECK(remote_wakeup_calls == 1);
+    /* Without host authorization the attempt is spent, not signalled. */
+    wake_event_resume(); wake_event_suspend(false);
+    wake_report_feed(&mouse); usbhid_step();
+    CHECK(remote_wakeup_calls == 1);
+    /* Resume re-arms a single attempt for the next suspend. */
+    wake_event_resume(); wake_event_suspend(true);
+    wake_report_feed(&mouse); usbhid_step();
+    CHECK(remote_wakeup_calls == 2);
+    return 0;
+}

@@ -882,7 +882,10 @@ uint8_t haptic_ptp_hid_report_descriptor[] = {
 };
 
 uint8_t const desc_configuration[] = {
-    TUD_CONFIG_DESCRIPTOR(1, 4, 0, CONFIG_TOTAL_LEN, 0x00, 100),
+    /* Bus powered dongle: declare remote wakeup so the receiver can bring the
+     * host out of suspend when the paired touchpad reports real input. The
+     * template sets the reserved bit (0x80), giving bmAttributes = 0xA0. */
+    TUD_CONFIG_DESCRIPTOR(1, 4, 0, CONFIG_TOTAL_LEN, TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
     TUD_HID_DESCRIPTOR(0, 0, false, sizeof(generic_hid_report_descriptor), EPNUM_GENERIC_IN, 64, 10),
     TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(haptic_ptp_hid_report_descriptor), HAPTIC_EPNUM_TP_IN, 64, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS),
     TUD_HID_DESCRIPTOR(2, 0, HID_ITF_PROTOCOL_NONE, sizeof(legacy_ptp_hid_report_descriptor), LEGACY_EPNUM_TP_IN, 64, CONFIG_TOUCHPAD_USB_INPUT_INTERVAL_MS),
