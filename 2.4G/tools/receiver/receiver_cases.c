@@ -52,6 +52,31 @@ EXPORT int check_usb_mount_keeps_negotiated_ptp(void)
     }
     return 0;
 }
+EXPORT int check_usb_mode_survives_bus_reset_and_detach(void)
+{
+    for(unsigned instance=REPORT_HAPTIC;instance<=REPORT_LEGACY;++instance) {
+        reset_all();
+        uint8_t id=instance==REPORT_HAPTIC?REPORTID_HAPTIC_FEATURE:REPORTID_LEGACY_FEATURE;
+        uint8_t value=3;
+        tud_hid_set_report_cb(instance,id,HID_REPORT_TYPE_FEATURE,&value,1);
+        event(TINYUSB_EVENT_ATTACHED);
+        CHECK(input_mode()==TP_PTP_MODE && usb_ready);
+        /* A bus reset retires the host session, not the negotiated Input Mode. */
+        uint8_t count;
+        usbd_class_driver_t const *driver=usbd_app_driver_get_cb(&count);
+        CHECK(count==1);driver->reset(0);
+        CHECK(input_mode()==TP_PTP_MODE && !usb_ready);
+        wireless_control_step(0);CHECK(control_in_flight && radio_byte==TP_PTP_MODE);
+        mode_send_complete(NULL,ESP_NOW_SEND_SUCCESS);wireless_control_step(1);
+        /* A sleep VBUS cut looks like DETACHED; the host still expects PTP. */
+        event(TINYUSB_EVENT_DETACHED);
+        CHECK(input_mode()==TP_PTP_MODE);
+        event(TINYUSB_EVENT_ATTACHED);
+        CHECK(input_mode()==TP_PTP_MODE && usb_ready);
+        wireless_control_step(2);CHECK(control_in_flight && radio_byte==TP_PTP_MODE);
+    }
+    return 0;
+}
 EXPORT int check_wire_actions_dedup_and_release(void)
 {
     reset_all(); input_set_mode(TP_PTP_MODE);

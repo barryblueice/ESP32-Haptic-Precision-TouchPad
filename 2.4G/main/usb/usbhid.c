@@ -203,19 +203,20 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t id, hid_report_type_t type,
     }
 }
 
-/* TinyUSB resets its class drivers on BUS_RESET, even without DETACHED.
- * Reset the host's mode here, before any subsequent mode negotiation. */
+/* TinyUSB resets its class drivers on BUS_RESET, even without DETACHED. A bus
+ * reset tears down the host session, not the Input Mode the host already
+ * negotiated, so keep the mode and only re-assert it to the pad. */
 static void usb_session_reset(uint8_t rhport)
 {
     (void)rhport;
     xSemaphoreTake(usb_mutex, portMAX_DELAY);
     usb_wakeup_clear();
     input_set_usb(false);
-    input_set_mode(TP_MOUSE_MODE);
     usb_busy = usb_aux_flight = usb_have_pending = false;
     aux_output_reset(false);
     receiver_ext_usb_ready(false);
     xSemaphoreGive(usb_mutex);
+    /* Re-assert the retained mode so the pad never runs ahead of the host. */
     wireless_request_mode();
 }
 
@@ -252,8 +253,9 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         break;
     case TINYUSB_EVENT_DETACHED:
         input_set_usb(false);
-        input_set_mode(TP_MOUSE_MODE);
-        /* TinyUSB has closed/reset endpoints; no transfer survives this event. */
+        /* Keep the negotiated mode: a system-sleep VBUS cut looks like an
+         * unplug here, yet the same host resumes expecting its previous Input
+         * Mode. TinyUSB has closed/reset endpoints; no transfer survives. */
         usb_busy = usb_aux_flight = false;
         aux_output_reset(false);
         usb_have_pending = false;
