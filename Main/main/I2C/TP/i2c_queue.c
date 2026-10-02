@@ -58,6 +58,10 @@ static uint16_t raw_x_history[5][HISTORY_LEN] = {0};
 static uint16_t raw_y_history[5][HISTORY_LEN] = {0};
 static uint16_t last_raw_x[5] = {0};
 static uint16_t last_raw_y[5] = {0};
+/* Median + jump-guarded coordinate, exposed to the simulated mouse so it keeps
+ * impulse-noise rejection without the tap-hold freeze or the EMA lag. */
+static uint16_t slot_median_x[5] = {0};
+static uint16_t slot_median_y[5] = {0};
 static uint16_t origin_x[5] = {0};
 static uint16_t origin_y[5] = {0};
 
@@ -362,6 +366,8 @@ static void reset_input_state(void)
     memset(raw_y_history, 0, sizeof(raw_y_history));
     memset(last_raw_x, 0, sizeof(last_raw_x));
     memset(last_raw_y, 0, sizeof(last_raw_y));
+    memset(slot_median_x, 0, sizeof(slot_median_x));
+    memset(slot_median_y, 0, sizeof(slot_median_y));
     memset(origin_x, 0, sizeof(origin_x));
     memset(origin_y, 0, sizeof(origin_y));
     memset(slot_filter_x, 0, sizeof(slot_filter_x));
@@ -596,6 +602,8 @@ void i2c_queue_task(void *arg) {
                         } else {
                             consecutive_errors[id] = 0;
                         }
+                        slot_median_x[id] = mx;
+                        slot_median_y[id] = my;
 
                         int alpha_speed = abs(rx - (int)last_raw_x[id]) + abs(ry - (int)last_raw_y[id]);
                         uint32_t dynamic_alpha = (alpha_speed < 3) ? 64 : (alpha_speed < 12 ? 115 : 218);
@@ -755,7 +763,17 @@ void i2c_queue_task(void *arg) {
                 bool tap = false;
                 if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                    parse_ptp_simulated_mouse_report(&tp_msg, &report.data.mouse);
+                    /* The simulated pointer owns its own trajectory filter: hand
+                     * it the median/jump-guarded coordinate so the tap-hold
+                     * freeze and the shared EMA cannot add lag or a release
+                     * jump, while impulse rejection is preserved. Every other
+                     * field (buttons, confidence, scan time) is untouched. */
+                    tp_multi_msg_t mouse_msg = tp_msg;
+                    for (unsigned id = 0; id < 5; ++id) {
+                        mouse_msg.fingers[id].x = slot_median_x[id];
+                        mouse_msg.fingers[id].y = slot_median_y[id];
+                    }
+                    parse_ptp_simulated_mouse_report(&mouse_msg, &report.data.mouse);
                     /* Only force clicks drive haptics; taps and tap-drags are virtual buttons. */
                     input_source_button(frame.generation, tp_msg.button_mask != 0);
                     tap = ptp_simulated_mouse_click_needs_release();
