@@ -167,6 +167,8 @@ extern "C" {
 #define CS40L25_POLL_ACK_CTRL_MAX               (100)   ///< Maximum number of times to poll for ACKed memory writes
 #define CS40L25_POLL_OTP_BOOT_DONE_MS           (10)    ///< Delay in ms between polling OTP_BOOT_DONE
 #define CS40L25_POLL_OTP_BOOT_DONE_MAX          (10)    ///< Maximum number of times to poll OTP_BOOT_DONE
+#define CS40L25_POLL_HALO_READY_MS              (10)    ///< Delay in ms between DSP startup checks
+#define CS40L25_POLL_HALO_READY_MAX             (50)    ///< DSP startup window, independent of boost ramp
 #define CS40L25_POLL_CAL_Q_MAX                  (30)    ///< Maximum number of times to poll CAL_Q
 /** @} */
 

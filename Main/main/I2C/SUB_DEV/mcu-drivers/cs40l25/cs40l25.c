@@ -720,7 +720,7 @@ static uint32_t cs40l25_write_acked_fw_control(cs40l25_t *driver, uint32_t id, u
  *
  * @return
  * - CS40L25_STATUS_FAIL if:
- *      - OTP_BOOT_DONE is not set
+ *      - Control port activity fails or HALO does not become ready
  *      - DSP Scratch register is not cleared
  * - CS40L25_STATUS_OK          otherwise
  *
@@ -734,28 +734,43 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
     regmap_cp_config_t *cp = REGMAP_GET_CP(driver);
 
     // Write errata
-    regmap_write_array(cp,
+    ret = regmap_write_array(cp,
                        (uint32_t *) cs40l25_revb0_errata_patch,
                        (sizeof(cs40l25_revb0_errata_patch)/sizeof(uint32_t)));
+    if (ret != REGMAP_STATUS_OK)
+    {
+        return CS40L25_STATUS_FAIL;
+    }
 
     // Set HALO Core DSP Sample Rate registers to G1R2
     for (count = 0; count < (sizeof(cs40l25_frame_sync_regs)/sizeof(uint32_t)); count++)
     {
-        regmap_write(cp, cs40l25_frame_sync_regs[count], CS40L25_DSP1_SAMPLE_RATE_G1R2);
+        if (regmap_write(cp, cs40l25_frame_sync_regs[count], CS40L25_DSP1_SAMPLE_RATE_G1R2) != REGMAP_STATUS_OK)
+        {
+            return CS40L25_STATUS_FAIL;
+        }
     }
 
     // Send words of Power Up Patch
-    regmap_write_array(cp,
+    ret = regmap_write_array(cp,
                        (uint32_t *) cs40l25_pup_patch,
                        (sizeof(cs40l25_pup_patch)/sizeof(uint32_t)));
+    if (ret != REGMAP_STATUS_OK)
+    {
+        return CS40L25_STATUS_FAIL;
+    }
 
     // Enable clocks to HALO Core DSP in DSP CCM control register
-    regmap_update_reg(cp,
+    ret = regmap_update_reg(cp,
                       XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_REG,
                       (XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_DSP1_CCM_CORE_EN_BITMASK | \
                         XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_DSP1_CCM_CORE_RESET_BITMASK),
                       (XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_DSP1_CCM_CORE_EN_BITMASK | \
                        XM_UNPACKED24_DSP1_CCM_CORE_CONTROL_DSP1_CCM_CORE_RESET_BITMASK));
+    if (ret != REGMAP_STATUS_OK)
+    {
+        return CS40L25_STATUS_FAIL;
+    }
 
     halo_symbol = (driver->state == CS40L25_STATE_CAL_STANDBY) ?
                   CS40L25_CAL_SYM_FIRMWARE_HALO_STATE :
@@ -765,30 +780,15 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
                                  driver->fw_info,
                                  halo_symbol,
                                  0xCB,
-                                 CS40L25_POLL_OTP_BOOT_DONE_MAX,
-                                 CS40L25_T_BST_PUP_MS);
-    if (ret)
+                                 CS40L25_POLL_HALO_READY_MAX,
+                                 CS40L25_POLL_HALO_READY_MS);
+    if (ret != REGMAP_STATUS_OK)
     {
-        /*
-         * Some systems can miss the transition inside the poll window even
-         * though the DSP reaches ACTIVE immediately afterwards. Re-read once
-         * before reporting failure.
-         */
-        ret = regmap_read_fw_control(cp, driver->fw_info, halo_symbol, &temp_reg_val);
-        /*
-         * SurfaceTouchpadHaptic_2.9.139 reaches 0xC9 with a live heartbeat
-         * and clear DSP scratch after boot. Accept it temporarily so the
-         * recovered firmware can be probed with real triggers.
-         */
-        if ((ret != REGMAP_STATUS_OK) || ((temp_reg_val != 0xCB) && (temp_reg_val != 0xC9)))
-        {
-            return CS40L25_STATUS_FAIL;
-        }
+        return CS40L25_STATUS_FAIL;
     }
 
-    regmap_read(cp, XM_UNPACKED24_DSP1_SCRATCH_REG, &temp_reg_val);
-
-    if (temp_reg_val)
+    ret = regmap_read(cp, XM_UNPACKED24_DSP1_SCRATCH_REG, &temp_reg_val);
+    if ((ret != REGMAP_STATUS_OK) || temp_reg_val)
     {
         return CS40L25_STATUS_FAIL;
     }
@@ -800,7 +800,11 @@ static uint32_t cs40l25_power_up(cs40l25_t *driver)
          * is still BLANK. Nudge the firmware into the active control path
          * before the caller starts sending trigger mailbox commands.
          */
-        (void)regmap_write(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_4_REG, CS40L25_POWERCONTROL_WAKEUP);
+        if (regmap_write(cp, DSP_VIRTUAL1_MBOX_DSP_VIRTUAL1_MBOX_4_REG,
+                         CS40L25_POWERCONTROL_WAKEUP) != REGMAP_STATUS_OK)
+        {
+            return CS40L25_STATUS_FAIL;
+        }
         bsp_driver_if_g->set_timer(BSP_TIMER_DURATION_5MS, NULL, NULL);
     }
 

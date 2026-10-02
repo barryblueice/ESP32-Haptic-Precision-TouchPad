@@ -9,6 +9,7 @@
 #include "driver/i2c_master.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -276,7 +277,15 @@ uint32_t bsp_audio_stop(bsp_i2s_port_t port)
 
 uint32_t bsp_set_timer(uint32_t duration_ms, bsp_callback_t cb, void *cb_arg)
 {
-    vTaskDelay(pdMS_TO_TICKS(duration_ms));
+    // Sub-tick waits must not become vTaskDelay(0). A delay may also start
+    // just before a tick boundary, so verify elapsed time before returning.
+    const int64_t deadline_us = esp_timer_get_time() + (int64_t)duration_ms * 1000;
+    int64_t remaining_us;
+    while ((remaining_us = deadline_us - esp_timer_get_time()) > 0)
+    {
+        TickType_t ticks = pdMS_TO_TICKS((remaining_us + 999) / 1000);
+        vTaskDelay(ticks ? ticks : 1);
+    }
 
     if (cb != NULL)
     {

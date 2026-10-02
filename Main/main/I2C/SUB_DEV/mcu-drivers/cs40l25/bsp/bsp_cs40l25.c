@@ -344,6 +344,13 @@ static uint32_t bsp_surface_prepare_vibegen(void)
 
 static bool bsp_surface_ram_ready(void)
 {
+    if (cs40l25_driver.fw_info == NULL ||
+        cs40l25_driver.fw_info->header.fw_id != SURFACE_FW_ID ||
+        cs40l25_driver.fw_info->header.fw_version != SURFACE_FW_REVISION)
+    {
+        return false;
+    }
+
     regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
     uint32_t halo_state = 0;
     uint32_t power_state = 0;
@@ -696,7 +703,16 @@ uint32_t bsp_dut_power_up(void)
     uint32_t ret;
 
     ESP_LOGW(TAG, "power_up request: driver_state=%" PRIu32, cs40l25_driver.state);
-    ret = cs40l25_power(&cs40l25_driver, CS40L25_POWER_UP);
+    // Boost-only sleep leaves the DSP running. Validate that existing state;
+    // a failed startup must never be promoted to DSP_POWER_UP by a later read.
+    if (cs40l25_driver.state == CS40L25_STATE_DSP_POWER_UP)
+    {
+        ret = bsp_surface_ram_ready() ? CS40L25_STATUS_OK : CS40L25_STATUS_FAIL;
+    }
+    else
+    {
+        ret = cs40l25_power(&cs40l25_driver, CS40L25_POWER_UP);
+    }
     ESP_LOGW(TAG, "power_up result: ret=0x%08" PRIX32 " driver_state=%" PRIu32, ret, cs40l25_driver.state);
 
     if (ret == CS40L25_STATUS_OK)
@@ -705,13 +721,6 @@ uint32_t bsp_dut_power_up(void)
     }
     else
     {
-        if (bsp_surface_ram_ready())
-        {
-            ESP_LOGW(TAG, "power_up fallback: Surface RAM firmware is already ready; forcing DSP_POWER_UP state");
-            cs40l25_driver.state = CS40L25_STATE_DSP_POWER_UP;
-            return BSP_STATUS_OK;
-        }
-
         bsp_log_power_up_diagnostics();
         return BSP_STATUS_FAIL;
     }

@@ -617,7 +617,10 @@ uint32_t regmap_poll_fw_control(regmap_cp_config_t *cp,
     {
         for (uint8_t i = 0; i < tries; i++)
         {
-            regmap_read(cp, temp_reg_addr, &temp_reg_val);
+            if (regmap_read(cp, temp_reg_addr, &temp_reg_val) != REGMAP_STATUS_OK)
+            {
+                return REGMAP_STATUS_FAIL;
+            }
 
             if (temp_reg_val == val)
             {
