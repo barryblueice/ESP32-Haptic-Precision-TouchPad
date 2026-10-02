@@ -2,6 +2,8 @@
 #include "surface_haptic_hw.h"
 #include "surface_haptic_settings.h"
 #include "SYS/device_config.h"
+#include "GPIO/GPIO_handle.h"
+#include "driver/gpio.h"
 #include "mcu-drivers/cs40l25/bsp/bsp_dut.h"
 #include <inttypes.h>
 #include "esp_log.h"
@@ -82,6 +84,24 @@ static void fault(const char *stage, uint8_t waveform)
     (void)surface_haptic_hw_power_off();
 }
 
+static bool recover_undervoltage(bool *retried, bool *vbus_high)
+{
+    /* Re-sample at the failure, since VBUS may fall during an I2C operation. */
+    bool high = gpio_get_level(VBUS_DET_GPIO) != 0;
+    if (*vbus_high && !high) *retried = false;
+    *vbus_high = high;
+    if (high || *retried) return false;
+    *retried = true;
+    taskENTER_CRITICAL(&lock);
+    surface_runtime_state(&runtime, sleep_requested ? SURFACE_SLEEPING : SURFACE_WAKING);
+    taskEXIT_CRITICAL(&lock);
+    /* A failed playback/wake may precede delivery of the hardware event. */
+    (void)surface_haptic_hw_process();
+    if (!surface_haptic_hw_recover_undervoltage()) return false;
+    ESP_LOGW(TAG, "Recovered boost undervoltage on battery power");
+    return true;
+}
+
 static void worker(void *arg)
 {
     (void)arg;
@@ -94,11 +114,18 @@ static void worker(void *arg)
     surface_runtime_state(&runtime, sleep_requested ? SURFACE_SLEEPING : SURFACE_READY);
     taskEXIT_CRITICAL(&lock);
     bool powered = true, heartbeat_pending = false;
+    bool undervoltage_retried = false;
+    bool vbus_high = gpio_get_level(VBUS_DET_GPIO) != 0;
     uint32_t heartbeat_start = 0, drops_seen = 0;
     uint32_t logged_at = 0, logged_presses = 0, logged_releases = 0;
     uint8_t last_waveform = 0;
     ESP_LOGI(TAG, "Initialized: Surface settings 0..100, MBOX1 PRESS/RELEASE");
     while (true) {
+        bool high = gpio_get_level(VBUS_DET_GPIO) != 0;
+        /* One recovery per unplug; a persistent battery/boost fault must not
+         * turn into an endless power-cycle loop. */
+        if (vbus_high && !high) undervoltage_retried = false;
+        vbus_high = high;
         taskENTER_CRITICAL(&lock);
         bool want_sleep = sleep_requested;
         uint32_t presses = button_presses, releases = button_releases;
@@ -119,9 +146,27 @@ static void worker(void *arg)
             }
         } else {
             if (!powered) {
-                if (!surface_haptic_hw_wake()) { fault("wake", last_waveform); break; }
+                if (!surface_haptic_hw_wake()) {
+                    if (!recover_undervoltage(&undervoltage_retried, &vbus_high)) {
+                        fault("wake", last_waveform); break;
+                    }
+                    powered = true;
+                    heartbeat_pending = false;
+                    continue;
+                }
                 powered = true;
                 ESP_LOGI(TAG, "WAKE: power and DSP checked");
+            }
+            /* Handle hardware events before submitting the next click. In
+             * particular, a supply handoff may have put the amp in safe mode. */
+            if (surface_haptic_hw_process() != BSP_STATUS_OK) {
+                if (!recover_undervoltage(&undervoltage_retried, &vbus_high)) {
+                    fault("driver processing", last_waveform); break;
+                }
+                heartbeat_pending = false;
+                /* Re-read sleep_requested on the next iteration. A sleep
+                 * request made during recovery must win over READY. */
+                continue;
             }
             uint32_t now = now_ms();
             taskENTER_CRITICAL(&lock);
@@ -163,11 +208,16 @@ static void worker(void *arg)
                         last_waveform == SURFACE_GESTURE_POINT_WAVE ? "point" : "edge", last_waveform, status);
                     ESP_LOGD(TAG, "setting=%u %s index=%u result=%" PRIu32,
                              event.setting, event.release ? "RELEASE" : "PRESS", last_waveform, status);
-                    if (status != BSP_STATUS_OK) { fault("playback", last_waveform); break; }
+                    if (status != BSP_STATUS_OK) {
+                        if (!recover_undervoltage(&undervoltage_retried, &vbus_high)) {
+                            fault("playback", last_waveform); break;
+                        }
+                        heartbeat_pending = false;
+                        continue;
+                    }
                     heartbeat_pending = true;
                 }
             }
-            if (surface_haptic_hw_process() != BSP_STATUS_OK) { fault("driver processing", last_waveform); break; }
             if (heartbeat_pending) {
                 bool changed;
                 if (bsp_dut_has_processed(&changed) != BSP_STATUS_OK) { fault("heartbeat read", last_waveform); break; }

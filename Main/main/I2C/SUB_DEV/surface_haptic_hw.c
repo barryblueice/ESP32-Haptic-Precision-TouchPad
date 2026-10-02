@@ -195,6 +195,26 @@ bool surface_haptic_hw_power_off(void)
     return true;
 }
 
+bool surface_haptic_hw_recover_undervoltage(void)
+{
+    if (!firmware_loaded || hardware_errors != CS40L25_EVENT_FLAG_BOOST_UNDERVOLTAGE)
+        return false;
+
+    /* cs40l25_event_handler already releases actuator-safe mode. A supply
+     * handoff can still need time to settle before the external boost restarts.
+     * Do not reset GPIO33: it is shared with the working touch controller. */
+    if (!surface_haptic_hw_power_off()) return false;
+    wait_ms(250);
+    hardware_errors = 0;
+    uint32_t scratch;
+    if (!surface_haptic_hw_wake() ||
+        !read_reg(XM_UNPACKED24_DSP1_SCRATCH_REG, &scratch) || scratch != 0) {
+        hardware_errors |= CS40L25_EVENT_FLAG_BOOST_UNDERVOLTAGE;
+        return false;
+    }
+    return true;
+}
+
 void surface_haptic_hw_diagnostics(uint8_t waveform)
 {
     if (chip_identified) {
