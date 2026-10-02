@@ -46,6 +46,9 @@
 #define POINTER_STILL_SPEED 25.0f
 #define POINTER_EMIT_FLOOR 0.35f
 
+/* Anchor key for the two-finger middle-button drag; finger slots are 0..4. */
+#define MOVE_ANCHOR_CENTROID 0xFFU
+
 /* Tap / click. */
 #define TAP_MAX_MOVE 60.0f
 #define TAP_MAX_TIME 3000U
@@ -443,28 +446,29 @@ static void handle_tap_release(const tp_multi_msg_t *msg,
     clear_tap_tracking();
 }
 
-static void handle_single_finger_move(const tp_multi_msg_t *msg,
-                                      int finger_index,
-                                      mouse_hid_report_t *out_report)
+/* Shared pointer path: one finger, or the centroid of the two fingers that
+ * hold the middle button during a drag. */
+static void handle_pointer_move(float curr_x,
+                                float curr_y,
+                                uint8_t anchor_key,
+                                uint16_t scan_time,
+                                mouse_hid_report_t *out_report)
 {
-    float curr_x = (float)msg->fingers[finger_index].x;
-    float curr_y = (float)msg->fingers[finger_index].y;
-
     if (!m_state.has_move_anchor ||
-        m_state.move_contact_index != (uint8_t)finger_index ||
+        m_state.move_contact_index != anchor_key ||
         !m_pointer.initialized) {
         reset_move_state();
         m_pointer = (axis_filter_t){.initialized = true,
                                     .x = curr_x,
                                     .y = curr_y,
-                                    .time = msg->scan_time};
-        m_state.move_contact_index = (uint8_t)finger_index;
+                                    .time = scan_time};
+        m_state.move_contact_index = anchor_key;
         m_state.has_move_anchor = true;
         return;
     }
 
-    float dt = scan_dt_seconds(msg->scan_time, m_pointer.time);
-    m_pointer.time = msg->scan_time;
+    float dt = scan_dt_seconds(scan_time, m_pointer.time);
+    m_pointer.time = scan_time;
 
     float prev_x = m_pointer.x;
     float prev_y = m_pointer.y;
@@ -534,20 +538,39 @@ static void handle_single_finger_move(const tp_multi_msg_t *msg,
     out_report->y = emit_hid_axis(&m_state.rem_y, move_y);
 }
 
+static void handle_single_finger_move(const tp_multi_msg_t *msg,
+                                      int finger_index,
+                                      mouse_hid_report_t *out_report)
+{
+    handle_pointer_move((float)msg->fingers[finger_index].x,
+                        (float)msg->fingers[finger_index].y,
+                        (uint8_t)finger_index,
+                        msg->scan_time,
+                        out_report);
+}
+
+/* Both the scroll and the middle drag reference the two-finger centroid, so
+ * switching between them cannot produce a position jump. */
+static void contact_centroid(const tp_multi_msg_t *msg,
+                             int first_index,
+                             int second_index,
+                             float *x,
+                             float *y)
+{
+    *x = ((float)msg->fingers[first_index].x +
+          (float)msg->fingers[second_index].x) / 2.0f;
+    *y = ((float)msg->fingers[first_index].y +
+          (float)msg->fingers[second_index].y) / 2.0f;
+}
+
 static void handle_dual_finger_scroll(const tp_multi_msg_t *msg,
                                       int first_index,
                                       int second_index,
                                       uint8_t active_mask,
                                       mouse_hid_report_t *out_report)
 {
-    float avg_x =
-        ((float)msg->fingers[first_index].x +
-         (float)msg->fingers[second_index].x) /
-        2.0f;
-    float avg_y =
-        ((float)msg->fingers[first_index].y +
-         (float)msg->fingers[second_index].y) /
-        2.0f;
+    float avg_x, avg_y;
+    contact_centroid(msg, first_index, second_index, &avg_x, &avg_y);
 
     if (!m_state.has_scroll_anchor ||
         m_state.scroll_contact_mask != active_mask ||
@@ -739,12 +762,25 @@ static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
             out_report->buttons = 0x01;
         }
     } else if (active_count == 2) {
-        reset_move_state();
-        handle_dual_finger_scroll(msg,
-                                  first_active,
-                                  second_active,
-                                  active_mask,
-                                  out_report);
+        if (out_report->buttons != 0) {
+            /* A held two-finger force press is a middle-button drag: keep
+             * emitting motion from the centroid instead of scrolling. */
+            reset_scroll_state();
+            float centroid_x, centroid_y;
+            contact_centroid(msg, first_active, second_active, &centroid_x, &centroid_y);
+            handle_pointer_move(centroid_x,
+                                centroid_y,
+                                MOVE_ANCHOR_CENTROID,
+                                msg->scan_time,
+                                out_report);
+        } else {
+            reset_move_state();
+            handle_dual_finger_scroll(msg,
+                                      first_active,
+                                      second_active,
+                                      active_mask,
+                                      out_report);
+        }
     } else if (active_count >= 3) {
         /* Reserve three fingers for the middle-click tap. */
         reset_move_state();

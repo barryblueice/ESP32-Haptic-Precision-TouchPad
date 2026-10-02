@@ -40,6 +40,10 @@
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 #define FORCE_CLICK_MOVE_DEADZONE 45
+/* The two-finger middle press only has to reach this share of the physical
+ * threshold: the contacts share the applied force, and the middle button is
+ * intentionally softer than the physical left/right button. */
+#define FORCE_CLICK_MIDDLE_PERCENT 120
 
 typedef enum {
     TOUCH_NONE = 0,
@@ -105,7 +109,6 @@ typedef struct {
     bool click_anchor_valid;
     bool click_drag_unlocked;
     bool last_position_valid;
-    uint8_t tracked_contact_id;
     uint8_t filtered_z;
     uint16_t click_anchor_x;
     uint16_t click_anchor_y;
@@ -113,13 +116,20 @@ typedef struct {
     uint16_t last_position_y;
     uint8_t press_stable_frames;
     uint8_t release_stable_frames;
+    /* Finger count latched when the click engages, so the button type cannot
+     * change while the press is held. */
+    uint8_t press_fingers;
 } ptp_force_click_state_t;
 
 static ptp_force_click_state_t ptp_force_click_state = {0};
 
+/* Owned by the parser; supply selection is independent of the host transport. */
+static bool pressure_vbus_high, pressure_vbus_candidate;
+static uint32_t pressure_vbus_sample_at, pressure_vbus_candidate_at;
+
 
 static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
-    if (current_mode != WIRED_MODE) {
+    if (!pressure_vbus_high) {
         device_config_t config; device_config_get(&config);
         unsigned index = threshold_level == 1 ? 0 : threshold_level == 3 ? 2 : 1;
         return config.bytes[CFG_WIRELESS_LIGHT + index];
@@ -137,13 +147,51 @@ static uint8_t ptp_map_button_press_threshold(uint8_t threshold_level) {
     }
 }
 
+static void pressure_vbus_log(void)
+{
+    ESP_LOGI(TAG, "VBUS=%u pressure_group=%s level=%u threshold=%u",
+             pressure_vbus_high, pressure_vbus_high ? "powered" : "battery",
+             ptp_button_press_threshold, ptp_map_button_press_threshold(ptp_button_press_threshold));
+}
+
+static void pressure_vbus_init(void)
+{
+    pressure_vbus_high = pressure_vbus_candidate = gpio_get_level(VBUS_DET_GPIO) != 0;
+    pressure_vbus_sample_at = pressure_vbus_candidate_at = (uint32_t)(esp_timer_get_time() / 1000);
+    pressure_vbus_log();
+}
+
+static void pressure_vbus_poll(void)
+{
+    uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+    if ((uint32_t)(now - pressure_vbus_sample_at) < 10) return;
+    pressure_vbus_sample_at = now;
+    bool high = gpio_get_level(VBUS_DET_GPIO) != 0;
+    if (high != pressure_vbus_candidate) {
+        pressure_vbus_candidate = high;
+        pressure_vbus_candidate_at = now;
+    }
+    if (high != pressure_vbus_high && (uint32_t)(now - pressure_vbus_candidate_at) >= 30) {
+        /* Powered/unpowered selects the pressure group, not the transport:
+         * e.g. 2.4G with the touchpad USB cable plugged in uses the powered
+         * group. A receiver in the PC does not raise the touchpad's VBUS. */
+        pressure_vbus_high = high;
+        input_source_recover("vbus");
+        pressure_vbus_log();
+    }
+}
+
+static uint8_t ptp_middle_press_threshold(uint8_t press_threshold) {
+    uint8_t scaled = (uint8_t)(press_threshold * FORCE_CLICK_MIDDLE_PERCENT / 100U);
+    return scaled ? scaled : 1U;
+}
+
 static void ptp_reset_force_click(tp_multi_msg_t *msg) {
     ptp_force_click_state.tracking_contact = false;
     ptp_force_click_state.button_down = false;
     ptp_force_click_state.click_anchor_valid = false;
     ptp_force_click_state.click_drag_unlocked = false;
     ptp_force_click_state.last_position_valid = false;
-    ptp_force_click_state.tracked_contact_id = 0;
     ptp_force_click_state.filtered_z = 0;
     ptp_force_click_state.click_anchor_x = 0;
     ptp_force_click_state.click_anchor_y = 0;
@@ -151,6 +199,7 @@ static void ptp_reset_force_click(tp_multi_msg_t *msg) {
     ptp_force_click_state.last_position_y = 0;
     ptp_force_click_state.press_stable_frames = 0;
     ptp_force_click_state.release_stable_frames = 0;
+    ptp_force_click_state.press_fingers = 0;
     msg->button_mask = 0;
 }
 
@@ -189,12 +238,19 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     debug_counter++;
     should_log_sample = (debug_counter % 64U) == 0U;
 
-    if ((active_finger_count != 1) ||
-        ((current_tp_mode != PTP_MODE)
+    /* The simulated mouse exposes a middle button through a two-finger press;
+     * a PTP host keeps its own button handling, so only one finger there. */
+    bool simulated_mouse = false;
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-         && (current_tp_mode != MOUSE_MODE)
+    simulated_mouse = true;
 #endif
-        )) {
+    bool mode_allows_click = (current_tp_mode == PTP_MODE) ||
+                             (simulated_mouse && current_tp_mode == MOUSE_MODE);
+    bool two_finger_click = simulated_mouse && current_tp_mode == MOUSE_MODE;
+
+    if (!mode_allows_click ||
+        (active_finger_count != 1 &&
+         !(two_finger_click && active_finger_count == 2))) {
         if (should_log_sample) {
             // ESP_LOGI(TAG,
             //          "PTP force click bypass: mode=%u active_fingers=%d threshold_level=%u",
@@ -206,11 +262,13 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         return;
     }
 
+    /* Track the hardest-pressing contact so either finger of a two-finger
+     * press can drive the click. */
     for (int id = 0; id < 5; id++) {
-        if (msg->fingers[id].tip_switch != 0) {
+        if (msg->fingers[id].tip_switch != 0 &&
+            (tracked_index < 0 ||
+             msg->fingers[id].pressure_z > msg->fingers[tracked_index].pressure_z)) {
             tracked_index = id;
-            // tracked_confidence = msg->fingers[id].confidence;
-            break;
         }
     }
 
@@ -222,18 +280,33 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         return;
     }
 
-    uint8_t raw_z = msg->fingers[tracked_index].pressure_z;
+    /* Two fingers share the applied force, so on a hard two-finger press a
+     * single contact never reaches a one-finger threshold: the sum of the
+     * active contacts is the total force, which keeps the middle press on the
+     * same scale as the physical left/right button instead of requiring double
+     * the force. */
+    uint32_t z_total = 0;
+    for (int id = 0; id < 5; id++) {
+        if (msg->fingers[id].tip_switch != 0) {
+            z_total += msg->fingers[id].pressure_z;
+        }
+    }
+    uint8_t raw_z = z_total > 255U ? 255U : (uint8_t)z_total;
     uint8_t press_threshold = ptp_map_button_press_threshold(ptp_button_press_threshold);
+    /* Latch the button type for a held press, so lifting one finger of a middle
+     * drag keeps the softer middle threshold until the press ends. */
+    if (ptp_force_click_state.button_down ? ptp_force_click_state.press_fingers >= 2
+                                          : active_finger_count >= 2) {
+        press_threshold = ptp_middle_press_threshold(press_threshold);
+    }
     uint8_t release_threshold = (press_threshold > 12) ? (press_threshold - 12) : press_threshold;
     uint8_t effective_z;
     uint16_t current_x = msg->fingers[tracked_index].x;
     uint16_t current_y = msg->fingers[tracked_index].y;
 
-    if (!ptp_force_click_state.tracking_contact ||
-        (ptp_force_click_state.tracked_contact_id != (uint8_t)tracked_index)) {
+    if (!ptp_force_click_state.tracking_contact) {
         ptp_force_click_state.tracking_contact = true;
         ptp_force_click_state.button_down = false;
-        ptp_force_click_state.tracked_contact_id = (uint8_t)tracked_index;
         ptp_force_click_state.filtered_z = raw_z;
         ptp_force_click_state.click_anchor_valid = false;
         ptp_force_click_state.click_drag_unlocked = false;
@@ -279,6 +352,7 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
             }
             if (ptp_force_click_state.press_stable_frames >= FORCE_CLICK_PRESS_STABLE_FRAMES) {
                 ptp_force_click_state.button_down = true;
+                ptp_force_click_state.press_fingers = (uint8_t)active_finger_count;
                 ptp_force_click_state.click_anchor_valid = true;
                 ptp_force_click_state.click_drag_unlocked = false;
                 ptp_force_click_state.click_anchor_x = ptp_force_click_state.last_position_valid ?
@@ -286,6 +360,14 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
                 ptp_force_click_state.click_anchor_y = ptp_force_click_state.last_position_valid ?
                     ptp_force_click_state.last_position_y : current_y;
                 ptp_force_click_state.release_stable_frames = 0;
+                if (active_finger_count >= 2) {
+                    /* Two fingers share the applied force; log the totals that
+                     * actually reached the middle-button threshold. */
+                    ESP_LOGI(TAG, "PTP middle force click down: sum_z=%u max_z=%u threshold=%u",
+                             raw_z,
+                             msg->fingers[tracked_index].pressure_z,
+                             press_threshold);
+                }
                 // ESP_LOGI(TAG,
                 //          "PTP force click down: id=%d raw_z=%u filtered_z=%u press=%u release=%u conf=%u level=%u",
                 //          tracked_index,
@@ -325,12 +407,18 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     }
 
     if (ptp_force_click_state.button_down) {
-        ptp_apply_force_click_deadzone(msg, tracked_index);
-
-        if (current_tp_mode == PTP_MODE) {
-            msg->button_mask = 0x01;
+        if (ptp_force_click_state.press_fingers >= 2) {
+            /* Two-finger press is a middle click (with the usual haptic
+             * feedback); it must not also drag a scroll. */
+            msg->button_mask = 0x04;
         } else {
-            msg->button_mask = (msg->fingers[tracked_index].x < device_config_x_max() / 2) ? 0x01 : 0x02;
+            ptp_apply_force_click_deadzone(msg, tracked_index);
+
+            if (current_tp_mode == PTP_MODE) {
+                msg->button_mask = 0x01;
+            } else {
+                msg->button_mask = (msg->fingers[tracked_index].x < device_config_x_max() / 2) ? 0x01 : 0x02;
+            }
         }
     } else {
         msg->button_mask = 0x00;
@@ -385,6 +473,7 @@ static void reset_input_state(void)
 void i2c_queue_task(void *arg) {
 
     input_register_parser();
+    pressure_vbus_init();
     const TickType_t poll_ticks = pdMS_TO_TICKS(10) ? pdMS_TO_TICKS(10) : 1;
     const esp_timer_create_args_t point_timer_args = {.callback = point_timer_wake, .name = "point_wheel"};
     ESP_ERROR_CHECK(esp_timer_create(&point_timer_args, &point_timer));
@@ -408,6 +497,7 @@ void i2c_queue_task(void *arg) {
         }
 
         connection_poll();
+        pressure_vbus_poll();
         if (input_apply_mode_request()) continue;
         if (generation != input_source_generation()) {
             generation = input_source_generation();
