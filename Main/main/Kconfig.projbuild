@@ -1,11 +1,33 @@
 menu "TouchPad Configuration"
 
-    config SURFACE_HAPTIC_TEST_MODE
-        bool "Run standalone Surface haptic test instead of normal touchpad"
-        default n
-        help
-            Test settings 0,25,63,75,100 with press/release events every 2 seconds.
-            Normal touchpad tasks are not started in this mode.
+    choice SURFACE_APP_MODE
+        prompt "Application entry point"
+        default SURFACE_NORMAL_MODE
+
+        config SURFACE_NORMAL_MODE
+            bool "Normal touchpad"
+
+        config SURFACE_HAPTIC_TEST_MODE
+            bool "CS40L25 haptic firmware/playback test (0x43)"
+            help
+                Test settings 0,25,63,75,100 with press/release events every 2 seconds.
+
+        config SURFACE_FORCE_UPDATE_MODE
+            bool "Force sensor firmware update (0x49)"
+            help
+                Force a firmware update on every boot, including the same version.
+                Print the result and stop without sampling or automatic retry.
+                Transfer/checksum errors still stop the operation.
+
+        config SURFACE_SYNAPTICS_UPDATE_MODE
+            bool "Synaptics TM3651-001 one-shot firmware update (0x2C)"
+            help
+                Write the bundled Surface 4.12.139 image on every boot, including
+                when the current version matches. Verify the post-reset
+                firmware ID, print the result and stop without sampling.
+                Only the matching product, BL8 and unchanged layout are supported.
+
+    endchoice
 
     menu "USB Descriptor Options"
 

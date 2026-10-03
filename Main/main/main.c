@@ -33,7 +33,13 @@
 
 #define TAG "SurfaceTouch"
 
-#if CONFIG_SURFACE_HAPTIC_TEST_MODE
+#if CONFIG_SURFACE_SYNAPTICS_UPDATE_MODE
+void surface_synaptics_update_start(void);
+void app_main(void) { surface_synaptics_update_start(); }
+#elif CONFIG_SURFACE_FORCE_UPDATE_MODE
+void surface_force_update_start(void);
+void app_main(void) { surface_force_update_start(); }
+#elif CONFIG_SURFACE_HAPTIC_TEST_MODE
 void surface_haptic_test_start(void);
 void app_main(void) { surface_haptic_test_start(); }
 #else

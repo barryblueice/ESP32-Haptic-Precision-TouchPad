@@ -1,6 +1,12 @@
 set(srcs
     "main.c"
     "surface_haptic_test.c"
+    "synaptics_firmware/synaptics_update.c"
+    "synaptics_firmware/synaptics_rmi.c"
+    "synaptics_firmware/synaptics_image.c"
+    "force_firmware/force_update.c"
+    "force_firmware/force_download.c"
+    "force_firmware/force_image.c"
 
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
@@ -84,3 +90,14 @@ idf_component_register(
         esp_event
         esp_wifi
 )
+
+# Keep this image out of normal / Force firmware builds.
+if(CONFIG_SURFACE_SYNAPTICS_UPDATE_MODE)
+    set(synaptics_image "${CMAKE_CURRENT_SOURCE_DIR}/synaptics_firmware/TM3651-001_Surface_4.12.139.img")
+    file(SHA256 "${synaptics_image}" synaptics_sha256)
+    if(NOT synaptics_sha256 STREQUAL "08657877a9ce4709fc138162a9b4ee086b6a9b921dde6eafef4f682bc74de3ee")
+        message(FATAL_ERROR "Synaptics image does not match the pinned TM3651-001 Surface 4.12.139 image")
+    endif()
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${synaptics_image}")
+    target_add_binary_data(${COMPONENT_LIB} "${synaptics_image}" BINARY RENAME_TO synaptics_image)
+endif()
