@@ -1,6 +1,7 @@
 #include "I2C/TP/i2c_hid.h"
 #include "I2C/TP/force_forward.h"
 #include "I2C/TP/tp_coordinates.h"
+#include "I2C/TP/tp_motion_filter.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -28,16 +29,10 @@
 
 #define TAG "I2C_QUEUE"
 
-#define HISTORY_LEN 3
-
-#define TAP_DEADZONE 30
-#define FILTER_ALPHA 0.5f
-
 #define PALM_MAJOR_LIMIT  0x10
 #define PALM_MINOR_LIMIT  0x10
 #define PALM_RATIO_LIMIT  2.0f
 
-#define SCAN_INTERVAL_PER_FINGER 80
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 #define FORCE_CLICK_MOVE_DEADZONE 45
@@ -46,45 +41,18 @@
  * intentionally softer than the physical left/right button. */
 #define FORCE_CLICK_MIDDLE_PERCENT 120
 
-typedef enum {
-    TOUCH_NONE = 0,
-    TOUCH_IDLE,
-    TOUCH_TAP_CANDIDATE,
-    TOUCH_DRAG
-} touch_state_t;
-
-static touch_state_t touch_state[5] = {0};
-
-static bool tap_frozen[5] = {false};
-
 uint16_t global_scan_time = 0;
 
-static uint16_t raw_x_history[5][HISTORY_LEN] = {0};
-static uint16_t raw_y_history[5][HISTORY_LEN] = {0};
+static tp_motion_filter_t slot_motion[5];
 static uint16_t last_raw_x[5] = {0};
 static uint16_t last_raw_y[5] = {0};
-/* Median + jump-guarded coordinate, exposed to the simulated mouse so it keeps
- * impulse-noise rejection without the tap-hold freeze or the EMA lag. */
-static uint16_t slot_median_x[5] = {0};
-static uint16_t slot_median_y[5] = {0};
-static uint16_t origin_x[5] = {0};
-static uint16_t origin_y[5] = {0};
-
-static uint16_t get_median(uint16_t n1, uint16_t n2, uint16_t n3) {
-    if ((n1 > n2) ^ (n1 > n3)) return n1;
-    else if ((n2 > n1) ^ (n2 > n3)) return n2;
-    else return n3;
-}
-
-static int32_t slot_filter_x[5] = {0};
-static int32_t slot_filter_y[5] = {0};
+/* Simulated mouse receives impulse-rejected coordinates and owns its smoothing. */
+static uint16_t slot_guarded_x[5] = {0};
+static uint16_t slot_guarded_y[5] = {0};
 static uint16_t history_x[5] = {0};
 static uint16_t history_y[5] = {0};
 static uint16_t last_confidence[5] = {0};
 
-static uint8_t consecutive_errors[5] = {0};
-
-static bool slot_active[5] = {false};
 static edge_gesture_t edge_state;
 static point_gesture_t point_state;
 static knuckle_gesture_t knuckle_state;
@@ -449,23 +417,14 @@ static void reset_input_state(void)
     usb_aux_cancel();
     ptp_report_reset();
     ptp_force_click_state = (ptp_force_click_state_t){0};
-    memset(touch_state, 0, sizeof(touch_state));
-    memset(tap_frozen, 0, sizeof(tap_frozen));
-    memset(raw_x_history, 0, sizeof(raw_x_history));
-    memset(raw_y_history, 0, sizeof(raw_y_history));
+    memset(slot_motion, 0, sizeof(slot_motion));
     memset(last_raw_x, 0, sizeof(last_raw_x));
     memset(last_raw_y, 0, sizeof(last_raw_y));
-    memset(slot_median_x, 0, sizeof(slot_median_x));
-    memset(slot_median_y, 0, sizeof(slot_median_y));
-    memset(origin_x, 0, sizeof(origin_x));
-    memset(origin_y, 0, sizeof(origin_y));
-    memset(slot_filter_x, 0, sizeof(slot_filter_x));
-    memset(slot_filter_y, 0, sizeof(slot_filter_y));
+    memset(slot_guarded_x, 0, sizeof(slot_guarded_x));
+    memset(slot_guarded_y, 0, sizeof(slot_guarded_y));
     memset(history_x, 0, sizeof(history_x));
     memset(history_y, 0, sizeof(history_y));
     memset(last_confidence, 0, sizeof(last_confidence));
-    memset(consecutive_errors, 0, sizeof(consecutive_errors));
-    memset(slot_active, 0, sizeof(slot_active));
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
     ptp_simulated_mouse_reset();
 #endif
@@ -661,77 +620,10 @@ void i2c_queue_task(void *arg) {
                         tp_msg.fingers[id].confidence = is_confident ? 0x01 : 0x00;
                         last_confidence[id] = tp_msg.fingers[id].confidence;
 
-                        for (int h = 0; h < HISTORY_LEN - 1; h++) {
-                            raw_x_history[id][h] = raw_x_history[id][h+1];
-                            raw_y_history[id][h] = raw_y_history[id][h+1];
-                        }
-                        raw_x_history[id][HISTORY_LEN-1] = rx;
-                        raw_y_history[id][HISTORY_LEN-1] = ry;
-
-                        if (!slot_active[id]) {
-                            slot_filter_x[id] = rx << 8;
-                            slot_filter_y[id] = ry << 8;
-                            origin_x[id] = rx;
-                            origin_y[id] = ry;
-                            tap_frozen[id] = true;
-                            touch_state[id] = TOUCH_TAP_CANDIDATE;
-                            slot_active[id] = true;
-                            consecutive_errors[id] = 0;
-
-                            for(int h=0; h<HISTORY_LEN; h++) {
-                                raw_x_history[id][h] = rx; raw_y_history[id][h] = ry;
-                            }
-                        }
-
-                        uint16_t mx = get_median(raw_x_history[id][HISTORY_LEN-3],
-                                                raw_x_history[id][HISTORY_LEN-2],
-                                                raw_x_history[id][HISTORY_LEN-1]);
-                        uint16_t my = get_median(raw_y_history[id][HISTORY_LEN-3],
-                                                raw_y_history[id][HISTORY_LEN-2],
-                                                raw_y_history[id][HISTORY_LEN-1]);
-
-                        int dx_jump = mx - (slot_filter_x[id] >> 8);
-                        int dy_jump = my - (slot_filter_y[id] >> 8);
-                        if ((dx_jump*dx_jump + dy_jump*dy_jump) > (300*300)) {
-                            if (consecutive_errors[id] < 2) {
-                                mx = (uint16_t)(slot_filter_x[id] >> 8);
-                                my = (uint16_t)(slot_filter_y[id] >> 8);
-                                consecutive_errors[id]++;
-                            } else {
-                                consecutive_errors[id] = 0;
-                            }
-                        } else {
-                            consecutive_errors[id] = 0;
-                        }
-                        slot_median_x[id] = mx;
-                        slot_median_y[id] = my;
-
-                        int alpha_speed = abs(rx - (int)last_raw_x[id]) + abs(ry - (int)last_raw_y[id]);
-                        uint32_t dynamic_alpha = (alpha_speed < 3) ? 64 : (alpha_speed < 12 ? 115 : 218);
-
-                        slot_filter_x[id] = (dynamic_alpha * (mx << 8) + (256 - dynamic_alpha) * slot_filter_x[id]) >> 8;
-                        slot_filter_y[id] = (dynamic_alpha * (my << 8) + (256 - dynamic_alpha) * slot_filter_y[id]) >> 8;
-
-                        uint16_t fx = (uint16_t)(slot_filter_x[id] >> 8);
-                        uint16_t fy = (uint16_t)(slot_filter_y[id] >> 8);
-
-                        int dx_from_origin = abs((int)rx - (int)origin_x[id]);
-                        int dy_from_origin = abs((int)ry - (int)origin_y[id]);
-
-                        int active_dz = (active_finger_count > 0) ? (TAP_DEADZONE / 2) : TAP_DEADZONE;
-
-                        if (dx_from_origin > active_dz || dy_from_origin > active_dz) {
-                            tap_frozen[id] = false;
-                            if (touch_state[id] == TOUCH_TAP_CANDIDATE) touch_state[id] = TOUCH_DRAG;
-                        }
-
-                        if (tap_frozen[id]) {
-                            tp_msg.fingers[id].x = origin_x[id];
-                            tp_msg.fingers[id].y = origin_y[id];
-                        } else {
-                            tp_msg.fingers[id].x = fx;
-                            tp_msg.fingers[id].y = fy;
-                        }
+                        tp_motion_filter_update(&slot_motion[id], rx, ry, frame.time_ms,
+                                                &tp_msg.fingers[id].x, &tp_msg.fingers[id].y);
+                        slot_guarded_x[id] = slot_motion[id].guarded_x;
+                        slot_guarded_y[id] = slot_motion[id].guarded_y;
 
                         history_x[id] = tp_msg.fingers[id].x;
                         history_y[id] = tp_msg.fingers[id].y;
@@ -747,16 +639,8 @@ void i2c_queue_task(void *arg) {
                         tp_msg.fingers[id].y = history_y[id];
                         tp_msg.fingers[id].confidence = last_confidence[id];
 
-                        slot_active[id] = false;
+                        slot_motion[id] = (tp_motion_filter_t){0};
                         last_raw_x[id] = 0; last_raw_y[id] = 0;
-                        origin_x[id] = 0; origin_y[id] = 0;
-                        slot_filter_x[id] = 0; slot_filter_y[id] = 0;
-                        touch_state[id] = TOUCH_NONE;
-                        tap_frozen[id] = false;
-                        consecutive_errors[id] = 0;
-                        for(int h=0; h<HISTORY_LEN; h++) {
-                            raw_x_history[id][h] = 0; raw_y_history[id][h] = 0;
-                        }
                     }
 
                     // watchdog_id = 0;
@@ -865,14 +749,13 @@ void i2c_queue_task(void *arg) {
                 if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                     /* The simulated pointer owns its own trajectory filter: hand
-                     * it the median/jump-guarded coordinate so the tap-hold
-                     * freeze and the shared EMA cannot add lag or a release
-                     * jump, while impulse rejection is preserved. Every other
-                     * field (buttons, confidence, scan time) is untouched. */
+                     * it the jump-guarded coordinate so the shared
+                     * position filter does not add a second smoothing delay.
+                     * Every other field (buttons, confidence, scan time) is untouched. */
                     tp_multi_msg_t mouse_msg = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) {
-                        mouse_msg.fingers[id].x = slot_median_x[id];
-                        mouse_msg.fingers[id].y = slot_median_y[id];
+                        mouse_msg.fingers[id].x = slot_guarded_x[id];
+                        mouse_msg.fingers[id].y = slot_guarded_y[id];
                     }
                     parse_ptp_simulated_mouse_report(&mouse_msg, &report.data.mouse);
                     /* Only force clicks drive haptics; taps and tap-drags are virtual buttons. */

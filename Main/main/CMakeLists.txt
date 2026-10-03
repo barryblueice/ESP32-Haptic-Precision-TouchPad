@@ -12,6 +12,7 @@ set(srcs
     "I2C/TP/force_forward_protocol.c"
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
+    "I2C/TP/tp_motion_filter.c"
     "I2C/TP/tp_raw_trace.c"
     "I2C/TP/tp_sleep.c"
     "I2C/TP/i2c_watchdog.c"

@@ -7,12 +7,18 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include <inttypes.h>
+#include "freertos/queue.h"
 
 #define TAG "FORCE_FORWARD"
 static i2c_master_dev_handle_t force_device, touchpad_device;
 static force_forward_state_t state;
 static portMUX_TYPE epoch_lock = portMUX_INITIALIZER_UNLOCKED;
 static uint32_t lifecycle_epoch;
+/* One latest request: pressure reads use live sensor data, never replay a
+ * backlog. The worker owns protocol state and runs below the touch reader. */
+typedef struct { input_frame_t frame; uint32_t epoch; } forward_request_t;
+static QueueHandle_t forward_queue;
+static void force_forward_task(void *arg);
 
 typedef struct {
     const input_frame_t *frame;
@@ -83,13 +89,25 @@ void force_forward_init(i2c_master_bus_handle_t bus, i2c_master_dev_handle_t tou
         return;
     }
     touchpad_device = touchpad;
+    forward_queue = xQueueCreate(1, sizeof(forward_request_t));
+    if (!forward_queue) {
+        ESP_LOGW(TAG, "Disabled: no memory for forwarding queue");
+        return;
+    }
+    if (xTaskCreatePinnedToCore(force_forward_task, "force_forward", 4096,
+                               NULL, 10, NULL, 1) != pdPASS) {
+        vQueueDelete(forward_queue);
+        forward_queue = NULL;
+        ESP_LOGW(TAG, "Disabled: could not start forwarding worker");
+        return;
+    }
     ESP_LOGI(TAG, "0x49 C1 -> 0x2C enabled, qualified_keystroke=0, timeout=10 ms, error backoff=100 ms");
 }
 
-void force_forward_report(const input_frame_t *frame)
+static void force_forward_process(const forward_request_t *request)
 {
-    if (!force_device) return;
-    forward_context_t context = {.frame = frame, .epoch = epoch_snapshot()};
+    const input_frame_t *frame = &request->frame;
+    forward_context_t context = {.frame = frame, .epoch = request->epoch};
     const force_forward_io_t io = {&context, select_c1, read_c1, forward, now_ms, ready};
     force_forward_result_t result = force_forward_run(&state, &io, frame->bytes, sizeof(frame->bytes), context.epoch);
     static uint32_t logged_at;
@@ -103,5 +121,23 @@ void force_forward_report(const input_frame_t *frame)
                  stage, esp_err_to_name(state.last_error), state.sent, state.read_failures,
                  state.checksum_failures, state.forward_failures);
     }
+}
+static void force_forward_task(void *arg)
+{
+    (void)arg;
+    forward_request_t request;
+    while (true) {
+        if (xQueueReceive(forward_queue, &request, portMAX_DELAY) == pdPASS)
+            force_forward_process(&request);
+    }
+}
+
+void force_forward_report(const input_frame_t *frame)
+{
+    if (!forward_queue) return;
+    forward_request_t request = {.frame = *frame, .epoch = epoch_snapshot()};
+    /* Zero-wait handoff; I2C errors/timeouts must not stall coordinate parsing.
+     * The enqueue epoch is rechecked before every worker bus transaction. */
+    xQueueOverwrite(forward_queue, &request);
 }
 #endif

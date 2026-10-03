@@ -11,8 +11,8 @@
 #define HID_AXIS_MIN (-127)
 #define HID_AXIS_MAX 127
 
-/* Single-finger pointer. The parser receives the median/jump-guarded raw
- * coordinates (not the frozen/EMA-smoothed PTP position), so all pointer
+/* Single-finger pointer. The parser receives the jump-guarded raw
+ * coordinates (before the PTP position low-pass), so all pointer
  * smoothing and acceleration live here. scan_time uses 100 us units. */
 
 /* One-euro adaptive low-pass: the cutoff follows speed, so a resting finger is
