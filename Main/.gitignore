@@ -86,7 +86,6 @@ tools/
 
 # Local agent workspaces and tests
 /.kilo/
-/tests/
 
 # Local knuckle training tools, datasets and reports
 /main/SYS/knuckle_training/
