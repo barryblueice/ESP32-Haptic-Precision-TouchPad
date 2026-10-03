@@ -4,6 +4,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/TP/force_forward.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "sdkconfig.h"
@@ -95,6 +96,7 @@ esp_err_t tp_write(uint16_t reg, uint8_t *data, size_t len) {
 }
 
 void hid_init_sequence(void) {
+    force_forward_invalidate();
     // ESP_LOGI(TAG, "Sending HID Power ON...");
     uint8_t pwr_data[] = { POWER_ON, CMD_SET_POWER };
     ESP_ERROR_CHECK(tp_write(HID_COMMAND_REG, pwr_data, 2));
@@ -130,9 +132,12 @@ void tp_i2c_init(void) {
         .scl_speed_hz = I2C_FREQ_HZ,
     };
     ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_haptic_motor_cfg, &dev_haptic_motor_handle));
+    force_forward_init(bus_handle, dev_handle);
 }
 
 void tp_hw_reset(void) {
+    /* Startup reset precedes the parser task. */
+    force_forward_invalidate();
     ESP_ERROR_CHECK(gpio_set_direction(TP_RESET_GPIO, GPIO_MODE_OUTPUT));
     ESP_LOGI(TAG, "Hardware Reset...");
     ESP_ERROR_CHECK(gpio_set_level(TP_RESET_GPIO, 0));
@@ -142,6 +147,7 @@ void tp_hw_reset(void) {
 }
 
 esp_err_t touchpad_mode_set(bool is_ptp_mode) {
+    force_forward_invalidate();
     cs40l25_surface_cancel_click();
 
     #if CONFIG_PTP_SIMULATED_MOUSE_MODE

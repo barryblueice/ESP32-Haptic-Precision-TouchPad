@@ -8,6 +8,8 @@ set(srcs
     "force_firmware/force_download.c"
     "force_firmware/force_image.c"
 
+    "I2C/TP/force_forward.c"
+    "I2C/TP/force_forward_protocol.c"
     "I2C/TP/i2c_cmd.c"
     "I2C/TP/i2c_queue.c"
     "I2C/TP/tp_raw_trace.c"

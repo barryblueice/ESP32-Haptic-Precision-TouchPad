@@ -29,6 +29,16 @@ menu "TouchPad Configuration"
 
     endchoice
 
+    config SURFACE_FORCE_FORWARD_ENABLE
+        bool "Forward six-channel Force samples to Synaptics"
+        depends on SURFACE_NORMAL_MODE
+        default y
+        help
+            On fresh Synaptics reports 2/4, read and validate the Force sensor
+            C1 frame at 0x49, then forward its six raw channels to 0x2C.
+            Paused during sleep, wake and mode changes. No calibration or
+            firmware writes. QualifiedKeystroke is zero (no keyboard source).
+
     menu "USB Descriptor Options"
 
         config TOUCHPAD_MANUFACTURER_STRING

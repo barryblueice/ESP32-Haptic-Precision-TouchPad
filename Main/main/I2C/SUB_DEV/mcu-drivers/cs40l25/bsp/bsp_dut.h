@@ -69,6 +69,11 @@ uint32_t bsp_dut_stop_i2s(void);
 uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms);
 uint32_t bsp_dut_has_processed(bool *has_processed);
 uint32_t bsp_dut_get_num_waves(uint32_t *count);
+/* Read-only Surface startup snapshot; no state promotion or wake commands. */
+typedef struct {
+    uint32_t driver_state, halo_state, power_state, scratch, heartbeat;
+} bsp_dut_startup_status_t;
+uint32_t bsp_dut_get_startup_status(bsp_dut_startup_status_t *status);
 uint32_t bsp_dut_update_haptic_config(uint8_t config_index);
 uint32_t bsp_dut_apply_haptic_mapping(uint8_t press_waveform,
                                       uint8_t release_waveform,

@@ -26,6 +26,8 @@ void input_recover(void);
 void input_source_recover(const char *reason);
 uint32_t input_source_generation(void);
 bool input_source_observe(uint32_t generation, bool all_up);
+/* Physical controller readiness; independent of host link/lift/output gates. */
+bool input_force_forward_ready(uint32_t generation);
 void input_source_button(uint32_t generation, bool down);
 void input_source_gesture(uint32_t generation, bool point);
 bool input_output_ready(uint32_t generation);

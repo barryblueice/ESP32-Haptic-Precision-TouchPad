@@ -342,6 +342,25 @@ static uint32_t bsp_surface_prepare_vibegen(void)
     return BSP_STATUS_OK;
 }
 
+uint32_t bsp_dut_get_startup_status(bsp_dut_startup_status_t *status)
+{
+    if (status == NULL || cs40l25_driver.fw_info == NULL ||
+        cs40l25_driver.fw_info->header.fw_id != SURFACE_FW_ID ||
+        cs40l25_driver.fw_info->header.fw_version != SURFACE_FW_REVISION)
+        return BSP_STATUS_FAIL;
+
+    regmap_cp_config_t *cp = REGMAP_GET_CP(&cs40l25_driver);
+    status->driver_state = cs40l25_driver.state;
+    if (regmap_read_fw_control(cp, cs40l25_driver.fw_info,
+                              CS40L25_SYM_FIRMWARE_HALO_STATE, &status->halo_state) != REGMAP_STATUS_OK ||
+        regmap_read_fw_control(cp, cs40l25_driver.fw_info,
+                              CS40L25_SYM_FIRMWARE_POWERSTATE, &status->power_state) != REGMAP_STATUS_OK ||
+        regmap_read(cp, XM_UNPACKED24_DSP1_SCRATCH_REG, &status->scratch) != REGMAP_STATUS_OK ||
+        cs40l25_get_halo_heartbeat(&cs40l25_driver, &status->heartbeat) != CS40L25_STATUS_OK)
+        return BSP_STATUS_FAIL;
+    return BSP_STATUS_OK;
+}
+
 static bool bsp_surface_ram_ready(void)
 {
     if (cs40l25_driver.fw_info == NULL ||

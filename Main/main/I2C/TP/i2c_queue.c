@@ -1,4 +1,5 @@
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/TP/force_forward.h"
 #include "I2C/TP/tp_coordinates.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -559,6 +560,16 @@ void i2c_queue_task(void *arg) {
         }
         uint32_t report_generation = frame.output_generation;
         if (frame.generation != input_source_generation()) continue;
+        /* Upstream capture validated the length. Run only for a fresh frame,
+         * before host admission or gesture buffering; replay never samples. */
+        if (!buffered_timeout) {
+            force_forward_report(&frame);
+            if (frame.generation != input_source_generation()) continue;
+            if ((uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
+                input_source_recover("raw_age");
+                continue;
+            }
+        }
         bool local_ready = input_source_observe(frame.generation, all_up);
         bool publish = input_observe(report_generation, all_up);
         last_all_up = all_up;

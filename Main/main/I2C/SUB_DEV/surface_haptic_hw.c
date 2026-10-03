@@ -160,16 +160,36 @@ bool surface_haptic_hw_initialize(void)
         wait_ms(10);
     }
     CHECK_BSP(bsp_dut_power_up());
-    bool changed;
-    CHECK_BSP(bsp_dut_has_processed(&changed));
+    bsp_dut_startup_status_t status;
+    CHECK_BSP(bsp_dut_get_startup_status(&status));
+    uint32_t previous_heartbeat = status.heartbeat;
+    bool ready = false;
     TickType_t start = xTaskGetTickCount();
     do {
         CHECK_BSP(surface_haptic_hw_process());
         wait_ms(10);
-        CHECK_BSP(bsp_dut_has_processed(&changed));
-        if (changed) break;
+        CHECK_BSP(bsp_dut_get_startup_status(&status));
+        /* Surface RAM firmware stops advancing heartbeat in idle standby.
+         * Require valid DSP state and a nonzero heartbeat in either case;
+         * active firmware must still demonstrate forward progress. */
+        bool running = status.driver_state == CS40L25_STATE_DSP_POWER_UP &&
+            status.halo_state == 0xCB && status.scratch == 0 && status.heartbeat != 0;
+        ready = running && (status.power_state == 2 ||
+            (status.power_state == 1 && status.heartbeat != previous_heartbeat));
+        if (ready) break;
+        previous_heartbeat = status.heartbeat;
     } while ((TickType_t)(xTaskGetTickCount() - start) < pdMS_TO_TICKS(2000));
-    if (!changed || !check_wave_count()) return false;
+    if (!ready) {
+        ESP_LOGE(TAG, "DSP startup timeout: driver=%" PRIu32 " HALO=0x%08" PRIX32
+                 " power=%" PRIu32 " scratch=0x%08" PRIX32 " heartbeat=0x%08" PRIX32,
+                 status.driver_state, status.halo_state, status.power_state, status.scratch, status.heartbeat);
+        return false;
+    }
+    ESP_LOGI(TAG, "DSP startup ready: power=%" PRIu32 " heartbeat=0x%08" PRIX32,
+             status.power_state, status.heartbeat);
+    if (!check_wave_count()) return false;
+    bool changed;
+    CHECK_BSP(bsp_dut_has_processed(&changed));
     CHECK_BSP(bsp_dut_update_haptic_config(0));
     CHECK_BSP(bsp_dut_enable_haptic_processing(true));
     bsp_dut_log_gain("initialize");

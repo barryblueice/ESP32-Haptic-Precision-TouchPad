@@ -8,6 +8,9 @@
 #include <string.h>
 #include <inttypes.h>
 #include "sdkconfig.h"
+#ifdef ESP_PLATFORM
+#include "I2C/TP/force_forward.h"
+#endif
 
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static report_buffer_t reports;
@@ -32,6 +35,9 @@ static const char *source_reason = "startup", *output_reason = "startup";
 static void source_reset_locked(const char *reason)
 {
     ++source_generation;
+#ifdef ESP_PLATFORM
+    force_forward_invalidate();
+#endif
     source_wait_up = true;
     source_reason = reason;
     cs40l25_surface_cancel_click();
@@ -201,6 +207,15 @@ void input_source_recover(const char *reason)
 uint32_t input_source_generation(void)
 {
     taskENTER_CRITICAL(&lock); uint32_t g = source_generation; taskEXIT_CRITICAL(&lock); return g;
+}
+
+bool input_force_forward_ready(uint32_t generation)
+{
+    taskENTER_CRITICAL(&lock);
+    bool ready = generation == source_generation && physical_mode_valid && mode_applied &&
+        !mode_pending && !transport_paused;
+    taskEXIT_CRITICAL(&lock);
+    return ready;
 }
 
 bool input_source_observe(uint32_t generation, bool all_up)

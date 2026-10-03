@@ -1,4 +1,5 @@
 #include "cs40l25_surface.h"
+#include "I2C/TP/force_forward.h"
 #include "surface_haptic_hw.h"
 #include "surface_haptic_settings.h"
 #include "SYS/device_config.h"
@@ -16,6 +17,14 @@ static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static surface_haptic_runtime_t runtime;
 static bool started, sleep_requested;
 static uint32_t button_presses, button_releases;
+
+/* Called with the runtime lock held. Only invalidate bookkeeping here;
+ * the parser owns all Force I2C traffic. Covers rapid sleep/wake and UV recovery. */
+static void set_state_locked(surface_haptic_state_t state)
+{
+    if (runtime.state != state) force_forward_invalidate();
+    surface_runtime_state(&runtime, state);
+}
 
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
 
@@ -69,7 +78,7 @@ void cs40l25_surface_set_modern_sleep(bool sleep_active)
     if (runtime.state != SURFACE_FAULT && sleep_requested != sleep_active) {
         sleep_requested = sleep_active;
         // Stop admission immediately; only the worker changes the power pin.
-        surface_runtime_state(&runtime, sleep_active ? SURFACE_SLEEPING : SURFACE_WAKING);
+        set_state_locked(sleep_active ? SURFACE_SLEEPING : SURFACE_WAKING);
     }
     taskEXIT_CRITICAL(&lock);
 }
@@ -77,7 +86,7 @@ void cs40l25_surface_set_modern_sleep(bool sleep_active)
 static void fault(const char *stage, uint8_t waveform)
 {
     taskENTER_CRITICAL(&lock);
-    surface_runtime_state(&runtime, SURFACE_FAULT);
+    set_state_locked(SURFACE_FAULT);
     taskEXIT_CRITICAL(&lock);
     ESP_LOGE(TAG, "FAULT at %s; haptics disabled until reset, touch reporting continues", stage);
     surface_haptic_hw_diagnostics(waveform);
@@ -93,7 +102,7 @@ static bool recover_undervoltage(bool *retried, bool *vbus_high)
     if (high || *retried) return false;
     *retried = true;
     taskENTER_CRITICAL(&lock);
-    surface_runtime_state(&runtime, sleep_requested ? SURFACE_SLEEPING : SURFACE_WAKING);
+    set_state_locked(sleep_requested ? SURFACE_SLEEPING : SURFACE_WAKING);
     taskEXIT_CRITICAL(&lock);
     /* A failed playback/wake may precede delivery of the hardware event. */
     (void)surface_haptic_hw_process();
@@ -111,7 +120,7 @@ static void worker(void *arg)
         return;
     }
     taskENTER_CRITICAL(&lock);
-    surface_runtime_state(&runtime, sleep_requested ? SURFACE_SLEEPING : SURFACE_READY);
+    set_state_locked(sleep_requested ? SURFACE_SLEEPING : SURFACE_READY);
     taskEXIT_CRITICAL(&lock);
     bool powered = true, heartbeat_pending = false;
     bool undervoltage_retried = false;
@@ -171,7 +180,7 @@ static void worker(void *arg)
             uint32_t now = now_ms();
             taskENTER_CRITICAL(&lock);
             // A sleep request arriving during wake wins over READY.
-            if (!sleep_requested) surface_runtime_state(&runtime, SURFACE_READY);
+            if (!sleep_requested) set_state_locked(SURFACE_READY);
             surface_haptic_event_t event;
             bool have_event = surface_runtime_pop(&runtime, now, &event);
             uint32_t drops = runtime.dropped;
