@@ -88,7 +88,12 @@ void app_main(void) {
         ESP_ERROR_CHECK(xTaskCreatePinnedToCore(ble_hid_task, "ble_hid_task", 4096, NULL, 12, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     } else {
 
-        led_send_command(GPIO_LED_3, LED_CMD_BLINK, 2000, 2000, 1, false);
+        /* Both transports start together; indicate the selected boot mode. */
+        if (current_mode == _2_4_MODE) {
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 500, 2000, 2, false);
+        } else {
+            led_send_command(GPIO_LED_3, LED_CMD_BLINK, 2000, 2000, 1, false);
+        }
 
         ESP_LOGW(TAG, "Starting USB and 2.4G transports...");
         usbhid_init();
