@@ -113,10 +113,12 @@ knuckle_result_t knuckle_gesture_update_with_classifier(knuckle_gesture_t *s,
         if (!s->rejected) {
             s->claimed = true;
             ++s->samples;
-            s->pressure_sum += f[5];
-            s->weighted_area_sum += (uint32_t)f[5] * area;
-            if (f[5] > s->peak_pressure) s->peak_pressure = f[5];
             if (model) knuckle_features_add(&s->features, f[5], area, now);
+            else {
+                s->pressure_sum += f[5];
+                s->weighted_area_sum += (uint32_t)f[5] * area;
+                if (f[5] > s->peak_pressure) s->peak_pressure = f[5];
+            }
         }
     }
     if (s->rejected && s->claimed && !s->cancelled) {
@@ -130,7 +132,8 @@ knuckle_result_t knuckle_gesture_update_with_classifier(knuckle_gesture_t *s,
      * release tail contributes less to weighted area instead of vetoing it.
      * With <=64 samples, even 255*255 area and Z=255 fit uint32_t sums. */
     bool accepted = false;
-    if (!s->rejected && now - s->down_at >= KNUCKLE_DOWN_MIN_MS && s->pressure_sum) {
+    if (!s->rejected && now - s->down_at >= KNUCKLE_DOWN_MIN_MS &&
+        (model ? s->features.pressure_sum : s->pressure_sum)) {
         if (model) {
             float features[6]; knuckle_features_finish(&s->features, now, features);
             accepted = knuckle_classifier_accepts(model, true, features);

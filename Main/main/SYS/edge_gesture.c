@@ -47,9 +47,9 @@ edge_result_t edge_gesture_update(edge_gesture_t *s, const device_config_t *c,
             if ((s->mask & (1U << e)) && inside(e, c->bytes + CFG_EDGES + 5 * e, x, y, xmax, ymax)) available |= 1U << e;
         if (!available) { s->state = EDGE_BLOCKED; return result; }
         s->mask = available;
-        uint32_t dx = abs((int)x - s->start_x) * (uint32_t)ymax;
-        uint32_t dy = abs((int)y - s->start_y) * (uint32_t)xmax;
         if ((available & 3) && (available & 12)) {
+            uint32_t dx = abs((int)x - s->start_x) * (uint32_t)ymax;
+            uint32_t dy = abs((int)y - s->start_y) * (uint32_t)xmax;
             if (dx == dy) { result.suppress = true; return result; }
             available &= dx > dy ? 3 : 12;
         }

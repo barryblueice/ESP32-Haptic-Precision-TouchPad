@@ -49,5 +49,7 @@ void ptp_report_reset(void);
 void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_report_t *out_report);
 bool ptp_simulated_mouse_click_needs_release(void);
 void ptp_simulated_mouse_reset(void);
+/* Completed edge tap; caller must queue the matching release. */
+void ptp_simulated_mouse_replay_tap(uint16_t scan_time, mouse_hid_report_t *out_report);
 
 #endif

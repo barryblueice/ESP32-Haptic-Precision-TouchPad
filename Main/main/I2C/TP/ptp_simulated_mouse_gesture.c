@@ -23,6 +23,7 @@
 #define POINTER_ACCEL_END 2400.0f
 #define POINTER_GAIN_MIN 0.70f
 #define POINTER_GAIN_MAX SENSITIVITY
+#define POINTER_SPEED_SCALE 0.50f
 
 /* A bounded sub-count remainder is carried so fast flicks lose no motion, yet
  * a saturated burst cannot leave the pointer coasting after the finger stops. */
@@ -37,8 +38,8 @@
 #define POINTER_STILL_SPEED 25.0f
 #define POINTER_EMIT_FLOOR 0.35f
 
-/* Anchor key for the two-finger middle-button drag; finger slots are 0..4. */
-#define MOVE_ANCHOR_CENTROID 0xFFU
+/* Keep centroid contact masks distinct from single-finger slot keys 0..4. */
+#define MOVE_ANCHOR_CENTROID 0x80U
 
 /* Tap / click. */
 #define TAP_MAX_MOVE 60.0f
@@ -85,7 +86,7 @@ typedef struct {
     float last_scroll_y;
     float tap_start_x[MAX_TOUCH_CONTACTS];
     float tap_start_y[MAX_TOUCH_CONTACTS];
-    float tap_max_move;
+    float tap_max_move_squared;
     uint16_t tap_start_time;
     uint16_t last_single_tap_time;
     uint8_t move_contact_index;
@@ -102,6 +103,7 @@ typedef struct {
     bool scroll_active;
     bool tap_active;
     bool tap_moved;
+    bool tap_cancelled; /* Confidence loss invalidates this entire contact. */
     bool has_last_single_tap;
     bool double_tap_drag_candidate;
     bool drag_active;
@@ -150,9 +152,14 @@ static float scan_dt_seconds(uint16_t now, uint16_t then)
     return dt;
 }
 
+static float vector_length_squared(float x, float y)
+{
+    return (x * x) + (y * y);
+}
+
 static float vector_length(float x, float y)
 {
-    return sqrtf((x * x) + (y * y));
+    return sqrtf(vector_length_squared(x, y));
 }
 
 static float interpolate_gain(float speed,
@@ -301,7 +308,7 @@ static void tap_anchor_contacts(const tp_multi_msg_t *msg, uint8_t mask)
     }
 }
 
-static float tap_contact_travel(const tp_multi_msg_t *msg, uint8_t mask)
+static float tap_contact_travel_squared(const tp_multi_msg_t *msg, uint8_t mask)
 {
     float max_move = 0.0f;
 
@@ -311,7 +318,7 @@ static float tap_contact_travel(const tp_multi_msg_t *msg, uint8_t mask)
         }
         float dx = (float)msg->fingers[i].x - m_state.tap_start_x[i];
         float dy = (float)msg->fingers[i].y - m_state.tap_start_y[i];
-        float distance = vector_length(dx, dy);
+        float distance = vector_length_squared(dx, dy);
         if (distance > max_move) {
             max_move = distance;
         }
@@ -327,7 +334,7 @@ static void update_tap_state(const tp_multi_msg_t *msg,
     if (!m_state.tap_active) {
         m_state.tap_active = true;
         m_state.tap_moved = false;
-        m_state.tap_max_move = 0.0f;
+        m_state.tap_max_move_squared = 0.0f;
         m_state.tap_max_count = (uint8_t)active_count;
         m_state.tap_start_time = msg->scan_time;
         m_state.double_tap_drag_candidate =
@@ -358,15 +365,15 @@ static void update_tap_state(const tp_multi_msg_t *msg,
         return;
     }
 
-    float max_move = tap_contact_travel(msg, active_mask);
-    if (max_move > m_state.tap_max_move) {
-        m_state.tap_max_move = max_move;
+    float max_move = tap_contact_travel_squared(msg, active_mask);
+    if (max_move > m_state.tap_max_move_squared) {
+        m_state.tap_max_move_squared = max_move;
     }
     uint16_t elapsed = scan_time_delta(msg->scan_time, m_state.tap_start_time);
 
     if (m_state.double_tap_drag_candidate &&
         active_count == 1 &&
-        (max_move > DOUBLE_TAP_DRAG_MIN_MOVE ||
+        (max_move > DOUBLE_TAP_DRAG_MIN_MOVE * DOUBLE_TAP_DRAG_MIN_MOVE ||
          elapsed >= DOUBLE_TAP_DRAG_HOLD_TIME)) {
         m_state.drag_active = true;
         m_state.has_last_single_tap = false;
@@ -393,7 +400,7 @@ static void clear_tap_tracking(void)
     m_state.tap_max_count = 0;
     m_state.tap_contact_mask = 0;
     m_state.tap_moved = false;
-    m_state.tap_max_move = 0.0f;
+    m_state.tap_max_move_squared = 0.0f;
     m_state.double_tap_drag_candidate = false;
     m_state.force_click_seen = false;
 }
@@ -410,7 +417,7 @@ static void handle_tap_release(const tp_multi_msg_t *msg,
     uint8_t buttons = tap_button_mask(m_state.tap_max_count);
     uint16_t elapsed = scan_time_delta(msg->scan_time, m_state.tap_start_time);
     bool clean = !m_state.tap_moved &&
-                 m_state.tap_max_move <= TAP_MAX_MOVE &&
+                 m_state.tap_max_move_squared <= TAP_MAX_MOVE * TAP_MAX_MOVE &&
                  elapsed <= TAP_MAX_TIME &&
                  buttons != 0;
 
@@ -477,10 +484,10 @@ static void handle_pointer_move(float curr_x,
     m_state.pending_move_x += step.dx;
     m_state.pending_move_y += step.dy;
 
-    float pending = vector_length(m_state.pending_move_x, m_state.pending_move_y);
+    float pending_squared = vector_length_squared(m_state.pending_move_x, m_state.pending_move_y);
     float emit_floor =
         m_pointer_jitter > POINTER_EMIT_FLOOR ? m_pointer_jitter : POINTER_EMIT_FLOOR;
-    if (pending < emit_floor) {
+    if (pending_squared < emit_floor * emit_floor) {
         return;
     }
 
@@ -488,7 +495,7 @@ static void handle_pointer_move(float curr_x,
                                   POINTER_GAIN_MIN,
                                   POINTER_GAIN_MAX,
                                   POINTER_ACCEL_START,
-                                  POINTER_ACCEL_END);
+                                  POINTER_ACCEL_END) * POINTER_SPEED_SCALE;
     float move_x = m_state.pending_move_x * gain;
     float move_y = m_state.pending_move_y * gain;
     m_state.pending_move_x = 0.0f;
@@ -555,11 +562,11 @@ static void handle_dual_finger_scroll(const tp_multi_msg_t *msg,
     /* Compare raw sample to raw sample. Comparing raw to the filtered position
      * would trip on the filter's own lag and stall accelerating scrolls. On a
      * real jump, re-anchor instead of skipping so the wheel never freezes. */
-    float raw_step = vector_length(avg_x - m_state.last_scroll_x,
+    float raw_step_squared = vector_length_squared(avg_x - m_state.last_scroll_x,
                                    avg_y - m_state.last_scroll_y);
     m_state.last_scroll_x = avg_x;
     m_state.last_scroll_y = avg_y;
-    if (raw_step > SCROLL_JUMP_THRESHOLD) {
+    if (raw_step_squared > SCROLL_JUMP_THRESHOLD * SCROLL_JUMP_THRESHOLD) {
         m_scroll.x = avg_x;
         m_scroll.y = avg_y;
         m_scroll.dx = 0.0f;
@@ -592,7 +599,7 @@ static void handle_dual_finger_scroll(const tp_multi_msg_t *msg,
         float total_x = filtered_x - m_state.scroll_origin_x;
         float total_y = filtered_y - m_state.scroll_origin_y;
 
-        if (vector_length(total_x, total_y) < SCROLL_START_THRESHOLD) {
+        if (vector_length_squared(total_x, total_y) < SCROLL_START_THRESHOLD * SCROLL_START_THRESHOLD) {
             return;
         }
 
@@ -633,6 +640,17 @@ static void handle_dual_finger_scroll(const tp_multi_msg_t *msg,
     }
 }
 
+/* A completed edge candidate has already supplied its real down/up pair.
+ * Emit exactly one queued click without routing the synthetic down through
+ * live-contact debounce. The caller queues the release with input_publish. */
+void ptp_simulated_mouse_replay_tap(uint16_t scan_time, mouse_hid_report_t *out_report)
+{
+    ptp_simulated_mouse_reset();
+    *out_report = (mouse_hid_report_t){.buttons = 0x01};
+    m_state.has_last_single_tap = true;
+    m_state.last_single_tap_time = scan_time;
+}
+
 bool ptp_simulated_mouse_click_needs_release(void)
 {
     bool needs_release = m_state.click_release_pending;
@@ -651,6 +669,23 @@ static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
 
     uint8_t raw_mask = get_active_contact_mask(msg);
     int raw_count = count_active_contacts(raw_mask);
+    uint8_t physical_mask = 0;
+    for (unsigned i = 0; i < MAX_TOUCH_CONTACTS; ++i)
+        if (msg->fingers[i].tip_switch) physical_mask |= (uint8_t)(1U << i);
+
+    /* Confidence loss is not a lift. Cancel virtual clicks/drags but keep
+     * physical button reporting, then require fresh trusted motion anchors. */
+    if (physical_mask != raw_mask) {
+        reset_move_state();
+        reset_scroll_state();
+        clear_tap_tracking();
+        m_state.tap_cancelled = true;
+        m_state.drag_active = false;
+        m_state.has_last_single_tap = false;
+        m_state.stable_count = m_state.pending_count = m_state.count_frames = 0;
+        return;
+    }
+    if (!physical_mask) m_state.tap_cancelled = false;
 
     if (out_report->buttons != 0) {
         m_state.force_click_seen = true;
@@ -686,7 +721,7 @@ static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
                 m_state.stable_count = (uint8_t)raw_count;
                 m_state.count_frames = 0;
             } else {
-                if (m_state.stable_count == 0 && raw_count == 1) {
+                if (m_state.stable_count == 0 && raw_count == 1 && !m_state.tap_cancelled) {
                     int id = mask_nth_slot(raw_mask, 0);
                     reset_move_state();
                     m_state.has_move_anchor = true;
@@ -719,7 +754,7 @@ static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
         return;
     }
 
-    if (active_count > 0) {
+    if (active_count > 0 && !m_state.tap_cancelled) {
         update_tap_state(msg, active_count, active_mask);
     }
 
@@ -738,7 +773,7 @@ static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
             contact_centroid(msg, first_active, second_active, &centroid_x, &centroid_y);
             handle_pointer_move(centroid_x,
                                 centroid_y,
-                                MOVE_ANCHOR_CENTROID,
+                                MOVE_ANCHOR_CENTROID | active_mask,
                                 msg->scan_time,
                                 out_report);
         } else {

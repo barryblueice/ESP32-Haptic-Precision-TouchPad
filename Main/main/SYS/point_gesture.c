@@ -8,11 +8,17 @@ bool point_gesture_inside(unsigned p, unsigned radius, uint16_t x, uint16_t y,
     uint16_t xmax, uint16_t ymax, uint16_t width, uint16_t height)
 {
     if (p >= 4 || !xmax || !ymax || !width || !height || x > xmax || y > ymax) return false;
-    /* Compare in physical units without rounding positions onto the circle.
-     * These products are bounded for the surface's 2302/1532 logical ranges. */
-    double dx = (double)((p & 1) ? xmax - x : x) * width / xmax;
-    double dy = (double)((p & 2) ? ymax - y : y) * height / ymax;
-    double r = (double)(width < height ? width : height) * radius / 100;
+    uint32_t logical_dx = (p & 1) ? xmax - x : x;
+    uint32_t logical_dy = (p & 2) ? ymax - y : y;
+    uint32_t radius_units = (uint32_t)(width < height ? width : height) * radius;
+    /* Reject the enclosing rectangle before doing software double divisions.
+     * Widen first: this public helper also accepts dimensions above the panel's. */
+    if ((uint64_t)logical_dx * width * 100 > (uint64_t)radius_units * xmax ||
+        (uint64_t)logical_dy * height * 100 > (uint64_t)radius_units * ymax) return false;
+    /* Preserve the original physical circle and its unrounded boundary. */
+    double dx = (double)logical_dx * width / xmax;
+    double dy = (double)logical_dy * height / ymax;
+    double r = (double)radius_units / 100;
     return dx * dx + dy * dy <= r * r;
 }
 static point_result_t action(const point_gesture_t *s)

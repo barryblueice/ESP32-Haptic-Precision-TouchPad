@@ -787,6 +787,9 @@ void i2c_queue_task(void *arg) {
 #endif
                 if (!knock.suppress && (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE || ble_custom_gestures)) {
                     device_config_t config; device_config_get(&config);
+                    bool portrait = (config.bytes[CFG_ROTATION] & 1) != 0;
+                    uint16_t xmax = portrait ? 1532 : 2302;
+                    uint16_t ymax = portrait ? 2302 : 1532;
                     tp_multi_msg_t logical = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch) {
                         logical.fingers[id].x = last_raw_x[id]; logical.fingers[id].y = last_raw_y[id];
@@ -794,9 +797,8 @@ void i2c_queue_task(void *arg) {
                     point_result_t point = {0};
                     bool owned = point_state.owned;
                     if (current_tp_mode == PTP_MODE || ble_custom_gestures) {
-                        bool portrait = device_config_rotation() & 1;
                         point = point_gesture_update(&point_state, &config, &logical,
-                            device_config_x_max(), device_config_y_max(),
+                            xmax, ymax,
                             portrait ? 766 : 1149, portrait ? 1149 : 766, frame.time_ms);
                         owned |= point_state.owned;
                         if (point.cancel) aux_output_cancel_gesture();
@@ -813,7 +815,7 @@ void i2c_queue_task(void *arg) {
                     }
                     edge_result_t edge = {0};
                     if (!point.suppress) edge = edge_gesture_update(&edge_state, &config, &logical,
-                        device_config_x_max(), device_config_y_max());
+                        xmax, ymax);
                     edge.suppress |= point.suppress;
                     if (owned) edge.tap = false;
                     if (edge.cancelled) aux_output_cancel_gesture();
@@ -823,10 +825,10 @@ void i2c_queue_task(void *arg) {
                     if (publish && edge.steps)
                         input_source_gesture(frame.generation, false);
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                    /* A claimed BLE gesture must not seed a simulated tap or
-                     * drag when it hands off or lifts. A failed edge candidate
-                     * is still replayed below as an ordinary tap. */
-                    if (ble_custom_gestures && (edge.suppress || owned)) ptp_simulated_mouse_reset();
+                    /* All simulated-mouse transports must discard motion and
+                     * tap state claimed by a special gesture. A completed edge
+                     * candidate is explicitly replayed below. */
+                    if (edge.suppress || owned) ptp_simulated_mouse_reset();
 #endif
                     if (edge.tap) {
                         /* Region taps are synthetic, excluded from transport latency. */
@@ -841,8 +843,14 @@ void i2c_queue_task(void *arg) {
                             }
                         } else {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                            edge.tap_down.actual_count = 1;
-                            parse_ptp_simulated_mouse_report(&edge.tap_down, &down.data.mouse);
+                            if (publish) {
+                                ptp_simulated_mouse_replay_tap(tp_msg.scan_time, &down.data.mouse);
+                                if (!input_publish(report_generation, &down, true)) {
+                                    ptp_simulated_mouse_reset();
+                                    publish = false;
+                                }
+                                published_pair = true;
+                            }
 #endif
                         }
                     }
