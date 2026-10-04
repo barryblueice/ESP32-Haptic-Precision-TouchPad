@@ -19,7 +19,7 @@ typedef struct {
     int16_t channels[6];
 } force_sample_t;
 
-/* Only the forwarding worker owns this state. Lifecycle changes arrive as epochs. */
+/* Only the parser task owns this state. Lifecycle changes arrive as epochs. */
 typedef struct {
     uint32_t epoch, failed_at;
     uint32_t sent, read_failures, checksum_failures, forward_failures;
