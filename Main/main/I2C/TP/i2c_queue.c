@@ -41,10 +41,9 @@
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 #define FORCE_CLICK_MOVE_DEADZONE 45
-/* The two-finger middle press only has to reach this share of the physical
- * threshold: the contacts share the applied force, and the middle button is
- * intentionally softer than the physical left/right button. */
-#define FORCE_CLICK_MIDDLE_PERCENT 120
+/* Pressure is summed across both contacts. Require 90% of the single-finger
+ * threshold per finger on a balanced press, reducing accidental middle clicks. */
+#define FORCE_CLICK_MIDDLE_PERCENT 140
 
 typedef enum {
     TOUCH_NONE = 0,
@@ -183,8 +182,10 @@ static void pressure_vbus_poll(void)
 }
 
 static uint8_t ptp_middle_press_threshold(uint8_t press_threshold) {
-    uint8_t scaled = (uint8_t)(press_threshold * FORCE_CLICK_MIDDLE_PERCENT / 100U);
-    return scaled ? scaled : 1U;
+    unsigned scaled = (unsigned)press_threshold * FORCE_CLICK_MIDDLE_PERCENT / 100U;
+    /* Match the saturated pressure sum; narrowing first can wrap a strong
+     * configured threshold into an extremely light middle click. */
+    return scaled > UINT8_MAX ? UINT8_MAX : scaled ? (uint8_t)scaled : 1U;
 }
 
 static void ptp_reset_force_click(tp_multi_msg_t *msg) {
@@ -281,11 +282,8 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
         return;
     }
 
-    /* Two fingers share the applied force, so on a hard two-finger press a
-     * single contact never reaches a one-finger threshold: the sum of the
-     * active contacts is the total force, which keeps the middle press on the
-     * same scale as the physical left/right button instead of requiring double
-     * the force. */
+    /* Compare the summed sensor Z values with the dedicated middle threshold.
+     * Z is a sensor reading, not a calibrated physical force measurement. */
     uint32_t z_total = 0;
     for (int id = 0; id < 5; id++) {
         if (msg->fingers[id].tip_switch != 0) {
@@ -295,7 +293,7 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     uint8_t raw_z = z_total > 255U ? 255U : (uint8_t)z_total;
     uint8_t press_threshold = ptp_map_button_press_threshold(ptp_button_press_threshold);
     /* Latch the button type for a held press, so lifting one finger of a middle
-     * drag keeps the softer middle threshold until the press ends. */
+     * drag keeps the middle threshold until the press ends. */
     if (ptp_force_click_state.button_down ? ptp_force_click_state.press_fingers >= 2
                                           : active_finger_count >= 2) {
         press_threshold = ptp_middle_press_threshold(press_threshold);
