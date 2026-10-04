@@ -8,12 +8,15 @@
 typedef struct {
     uint8_t mode;
     uint32_t generation, time_ms;
+    uint32_t queued_time_ms; /* Oldest origin retained after dequeue into a sender. */
+    uint32_t read_done_us; /* Diagnostic origin; zero for synthetic/replayed input. */
     bool release;
     union { ptp_report_t ptp; mouse_hid_report_t mouse; } data;
 } input_report_t;
 
 typedef struct {
     input_report_t report;
+    uint32_t first_time_ms; /* Oldest queued sample, independent of latest PTP data. */
     int32_t x, y, wheel, pan;
     bool edge;
 } report_entry_t;

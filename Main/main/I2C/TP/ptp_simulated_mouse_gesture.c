@@ -6,24 +6,15 @@
 
 #include "SYS/hid_msg.h"
 #include "I2C/TP/i2c_hid.h"
+#include "I2C/TP/pointer_motion.h"
 
 #define MAX_TOUCH_CONTACTS 5
 #define HID_AXIS_MIN (-127)
 #define HID_AXIS_MAX 127
 
-/* Single-finger pointer. The parser receives the median/jump-guarded raw
- * coordinates (not the frozen/EMA-smoothed PTP position), so all pointer
- * smoothing and acceleration live here. scan_time uses 100 us units. */
-
-/* One-euro adaptive low-pass: the cutoff follows speed, so a resting finger is
- * smoothed hard (jitter rejected without a positional dead zone, hence no
- * release jump) while a moving finger stays responsive. It self-tunes to the
- * user's motion, needs no training data, and costs a few multiply-adds. */
-#define POINTER_EURO_MIN_CUTOFF 1.4f
-#define POINTER_EURO_BETA 0.004f
+/* Pointer motion has one shared XY adaptive filter. Scroll retains its
+ * existing tuning; the derivative cutoff below belongs only to scrolling. */
 #define POINTER_EURO_D_CUTOFF 1.0f
-
-#define POINTER_JUMP_THRESHOLD 300.0f
 
 /* Acceleration is driven by filtered speed (raw units/s) instead of the
  * accumulated distance, so the curve tracks real hand motion. The range keeps
@@ -129,14 +120,14 @@ typedef struct {
 } axis_filter_t;
 
 static simulated_mouse_state_t m_state = {0};
-static axis_filter_t m_pointer = {0};
+static pointer_motion_t m_pointer = {0};
 static axis_filter_t m_scroll = {0};
 static float m_pointer_jitter = POINTER_JITTER_MIN;
 
 void ptp_simulated_mouse_reset(void)
 {
     m_state = (simulated_mouse_state_t){0};
-    m_pointer = (axis_filter_t){0};
+    m_pointer = (pointer_motion_t){0};
     m_scroll = (axis_filter_t){0};
     m_pointer_jitter = POINTER_JITTER_MIN;
 }
@@ -281,7 +272,7 @@ static void reset_move_state(void)
     m_state.pending_move_y = 0.0f;
     m_state.rem_x = 0.0f;
     m_state.rem_y = 0.0f;
-    m_pointer = (axis_filter_t){0};
+    m_pointer = (pointer_motion_t){0};
 }
 
 static void reset_scroll_state(void)
@@ -454,53 +445,22 @@ static void handle_pointer_move(float curr_x,
                                 uint16_t scan_time,
                                 mouse_hid_report_t *out_report)
 {
-    if (!m_state.has_move_anchor ||
-        m_state.move_contact_index != anchor_key ||
-        !m_pointer.initialized) {
+    if (!m_state.has_move_anchor || m_state.move_contact_index != anchor_key) {
         reset_move_state();
-        m_pointer = (axis_filter_t){.initialized = true,
-                                    .x = curr_x,
-                                    .y = curr_y,
-                                    .time = scan_time};
         m_state.move_contact_index = anchor_key;
         m_state.has_move_anchor = true;
+    }
+    pointer_step_t step = pointer_motion_update(&m_pointer, curr_x, curr_y, scan_time);
+    if (step.reanchored) {
+        m_state.pending_move_x = m_state.pending_move_y = 0;
+        m_state.rem_x = m_state.rem_y = 0;
+        m_pointer_jitter = POINTER_JITTER_MIN;
         return;
     }
-
-    float dt = scan_dt_seconds(scan_time, m_pointer.time);
-    m_pointer.time = scan_time;
-
-    float prev_x = m_pointer.x;
-    float prev_y = m_pointer.y;
-
-    /* A step this large cannot be real motion mid-touch: re-anchor instead of
-     * letting a spike through the filter. */
-    if (vector_length(curr_x - prev_x, curr_y - prev_y) > POINTER_JUMP_THRESHOLD) {
-        m_pointer.x = curr_x;
-        m_pointer.y = curr_y;
-        m_pointer.dx = 0.0f;
-        m_pointer.dy = 0.0f;
-        m_state.pending_move_x = 0.0f;
-        m_state.pending_move_y = 0.0f;
-        return;
-    }
-
-    float filtered_x = one_euro_axis(&m_pointer.x,
-                                     &m_pointer.dx,
-                                     curr_x,
-                                     dt,
-                                     POINTER_EURO_MIN_CUTOFF,
-                                     POINTER_EURO_BETA,
-                                     POINTER_EURO_D_CUTOFF);
-    float filtered_y = one_euro_axis(&m_pointer.y,
-                                     &m_pointer.dy,
-                                     curr_y,
-                                     dt,
-                                     POINTER_EURO_MIN_CUTOFF,
-                                     POINTER_EURO_BETA,
-                                     POINTER_EURO_D_CUTOFF);
-
-    float speed = vector_length(m_pointer.dx, m_pointer.dy);
+    /* An impulse held by the guard must not drain old motion into the host. */
+    if (m_pointer.candidate) return;
+    float filtered_x = m_pointer.x, filtered_y = m_pointer.y;
+    float speed = step.speed;
 
     /* Learn the resting jitter floor; it only ever raises the emit gate, so it
      * suppresses drift without discarding deliberate motion. */
@@ -514,8 +474,8 @@ static void handle_pointer_move(float curr_x,
         }
     }
 
-    m_state.pending_move_x += filtered_x - prev_x;
-    m_state.pending_move_y += filtered_y - prev_y;
+    m_state.pending_move_x += step.dx;
+    m_state.pending_move_y += step.dy;
 
     float pending = vector_length(m_state.pending_move_x, m_state.pending_move_y);
     float emit_floor =
@@ -726,7 +686,15 @@ static void parse_simulated_mouse_buttons(const tp_multi_msg_t *msg,
                 m_state.stable_count = (uint8_t)raw_count;
                 m_state.count_frames = 0;
             } else {
-                /* Transient change: hold every gesture state, resume next frame. */
+                if (m_state.stable_count == 0 && raw_count == 1) {
+                    int id = mask_nth_slot(raw_mask, 0);
+                    reset_move_state();
+                    m_state.has_move_anchor = true;
+                    m_state.move_contact_index = (uint8_t)id;
+                    pointer_motion_update(&m_pointer, msg->fingers[id].x,
+                        msg->fingers[id].y, msg->scan_time);
+                }
+                /* Transient changes still cannot promote a tap or gesture. */
                 return;
             }
         }

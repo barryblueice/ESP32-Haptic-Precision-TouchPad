@@ -1,4 +1,5 @@
 #include "input_pipeline.h"
+#include "input_diagnostics.h"
 #include "device_config.h"
 #include "rtos_queue.h"
 #include "I2C/TP/i2c_hid.h"
@@ -10,6 +11,7 @@
 #include "sdkconfig.h"
 #ifdef ESP_PLATFORM
 #include "I2C/TP/force_forward.h"
+#include "USB/usbhid.h"
 #endif
 
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
@@ -45,6 +47,7 @@ static void source_reset_locked(const char *reason)
 
 static void output_reset_locked(const char *reason)
 {
+    input_diag_recovery(reason);
     startup_pending = false;
     output_reason = reason;
     output_wait_up = true;
@@ -83,13 +86,20 @@ static bool output_ready_locked(uint32_t generation)
 }
 
 static uint32_t now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
-static void notify(TaskHandle_t task) { if (task) xTaskNotifyGive(task); }
+static void notify(TaskHandle_t task)
+{
+#ifdef ESP_PLATFORM
+    if (usbhid_notify_sender(task)) return;
+#endif
+    if (task) xTaskNotifyGive(task);
+}
 
 void input_pipeline_init(void)
 {
 #ifdef ESP_PLATFORM
     /* Serial instrumentation is excluded from native algorithm harnesses. */
     tp_raw_trace_init();
+    input_diag_init();
 #endif
     tp_data_queue = xQueueCreate(16, sizeof(input_frame_t));
     ESP_ERROR_CHECK(tp_data_queue ? ESP_OK : ESP_ERR_NO_MEM);
@@ -196,6 +206,7 @@ void input_source_recover(const char *reason)
     report_buffer_reset(&reports, reports.mode);
     output_wait_up = true;
     output_reason = reason;
+    input_diag_recovery(reason);
     source_reset_locked(reason);
     source_uncertain = true;
     if (usb_session) reports.release_mask = host_active_mask;
@@ -343,24 +354,26 @@ uint8_t input_mode(void)
     taskENTER_CRITICAL(&lock); uint8_t m = reports.mode; taskEXIT_CRITICAL(&lock); return m;
 }
 
-void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
+bool input_capture(const uint8_t *bytes, bool success, uint32_t generation,
                    uint32_t output_generation, uint32_t time_ms)
 {
+    uint32_t read_done_us = input_diag_now();
+    if (generation != input_source_generation()) return false;
     if (success) {
         uint16_t length = (uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8);
         /* Zero-length HID-I2C RESET completion is not a mouse sample. Its
          * unread/stale tail must never become contact or lift evidence. */
-        if (length == 0 || length == 2 || length == UINT16_MAX) return;
+        if (length == 0 || length == 2 || length == UINT16_MAX) return false;
         if (length < 6 || length > 64) {
             taskENTER_CRITICAL(&lock); ++reports.stats.read_failures; taskEXIT_CRITICAL(&lock);
             input_source_recover("raw_length");
-            return;
+            return false;
         }
     }
 #ifdef ESP_PLATFORM
     if (success) tp_raw_trace_capture(bytes, time_ms, generation, output_generation);
 #endif
-    input_frame_t frame = {.generation = generation, .output_generation = output_generation, .time_ms = time_ms};
+    input_frame_t frame = {.generation = generation, .output_generation = output_generation, .time_ms = time_ms, .read_done_us = read_done_us};
     if (success) memcpy(frame.bytes, bytes, sizeof(frame.bytes));
     if (success) {
         bool active = (bytes[3] & 7U) != 0;
@@ -368,6 +381,7 @@ void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
             active = false;
             for (unsigned i = 0; i < 5; ++i) active |= (bytes[4 + i * 8] & 1U) != 0;
         }
+        input_diag_capture(generation, active, read_done_us);
         taskENTER_CRITICAL(&lock);
         /* Track capture, even before the parser runs or while mode is pending. */
         if (generation == source_generation && now_ms() - time_ms <= REPORT_MAX_AGE_MS) {
@@ -391,13 +405,20 @@ void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
     TaskHandle_t p = parser;
     taskEXIT_CRITICAL(&lock);
     if (first) ESP_LOGI("INPUT", "First controller input at %" PRIu32 " ms, length=%u", now_ms(), bytes[0]);
+#if CONFIG_INPUT_LATENCY_DIAGNOSTICS
+    input_diag_depth(uxQueueMessagesWaiting(tp_data_queue), 0);
+#endif
     notify(p);
+    return success && !overflow && generation == input_source_generation();
 }
 
 bool input_next_frame(input_frame_t *frame)
 {
     while (xQueueReceive(tp_data_queue, frame, 0) == pdPASS)
-        if (frame->generation == input_source_generation()) return true;
+        if (frame->generation == input_source_generation()) {
+            if (frame->read_done_us) input_diag_sample(INPUT_DIAG_RAW_WAIT, input_diag_now() - frame->read_done_us);
+            return true;
+        }
     return false;
 }
 
@@ -425,6 +446,7 @@ bool input_publish_pair(uint32_t generation, input_report_t *down, input_report_
             ok = report_buffer_push(&reports, down, false) && report_buffer_push(&reports, up, false);
         else { report_buffer_reset(&reports, reports.mode); ok = false; }
     }
+    input_diag_depth(0, reports.count);
     bool reset = before != reports.generation;
     if (reset) output_reset_locked("pair_full");
     taskEXIT_CRITICAL(&lock);
@@ -437,6 +459,7 @@ bool input_publish(uint32_t generation, input_report_t *report, bool tap)
     uint32_t before = reports.generation;
     bool ok = output_ready_locked(generation) &&
         report_buffer_push(&reports, report, tap);
+    input_diag_depth(0, reports.count);
     bool reset = before != reports.generation;
     if (reset) output_reset_locked("report_full");
     TaskHandle_t s = sender, p = parser;
@@ -452,6 +475,7 @@ bool input_take_report(input_report_t *report)
     uint32_t before = reports.generation;
     bool ok = ready_mask && report_buffer_take(&reports, now_ms(), report);
     if (ok && !(ready_mask & (1U << report->mode))) ok = false;
+    input_diag_depth(0, reports.count);
     bool reset = before != reports.generation;
     if (reset) {
         output_reset_locked("report_age");
@@ -468,7 +492,7 @@ bool input_report_current(const input_report_t *report)
 {
     taskENTER_CRITICAL(&lock);
     bool ok = report_buffer_current(&reports, report) && (ready_mask & (1U << report->mode));
-    uint32_t age = now_ms() - report->time_ms;
+    uint32_t age = now_ms() - report->queued_time_ms;
     if (ok && !report->release && age > reports.stats.longest_wait_ms) reports.stats.longest_wait_ms = age;
     bool stale = ok && !report->release && age > REPORT_MAX_AGE_MS;
     if (stale) {

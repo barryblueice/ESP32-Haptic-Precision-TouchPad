@@ -1,9 +1,11 @@
 #ifndef USBHID_H
 #define USBHID_H
+#include <stdbool.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+bool usbhid_notify_sender(TaskHandle_t task);
 void usbhid_task(void *arg);
 void usbhid_init(void);
 void usbhid_remote_wakeup_request(void);

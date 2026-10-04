@@ -39,6 +39,13 @@ menu "TouchPad Configuration"
             Paused during sleep, wake and mode changes. No calibration or
             firmware writes. QualifiedKeystroke is zero (no keyboard source).
 
+    config INPUT_LATENCY_DIAGNOSTICS
+        bool "Aggregate input latency diagnostics every 5 seconds"
+        default n
+        help
+            Log bounded latency histograms, queue peaks and recovery reasons.
+            No per-frame logging. Read-to-USB metrics exclude gesture replay.
+
     menu "USB Descriptor Options"
 
         config TOUCHPAD_MANUFACTURER_STRING

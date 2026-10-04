@@ -505,7 +505,7 @@ uint8_t const desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, 3, 0, CONFIG_TOTAL_LEN,
         TUSB_DESC_CONFIG_ATT_SELF_POWERED | TUSB_DESC_CONFIG_ATT_REMOTE_WAKEUP, 100),
     TUD_HID_DESCRIPTOR(0, 0, false, sizeof(generic_hid_report_descriptor), EPNUM_GENERIC_IN, 64, 10),
-    TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(ptp_hid_report_descriptor), EPNUM_TP_IN, 64, 10),
+    TUD_HID_DESCRIPTOR(1, 0, HID_ITF_PROTOCOL_NONE, sizeof(ptp_hid_report_descriptor), EPNUM_TP_IN, 64, 1),
     TUD_HID_DESCRIPTOR(2, 0, HID_ITF_PROTOCOL_MOUSE, sizeof(mouse_hid_report_descriptor), EPNUM_MOUSE_IN, 16, 1)
 };
 

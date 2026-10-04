@@ -11,7 +11,7 @@ enum {
     KNUCKLE_DOWN_MIN_MS = 8, KNUCKLE_DOWN_MAX_MS = 120,
     KNUCKLE_SAMPLE_GAP_MS = 60,
     KNUCKLE_GAP_MIN_MS = 60, KNUCKLE_GAP_MAX_MS = 350,
-    KNUCKLE_MOVE_MAX = 60, KNUCKLE_PAIR_DISTANCE = 160
+    KNUCKLE_MOVE_MAX = 12, KNUCKLE_PAIR_DISTANCE = 160
 };
 /* V2 features: peak Z, weighted area, duration ms, first peak ms,
  * maximum adjacent positive dZ/ms, pressure-weighted area standard deviation. */

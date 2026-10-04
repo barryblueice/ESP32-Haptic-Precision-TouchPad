@@ -3,7 +3,7 @@
 #include "freertos/task.h"
 
 /* Raw frames use the source generation; HID/aux reports use input_generation(). */
-typedef struct { uint8_t bytes[64]; uint32_t generation, output_generation, time_ms; } input_frame_t;
+typedef struct { uint8_t bytes[64]; uint32_t generation, output_generation, time_ms, read_done_us; } input_frame_t;
 
 void input_pipeline_init(void);
 /* True until the first real host input is acknowledged (or a real fault). */
@@ -31,7 +31,8 @@ bool input_force_forward_ready(uint32_t generation);
 void input_source_button(uint32_t generation, bool down);
 void input_source_gesture(uint32_t generation, bool point);
 bool input_output_ready(uint32_t generation);
-void input_capture(const uint8_t *bytes, bool success, uint32_t generation,
+/* True only for an enqueued frame still belonging to the current source. */
+bool input_capture(const uint8_t *bytes, bool success, uint32_t generation,
                    uint32_t output_generation, uint32_t time_ms);
 bool input_next_frame(input_frame_t *frame);
 uint32_t input_generation(void);

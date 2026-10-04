@@ -51,14 +51,18 @@ static bool append(report_buffer_t *b, const input_report_t *r)
     report_entry_t *e = b->count ? &b->entries[b->count - 1] : NULL;
     /* Never move an edge's coordinates or deltas to a later sample. */
     if (!edge && e && !e->edge && same_state(&e->report, r)) {
-        if (r->mode == PTP_MODE) e->report.data.ptp = r->data.ptp;
+        if (r->mode == PTP_MODE) {
+            e->report.data.ptp = r->data.ptp;
+            e->report.time_ms = r->time_ms;
+            e->report.read_done_us = r->read_done_us;
+        }
         else if (!add_axis(&e->x, r->data.mouse.x) || !add_axis(&e->y, r->data.mouse.y) ||
                  !add_axis(&e->wheel, r->data.mouse.wheel) || !add_axis(&e->pan, r->data.mouse.pan)) return false;
         ++b->stats.merged;
     } else {
         if (b->count == REPORT_BUFFER_CAPACITY) return false;
         e = &b->entries[b->count++];
-        *e = (report_entry_t){.report = *r, .edge = edge};
+        *e = (report_entry_t){.report = *r, .edge = edge, .first_time_ms = r->time_ms};
         e->report.generation = b->generation;
         if (r->mode == MOUSE_MODE) {
             e->x = r->data.mouse.x; e->y = r->data.mouse.y;
@@ -98,7 +102,7 @@ static int8_t split_axis(int32_t *value)
 bool report_buffer_take(report_buffer_t *b, uint32_t now, input_report_t *out)
 {
     if (b->count) {
-        uint32_t age = now - b->entries[0].report.time_ms;
+        uint32_t age = now - b->entries[0].first_time_ms;
         if (age > b->stats.longest_wait_ms) b->stats.longest_wait_ms = age;
         if (age > REPORT_MAX_AGE_MS) report_buffer_reset(b, b->mode);
     }
@@ -114,6 +118,7 @@ bool report_buffer_take(report_buffer_t *b, uint32_t now, input_report_t *out)
     if (!b->count) return false;
     report_entry_t *e = &b->entries[0];
     *out = e->report;
+    out->queued_time_ms = e->first_time_ms;
     if (out->mode == MOUSE_MODE) {
         out->data.mouse.x = split_axis(&e->x); out->data.mouse.y = split_axis(&e->y);
         out->data.mouse.wheel = split_axis(&e->wheel); out->data.mouse.pan = split_axis(&e->pan);

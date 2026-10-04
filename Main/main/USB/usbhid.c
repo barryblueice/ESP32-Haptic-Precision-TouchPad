@@ -26,6 +26,8 @@
 #include "SYS/input_pipeline.h"
 
 #include "USB/usbhid.h"
+#include "USB/usb_pump_state.h"
+#include "SYS/input_diagnostics.h"
 #include "USB/usb_config.h"
 #include "USB/usb_aux.h"
 #include "SYS/device_config.h"
@@ -113,9 +115,11 @@ static input_report_t usb_flight[3];
 static bool usb_busy[3];
 static bool usb_aux_flight;
 static usb_aux_report_t usb_aux_buffer;
-/* Everything except pump_queued belongs to the TinyUSB task. This serializes
+/* Everything except pump_state belongs to the TinyUSB task. This serializes
  * endpoint submission with reset, SET_REPORT and completion callbacks. */
-static bool pump_queued, usb_configured;
+static usb_pump_state_t pump_state;
+static bool usb_configured;
+static uint32_t usb_submitted_us[3];
 static TaskHandle_t usb_sender_task;
 static bool pump_enqueued;
 static bool usb_remote_wakeup_enabled, usb_remote_wakeup_requested;
@@ -124,8 +128,20 @@ static uint32_t usb_epoch, usb_flight_epoch[3], usb_route_epoch[3];
 static input_report_t usb_pending;
 static bool usb_have_pending, usb_prefer_aux = true;
 
+/* All pipeline wakes pass through here, including completion and recovery.
+ * Return false for other tasks so the generic notifier can handle them. */
+bool usbhid_notify_sender(TaskHandle_t task)
+{
+    taskENTER_CRITICAL(&usb_tx_lock);
+    bool ours = task && task == usb_sender_task;
+    if (ours) usb_pump_request(&pump_state);
+    taskEXIT_CRITICAL(&usb_tx_lock);
+    if (ours) xTaskNotifyGive(task);
+    return ours;
+}
+
 /* usbd_defer_func has no return value. Its hook runs synchronously only after
- * enqueue succeeds; a full stack event queue must not leave pump_queued stuck.
+ * enqueue succeeds; a full stack event queue must not leave the pump stuck.
  * These two fields are used solely by the sender task (never by the ISR). */
 void tud_event_hook_cb(uint8_t rhport, uint32_t eventid, bool in_isr)
 {
@@ -144,7 +160,7 @@ void usbhid_remote_wakeup_request(void)
     else
         sender = NULL;
     taskEXIT_CRITICAL(&usb_tx_lock);
-    if (sender != NULL) xTaskNotifyGive(sender);
+    if (sender != NULL) usbhid_notify_sender(sender);
 }
 
 static void usb_complete(uint8_t instance, bool success)
@@ -164,7 +180,12 @@ static void usb_complete(uint8_t instance, bool success)
     if (busy && !owner) busy = false;
     if (busy && aux) { usb_aux_complete(success); if (!success) input_recover(); }
     else if (busy) {
-        if (success) input_report_ack(&report);
+        if (success) {
+            uint32_t now = input_diag_now();
+            input_diag_sample(INPUT_DIAG_USB_FLIGHT, now - usb_submitted_us[instance]);
+            if (report.read_done_us) input_diag_sample(INPUT_DIAG_COMPLETE, now - report.read_done_us);
+            input_report_ack(&report);
+        }
         else {
             input_submit_failed();
             if (input_report_current(&report)) input_recover();
@@ -479,6 +500,9 @@ static void usb_send_pump(void *arg)
                         tud_hid_n_report(instance, REPORTID_TOUCHPAD, &usb_pending.data.ptp, sizeof(ptp_report_t)) :
                         tud_hid_n_report(instance, REPORTID_MOUSE, &usb_pending.data.mouse, sizeof(mouse_hid_report_t));
                     if (accepted) {
+                        usb_submitted_us[instance] = input_diag_now();
+                        if (usb_pending.read_done_us)
+                            input_diag_sample(INPUT_DIAG_SUBMIT, usb_submitted_us[instance] - usb_pending.read_done_us);
                         usb_route_epoch[instance] = connection_epoch();
                         connection_flight(WIRED_MODE, usb_route_epoch[instance], true);
                         input_report_submitted(&usb_pending);
@@ -494,8 +518,10 @@ static void usb_send_pump(void *arg)
     }
     connection_unlock();
     taskENTER_CRITICAL(&usb_tx_lock);
-    pump_queued = false;
+    bool again = usb_pump_finish(&pump_state);
+    TaskHandle_t sender = usb_sender_task;
     taskEXIT_CRITICAL(&usb_tx_lock);
+    if (again && sender) xTaskNotifyGive(sender);
 }
 
 void usbhid_task(void *arg)
@@ -510,15 +536,14 @@ void usbhid_task(void *arg)
         if (connection_selected(WIRED_MODE)) input_log_stats();
         connection_unlock();
         taskENTER_CRITICAL(&usb_tx_lock);
-        bool schedule = !pump_queued;
-        if (schedule) pump_queued = true;
+        bool schedule = usb_pump_schedule(&pump_state);
         taskEXIT_CRITICAL(&usb_tx_lock);
         if (schedule) {
             pump_enqueued = false;
             usbd_defer_func(usb_send_pump, NULL, false);
             if (!pump_enqueued) {
                 taskENTER_CRITICAL(&usb_tx_lock);
-                pump_queued = false;
+                usb_pump_finish(&pump_state);
                 taskEXIT_CRITICAL(&usb_tx_lock);
             }
         }

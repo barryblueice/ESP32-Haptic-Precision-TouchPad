@@ -1,5 +1,5 @@
 #include "I2C/TP/i2c_hid.h"
-#include "I2C/TP/force_forward.h"
+#include "SYS/input_diagnostics.h"
 #include "I2C/TP/tp_coordinates.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -63,10 +63,10 @@ static uint16_t raw_x_history[5][HISTORY_LEN] = {0};
 static uint16_t raw_y_history[5][HISTORY_LEN] = {0};
 static uint16_t last_raw_x[5] = {0};
 static uint16_t last_raw_y[5] = {0};
-/* Median + jump-guarded coordinate, exposed to the simulated mouse so it keeps
- * impulse-noise rejection without the tap-hold freeze or the EMA lag. */
-static uint16_t slot_median_x[5] = {0};
-static uint16_t slot_median_y[5] = {0};
+/* Rotated samples for mouse motion. Its single trajectory filter owns jump
+ * rejection; PTP retains its existing independent coordinate processing. */
+static uint16_t slot_mouse_x[5] = {0};
+static uint16_t slot_mouse_y[5] = {0};
 static uint16_t origin_x[5] = {0};
 static uint16_t origin_y[5] = {0};
 
@@ -455,8 +455,8 @@ static void reset_input_state(void)
     memset(raw_y_history, 0, sizeof(raw_y_history));
     memset(last_raw_x, 0, sizeof(last_raw_x));
     memset(last_raw_y, 0, sizeof(last_raw_y));
-    memset(slot_median_x, 0, sizeof(slot_median_x));
-    memset(slot_median_y, 0, sizeof(slot_median_y));
+    memset(slot_mouse_x, 0, sizeof(slot_mouse_x));
+    memset(slot_mouse_y, 0, sizeof(slot_mouse_y));
     memset(origin_x, 0, sizeof(origin_x));
     memset(origin_y, 0, sizeof(origin_y));
     memset(slot_filter_x, 0, sizeof(slot_filter_x));
@@ -481,12 +481,14 @@ void i2c_queue_task(void *arg) {
     input_frame_t frame;
     uint32_t generation = input_source_generation();
     uint32_t output_generation = input_generation();
+    uint32_t parse_start = 0;
     bool last_all_up = true;
     int previous_format = -1;
     uint8_t previous_mode = current_tp_mode;
 
     while (1) {
-
+        if (parse_start) input_diag_sample(INPUT_DIAG_PARSE, input_diag_now() - parse_start);
+        parse_start = 0;
         tp_multi_msg_t tp_msg = {0};
         mouse_msg_t mouse_msg = {0};
 
@@ -541,6 +543,7 @@ void i2c_queue_task(void *arg) {
                 continue;
             }
         }
+        parse_start = input_diag_now();
         /* A reset may have raced with dequeuing the next captured frame. */
         if (generation != frame.generation) {
             generation = frame.generation;
@@ -560,16 +563,6 @@ void i2c_queue_task(void *arg) {
         }
         uint32_t report_generation = frame.output_generation;
         if (frame.generation != input_source_generation()) continue;
-        /* Upstream capture validated the length. Run only for a fresh frame,
-         * before host admission or gesture buffering; replay never samples. */
-        if (!buffered_timeout) {
-            force_forward_report(&frame);
-            if (frame.generation != input_source_generation()) continue;
-            if ((uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
-                input_source_recover("raw_age");
-                continue;
-            }
-        }
         bool local_ready = input_source_observe(frame.generation, all_up);
         bool publish = input_observe(report_generation, all_up);
         last_all_up = all_up;
@@ -703,8 +696,8 @@ void i2c_queue_task(void *arg) {
                         } else {
                             consecutive_errors[id] = 0;
                         }
-                        slot_median_x[id] = mx;
-                        slot_median_y[id] = my;
+                        slot_mouse_x[id] = rx;
+                        slot_mouse_y[id] = ry;
 
                         int alpha_speed = abs(rx - (int)last_raw_x[id]) + abs(ry - (int)last_raw_y[id]);
                         uint32_t dynamic_alpha = (alpha_speed < 3) ? 64 : (alpha_speed < 12 ? 115 : 218);
@@ -836,6 +829,7 @@ void i2c_queue_task(void *arg) {
                     if (ble_custom_gestures && (edge.suppress || owned)) ptp_simulated_mouse_reset();
 #endif
                     if (edge.tap) {
+                        /* Region taps are synthetic, excluded from transport latency. */
                         input_report_t down = {.mode = input_mode(), .time_ms = report_time_ms};
                         input_report_t up = down;
                         if (down.mode == PTP_MODE) {
@@ -860,19 +854,17 @@ void i2c_queue_task(void *arg) {
                 if (point_state.owned) ptp_reset_force_click(&tp_msg);
                 else ptp_update_force_click_button(&tp_msg, active_finger_count);
                 tp_msg.actual_count = active_finger_count > 0 ? active_finger_count : 1;
-                input_report_t report = {.mode = input_mode(), .time_ms = report_time_ms};
+                input_report_t report = {.mode = input_mode(), .time_ms = report_time_ms,
+                    .read_done_us = knock.replay ? 0 : frame.read_done_us};
                 bool tap = false;
                 if (report.mode == MOUSE_MODE) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
-                    /* The simulated pointer owns its own trajectory filter: hand
-                     * it the median/jump-guarded coordinate so the tap-hold
-                     * freeze and the shared EMA cannot add lag or a release
-                     * jump, while impulse rejection is preserved. Every other
-                     * field (buttons, confidence, scan time) is untouched. */
+                    /* Confidence/gesture ownership is unchanged; mouse motion
+                     * uses raw rotated samples and rejects jumps in one place. */
                     tp_multi_msg_t mouse_msg = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) {
-                        mouse_msg.fingers[id].x = slot_median_x[id];
-                        mouse_msg.fingers[id].y = slot_median_y[id];
+                        mouse_msg.fingers[id].x = slot_mouse_x[id];
+                        mouse_msg.fingers[id].y = slot_mouse_y[id];
                     }
                     parse_ptp_simulated_mouse_report(&mouse_msg, &report.data.mouse);
                     /* Only force clicks drive haptics; taps and tap-drags are virtual buttons. */
@@ -907,7 +899,7 @@ void i2c_queue_task(void *arg) {
                 mouse_msg.buttons = tp_packet[3];
                 input_source_button(frame.generation, (mouse_msg.buttons & 0x03U) != 0);
 
-                input_report_t report = {.mode = MOUSE_MODE, .time_ms = frame.time_ms};
+                input_report_t report = {.mode = MOUSE_MODE, .time_ms = frame.time_ms, .read_done_us = frame.read_done_us};
                 parse_mouse_report(&mouse_msg, &report.data.mouse);
                 if (publish) input_publish(report_generation, &report, false);
             }

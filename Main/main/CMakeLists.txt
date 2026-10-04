@@ -17,6 +17,7 @@ set(srcs
     "I2C/TP/i2c_watchdog.c"
     "I2C/TP/tp_report_handle.c"
     "I2C/TP/ptp_simulated_mouse_gesture.c"
+    "I2C/TP/pointer_motion.c"
 
     "I2C/SUB_DEV/cs40l25_surface.c"
     "I2C/SUB_DEV/surface_haptic_policy.c"
@@ -51,6 +52,7 @@ set(srcs
     "SYS/rtos_queue.c"
     "SYS/report_buffer.c"
     "SYS/input_pipeline.c"
+    "SYS/input_diagnostics.c"
     "SYS/connection.c"
     "SYS/connection_policy.c"
     "SYS/rstp_protocol.c"
