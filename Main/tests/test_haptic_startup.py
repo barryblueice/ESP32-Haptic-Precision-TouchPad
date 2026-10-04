@@ -110,7 +110,7 @@ unsigned bsp_initialize(void (*notify)(uint32_t,void *),void *arg) { (void)notif
 unsigned bsp_dut_initialize(void) { return 0; }
 unsigned bsp_dut_boot(bool cal) { (void)cal; return scenario==12; }
 unsigned bsp_dut_power_up(void) { return scenario==11; }
-unsigned bsp_dut_process(void) { return scenario==9 && ++processes>10; }
+unsigned bsp_dut_process(void) { return scenario==9 && ++processes>1; }
 unsigned bsp_dut_get_startup_status(bsp_dut_startup_status_t *s) {
     ++snapshots;
     if(scenario==8 && snapshots>=2) return 1;
@@ -181,7 +181,9 @@ class StartupTests(unittest.TestCase):
     def test_logged_standby_with_static_nonzero_heartbeat_succeeds(self):
         self.assertEqual(self.lib.test_initialize(0), 1)
         self.assertEqual(self.lib.test_configured(), 2)
-        self.assertLess(self.lib.test_ticks(), 1000)
+        # Keep the 250 ms supply wait and one 10 ms readiness observation,
+        # without a fixed 100 ms pre-power-up delay.
+        self.assertEqual(self.lib.test_ticks(), 260)
 
     def test_active_dsp_progress_succeeds(self):
         self.assertEqual(self.lib.test_initialize(1), 1)
@@ -190,7 +192,7 @@ class StartupTests(unittest.TestCase):
         for scenario in (2, 3, 4, 5, 6, 13):
             with self.subTest(scenario=scenario):
                 self.assertEqual(self.lib.test_initialize(scenario), 0)
-                self.assertGreaterEqual(self.lib.test_ticks(), 2350)
+                self.assertGreaterEqual(self.lib.test_ticks(), 2250)
                 self.assertEqual(self.lib.test_configured(), 0)
 
     def test_transitional_power_state_can_settle(self):

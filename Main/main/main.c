@@ -75,6 +75,10 @@ void app_main(void) {
     irq_int_init();
     ESP_LOGI(TAG, "Startup: touch capture enabled at %" PRIi64 " ms", esp_timer_get_time() / 1000);
     sub_dev_init();  // Register I2C1 before transport battery queries or haptics.
+    /* Both buses and the shared reset are ready. Load DSP RAM in its worker
+     * while transports initialize; touch keeps its higher-priority reader.
+     * Each firmware block is only 240 bytes, so bus ownership stays bounded. */
+    cs40l25_surface_init();
 
 
     if (current_mode == BLE_MODE) {
@@ -93,9 +97,6 @@ void app_main(void) {
         ESP_ERROR_CHECK(xTaskCreatePinnedToCore(wifi_send_task, "wifi_send_task", 4096, NULL, 12, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     }
     ESP_LOGI(TAG, "Startup: transport initialized at %" PRIi64 " ms", esp_timer_get_time() / 1000);
-    /* Firmware loading shares I2C0 with touch. Start it after input/transport
-     * setup so the first mode command is not queued behind DSP downloads. */
-    cs40l25_surface_init();
 }
 
 #endif

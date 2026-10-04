@@ -20,6 +20,8 @@ void input_set_link(uint8_t ready_mask);
 /* USB task only: reset destroys the host session; suspend preserves transfers. */
 void input_usb_reset(void);
 void input_usb_link(bool ready);
+/* USB SUSPEND/RESUME only; detach/reset must use the strict session APIs. */
+void input_usb_suspend(bool suspended);
 void input_report_submitted(const input_report_t *report);
 void input_recover(void);
 /* Reset raw parsing and host output. Diagnostic reason must have static storage. */

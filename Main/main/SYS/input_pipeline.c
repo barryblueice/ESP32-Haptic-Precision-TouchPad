@@ -28,6 +28,8 @@ static uint32_t source_generation;
 static bool source_wait_up, output_wait_up;
 static bool usb_session, physical_active, source_uncertain;
 static bool startup_pending, first_frame_seen;
+/* Only a fault-free USB suspend entered with no held contact may rebase wake input. */
+static bool usb_idle_suspend;
 static uint8_t host_active_mask;
 static bool physical_mode_valid, physical_ptp, mode_retry;
 static uint32_t mode_retry_at;
@@ -37,6 +39,7 @@ static const char *source_reason = "startup", *output_reason = "startup";
 static void source_reset_locked(const char *reason)
 {
     ++source_generation;
+    usb_idle_suspend = false;
 #ifdef ESP_PLATFORM
     force_forward_invalidate();
 #endif
@@ -307,18 +310,45 @@ void input_usb_reset(void)
     input_wake_parser(); input_wake_sender();
 }
 
-void input_usb_link(bool ready)
+static void input_usb_update_link(bool ready, bool power_event)
 {
     taskENTER_CRITICAL(&lock);
+    /* Detach/attach is never an idle resume, even if readiness was already 0. */
+    if (!power_event) usb_idle_suspend = false;
+    bool idle_suspend = power_event && !ready && ready_mask && usb_session &&
+        first_frame_seen && mode_applied && !mode_pending && !transport_paused &&
+        !physical_active && !host_active_mask && !source_uncertain &&
+        !source_wait_up && !output_wait_up && !reports.recovering && !reports.count;
+    bool fresh_wake = power_event && ready && usb_idle_suspend && usb_session &&
+        !source_uncertain && !source_wait_up && !mode_pending && !transport_paused &&
+        !host_active_mask;
     if (ready_mask != (ready ? 3 : 0)) {
         report_buffer_reset(&reports, reports.mode);
-        /* Cold startup includes an already resting finger; runtime reconnection
-         * still requires the previous physical contact to end. */
         transition_locked(ready ? "usb_ready" : "usb_suspend", true);
+        if (fresh_wake) {
+            /* The finger arrived AFTER a clean, all-up suspend. Retire old
+             * parser/output generations, but admit this new contact on resume.
+             * Faults, resets and mode/route changes invalidate the token. */
+            source_wait_up = output_wait_up = false;
+            reports.recovery_ready = true;
+            reports.recovering = reports.release_mask != 0;
+        }
+        if (idle_suspend) usb_idle_suspend = true;
     }
+    if (ready) usb_idle_suspend = false;
     ready_mask = ready ? 3 : 0;
     taskEXIT_CRITICAL(&lock);
     input_wake_parser(); input_wake_sender();
+}
+
+void input_usb_link(bool ready)
+{
+    input_usb_update_link(ready, false);
+}
+
+void input_usb_suspend(bool suspended)
+{
+    input_usb_update_link(!suspended, true);
 }
 
 static bool report_active(const input_report_t *report)

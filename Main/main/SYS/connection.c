@@ -120,6 +120,17 @@ void connection_link(int transport, bool ready)
     }
     input_wake_parser();
 }
+void connection_usb_suspend(bool suspended)
+{
+    /* USB task holds connection_lock, just like connection_link. */
+    if (!gpio_get_level(VBUS_DET_GPIO)) {
+        connection_link(WIRED_MODE, false);
+        return;
+    }
+    links[WIRED_MODE] = !suspended;
+    if (connection_selected(WIRED_MODE)) input_usb_suspend(suspended);
+    input_wake_parser();
+}
 void connection_usb_reset(void)
 {
     /* A bus reset tears down the host session, not the Input Mode the host

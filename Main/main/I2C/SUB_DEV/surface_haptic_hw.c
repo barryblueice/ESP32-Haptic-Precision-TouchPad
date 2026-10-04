@@ -155,10 +155,9 @@ bool surface_haptic_hw_initialize(void)
     CHECK_BSP(bsp_dut_boot(false));
     firmware_loaded = true;
     bsp_dut_log_gain("post-boot");
-    for (unsigned int i = 0; i < 10; ++i) {
-        CHECK_BSP(surface_haptic_hw_process());
-        wait_ms(10);
-    }
+    /* Service pending faults once. Power-up and the readiness loop below
+     * already validate HALO, scratch and heartbeat; no blind 100 ms pause. */
+    CHECK_BSP(surface_haptic_hw_process());
     CHECK_BSP(bsp_dut_power_up());
     bsp_dut_startup_status_t status;
     CHECK_BSP(bsp_dut_get_startup_status(&status));

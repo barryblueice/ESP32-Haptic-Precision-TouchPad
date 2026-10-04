@@ -27,4 +27,5 @@ uint32_t connection_epoch(void);
 void connection_flight(int transport, uint32_t epoch, bool submitted);
 void connection_link(int transport, bool ready);
 void connection_usb_reset(void);
+void connection_usb_suspend(bool suspended);
 void connection_usb_mode(uint8_t mode);

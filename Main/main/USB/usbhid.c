@@ -408,7 +408,7 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         usb_remote_wakeup_attempted = false;
         taskEXIT_CRITICAL(&usb_tx_lock);
         if (connection_selected(WIRED_MODE)) usb_aux_cancel();
-        connection_link(WIRED_MODE, false);
+        connection_usb_suspend(true);
         ESP_LOGI(TAG, "USB suspended epoch=%" PRIu32, usb_epoch);
         break;
     case TINYUSB_EVENT_RESUMED:
@@ -419,7 +419,7 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
         taskEXIT_CRITICAL(&usb_tx_lock);
         /* cancel retains in-flight reports and only releases actual held keys. */
         if (connection_selected(WIRED_MODE)) usb_aux_cancel();
-        if (usb_configured) connection_link(WIRED_MODE, true);
+        if (usb_configured) connection_usb_suspend(false);
         ESP_LOGI(TAG, "USB resumed epoch=%" PRIu32, usb_epoch);
         break;
     default:
