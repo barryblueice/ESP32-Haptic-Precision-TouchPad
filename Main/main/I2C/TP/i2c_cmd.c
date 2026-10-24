@@ -5,6 +5,7 @@
 #include "freertos/task.h"
 #include "I2C/TP/i2c_hid.h"
 #include "I2C/TP/force_forward.h"
+#include "I2C/TP/synaptics_border.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 
 #include "sdkconfig.h"
@@ -183,6 +184,11 @@ void touchpad_init(void) {
     };
 
     ESP_ERROR_CHECK(gpio_config(&int_conf));
+    tp_hw_reset();
+    /* Query before either input consumer starts. Always reset afterwards so
+     * an incomplete RMI reply cannot enter the normal touch stream. The shared
+     * reset still precedes haptic firmware loading in app_main(). */
+    (void)synaptics_border_log_startup(dev_handle);
     tp_hw_reset();
     hid_init_sequence();
 
