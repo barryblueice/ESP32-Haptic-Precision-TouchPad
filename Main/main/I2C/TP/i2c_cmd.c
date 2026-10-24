@@ -185,11 +185,13 @@ void touchpad_init(void) {
 
     ESP_ERROR_CHECK(gpio_config(&int_conf));
     tp_hw_reset();
+#if SYNA_STARTUP_DIAGNOSTICS_ENABLED
     /* Query before either input consumer starts. Always reset afterwards so
      * an incomplete RMI reply cannot enter the normal touch stream. The shared
      * reset still precedes haptic firmware loading in app_main(). */
     (void)synaptics_border_log_startup(dev_handle);
     tp_hw_reset();
+#endif
     hid_init_sequence();
 
     ESP_ERROR_CHECK(xTaskCreatePinnedToCore(i2c_queue_task, "i2c_queue_task", 6144, NULL, 15, NULL, 1) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);

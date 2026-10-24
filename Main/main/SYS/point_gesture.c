@@ -2,7 +2,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-enum { POINT_IDLE, POINT_ACTIVE, POINT_PASSTHROUGH, POINT_SUPPRESSED, POINT_WAITING };
 void point_gesture_reset(point_gesture_t *s) { memset(s, 0, sizeof(*s)); }
 bool point_gesture_inside(unsigned p, unsigned radius, uint16_t x, uint16_t y,
     uint16_t xmax, uint16_t ymax, uint16_t width, uint16_t height)

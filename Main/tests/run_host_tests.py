@@ -12,6 +12,14 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 def body(path):
     source = path.read_text(encoding='utf-8')
+    for header in ('I2C/TP/tp_f12.h', 'I2C/TP/tp_raw_trace.h'):
+        include = '#include "'+header+'"'
+        if include in source:
+            source = source.replace(include, body(ROOT/'main'/header))
+    for include in ('#include "input_diagnostics.h"', '#include "SYS/input_diagnostics.h"'):
+        if include in source:
+            source = source.replace(include, '#ifndef TEST_INPUT_DIAGNOSTICS_H\n#define TEST_INPUT_DIAGNOSTICS_H\n'
+                + body(ROOT/'main/SYS/input_diagnostics.h') + '\n#endif\n')
     if path.name == 'knuckle_gesture.c':
         source = source.replace('#include "knuckle_model_v2.h"', body(path.parent/'knuckle_model_v2.h'))
     return re.sub(r'^#include[^\n]*\n|^#pragma once[^\n]*\n', '', source, flags=re.M)

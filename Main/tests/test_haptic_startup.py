@@ -53,6 +53,7 @@ typedef void *i2c_master_bus_handle_t;
 #define CS40L25_EVENT_FLAG_STATE_ERROR (1U << 7)
 #define pdMS_TO_TICKS(ms) (ms)
 #define ESP_LOGI(...) mock_log(__VA_ARGS__)
+#define ESP_LOGD(...) mock_log(__VA_ARGS__)
 #define ESP_LOGE(...) mock_log(__VA_ARGS__)
 extern i2c_master_dev_handle_t dev_haptic_motor_handle, sub_dev_mp28167_handle;
 extern i2c_master_bus_handle_t bus_handle, sub_bus_handle;

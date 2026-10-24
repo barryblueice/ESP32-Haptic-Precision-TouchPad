@@ -2,6 +2,9 @@
 #include "driver/i2c_master.h"
 #include "esp_err.h"
 
+/* Temporary startup RMI diagnostics, disabled in normal operation. */
+#define SYNA_STARTUP_DIAGNOSTICS_ENABLED 0
+
 /* Startup only, with exclusive I2C/input ownership and INT configured.
  * Reads Synaptics capabilities/register snapshots and requests F54 reports.
  * Does not change sensor tuning, calibrate, or issue flash commands.

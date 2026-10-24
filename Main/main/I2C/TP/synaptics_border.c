@@ -97,6 +97,8 @@ static esp_err_t discover_hid(void)
     if (!len || len > sizeof(descriptor) || input_size < 4 || input_size > 64 ||
         output_size < 8 || output_size > 64) return ESP_ERR_INVALID_SIZE;
     TRY(hid_read(u16(d + 6), descriptor, len));
+    ESP_LOGI(TAG, "HID report_descriptor addr=%04x bytes=%u RAW:", u16(d + 6), (unsigned)len);
+    ESP_LOG_BUFFER_HEX_LEVEL(TAG, descriptor, len, ESP_LOG_INFO);
     TRY(parse_reports(descriptor, len));
     ESP_LOGI(TAG, "RMI HID sizes: write09=%u read0a=%u reply0b=%u attn0c=%u mode0f=%u",
         report_bytes[9][1], report_bytes[10][1], report_bytes[11][0],
@@ -207,8 +209,8 @@ static esp_err_t scan_pdt(void)
             TRY(rmi_read(base | offset, p, sizeof(p)));
             if (!p[5] || p[5] == 0xff) break;
             any = true;
-            ESP_LOGI(TAG, "PDT F%02x version=%u query=%04x command=%04x control=%04x data=%04x irq=%u",
-                p[5], (p[4] >> 5) & 3, base | p[0], base | p[1], base | p[2], base | p[3], p[4] & 7);
+            ESP_LOGI(TAG, "PDT F%02x version=%u query=%04x command=%04x control=%04x data=%04x irq=%u irq_first=%u",
+                p[5], (p[4] >> 5) & 3, base | p[0], base | p[1], base | p[2], base | p[3], p[4] & 7, irq_count);
             rmi_function_t *fn = p[5] == 1 ? &f01 : p[5] == 0x11 ? &f11 : p[5] == 0x12 ? &f12 :
                 p[5] == 0x34 ? &f34 : p[5] == 0x54 ? &f54 :
                 p[5] == 0x55 ? &f55 : p[5] == 0x51 ? &f51 : NULL;
@@ -458,6 +460,13 @@ static esp_err_t dump_f12_descriptor(unsigned descriptor_offset, const char *kin
         ESP_LOGI(TAG, "%s%u offset=%u bytes=%lu subpackets=%u bitmap RAW:",
             kind, reg, address_offset, (unsigned long)bytes, subpackets);
         ESP_LOG_BUFFER_HEX_LEVEL(TAG, structure + map_start, cursor - map_start, ESP_LOG_INFO);
+        if (descriptor_offset == 7 && reg == 1) {
+            bool full_record = subpackets && bytes == subpackets * 8;
+            ESP_LOGI(TAG, "F12 DATA1 layout register_offset=%u bytes=%lu objects=%u full_8byte=%u; packet_offset requires attention-header verification",
+                address_offset, (unsigned long)bytes, subpackets, full_record);
+            if (full_record)
+                ESP_LOGI(TAG, "F12 DATA1 record offsets: 0=object_type 1..2=x_le 3..4=y_le 5=z 6=Wx 7=Wy; type01=FINGER type03=PALM type04=UNCLASSIFIED (not HID tip bits)");
+        }
         if (read_values) {
             esp_err_t err = dump_register(kind, reg, value_base, address_offset, bytes);
             if (err != ESP_OK && err != ESP_ERR_NOT_SUPPORTED) return err;

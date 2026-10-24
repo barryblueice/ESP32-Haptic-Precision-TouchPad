@@ -213,7 +213,7 @@ static void worker(void *arg)
                     last_waveform = event.release ? event.pair.release_index : event.pair.press_index;
                     if (!heartbeat_pending) heartbeat_start = now_ms();
                     uint32_t status = surface_haptic_play_event(&event.pair, event.release);
-                    if (event.gesture) ESP_LOGI(TAG, "custom %s index=%u result=%" PRIu32,
+                    if (event.gesture) ESP_LOGD(TAG, "custom %s index=%u result=%" PRIu32,
                         last_waveform == SURFACE_GESTURE_POINT_WAVE ? "point" : "edge", last_waveform, status);
                     ESP_LOGD(TAG, "setting=%u %s index=%u result=%" PRIu32,
                              event.setting, event.release ? "RELEASE" : "PRESS", last_waveform, status);

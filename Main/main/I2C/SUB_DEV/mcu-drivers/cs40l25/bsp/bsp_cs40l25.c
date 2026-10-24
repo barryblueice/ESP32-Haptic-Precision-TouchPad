@@ -1038,11 +1038,6 @@ uint32_t bsp_dut_trigger_haptic(uint8_t waveform, uint32_t duration_ms)
         }
 
         ret = cs40l25_trigger(&cs40l25_driver, waveform, duration_ms);
-        if (ret == CS40L25_STATUS_OK)
-        {
-            // Read after the trigger ACK so diagnostics do not delay the effect start.
-            bsp_dut_log_gain("post-trigger");
-        }
     }
 
     if (ret == CS40L25_STATUS_OK)

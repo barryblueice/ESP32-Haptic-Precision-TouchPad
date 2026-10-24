@@ -10,5 +10,6 @@ typedef struct {
 } edge_gesture_t;
 typedef struct { bool suppress, tap, cancelled; uint8_t action; int steps; tp_multi_msg_t tap_down; } edge_result_t;
 void edge_gesture_reset(edge_gesture_t *state);
+bool edge_gesture_captured(const edge_gesture_t *state);
 edge_result_t edge_gesture_update(edge_gesture_t *state, const device_config_t *config,
                                   const tp_multi_msg_t *msg, uint16_t xmax, uint16_t ymax);

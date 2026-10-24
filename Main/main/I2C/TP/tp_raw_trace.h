@@ -1,7 +1,9 @@
 #pragma once
 #include <stdint.h>
 
-/* Temporary serial capture. Set to 0 after collecting calibration data. */
+/* Temporary diagnostics: 0=off, 1=all frames for calibration,
+ * 2=contact transitions, 3=every frame and every slot regardless of status.
+ * Modes 2/3 include gesture decisions. Set to 0 after diagnosis. */
 #define TP_RAW_TRACE_ENABLED 0
 
 void tp_raw_trace_init(void);

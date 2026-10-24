@@ -3,6 +3,7 @@
 #include <string.h>
 enum { EDGE_IDLE, EDGE_CANDIDATE, EDGE_CAPTURED, EDGE_BLOCKED, EDGE_SUPPRESSED };
 void edge_gesture_reset(edge_gesture_t *s) { memset(s, 0, sizeof(*s)); }
+bool edge_gesture_captured(const edge_gesture_t *s) { return s->state == EDGE_CAPTURED; }
 static bool inside(unsigned edge, const uint8_t *record, uint16_t x, uint16_t y, uint16_t xmax, uint16_t ymax)
 {
     if (!xmax || !ymax || x > xmax || y > ymax) return false;

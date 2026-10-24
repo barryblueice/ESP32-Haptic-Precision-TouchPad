@@ -1,4 +1,5 @@
 #include "knuckle_gesture.h"
+#include "I2C/TP/tp_f12.h"
 #include "knuckle_model.h"
 #include "knuckle_model_v2.h"
 #include <string.h>
@@ -80,7 +81,7 @@ knuckle_result_t knuckle_gesture_update_with_classifier(knuckle_gesture_t *s,
         knuckle_gesture_reset(s); return r;
     }
     unsigned count = 0, id = 0;
-    for (unsigned i = 0; i < 5; ++i) if (p[4 + 8*i] & 1) { ++count; id = i; }
+    for (unsigned i = 0; i < 5; ++i) if (tp_f12_present(p[4 + 8*i])) { ++count; id = i; }
     if (!s->active && s->pending && now - s->lifted_at > KNUCKLE_GAP_MAX_MS) s->pending = false;
     if (!s->active) {
         if (!count) return r;
@@ -91,7 +92,7 @@ knuckle_result_t knuckle_gesture_update_with_classifier(knuckle_gesture_t *s,
         unsigned pressure = p[4 + 8*id + 5];
         unsigned area = (unsigned)p[4 + 8*id + 6] * p[4 + 8*id + 7];
         float onset[2] = {pressure, area};
-        s->rejected = count != 1 || !(model ? knuckle_classifier_accepts(model, false, onset) :
+        s->rejected = count != 1 || !tp_f12_confident(p + 4 + 8*id) || !(model ? knuckle_classifier_accepts(model, false, onset) :
             knuckle_model_accepts(&knuckle_model_onset, pressure, area));
         if (model) s->features = (knuckle_features_t){0};
         s->pressure_sum = s->weighted_area_sum = 0;
@@ -106,7 +107,7 @@ knuckle_result_t knuckle_gesture_update_with_classifier(knuckle_gesture_t *s,
         const uint8_t *f = p + 4 + 8*id;
         uint16_t x = f[1] | ((uint16_t)f[2] << 8), y = f[3] | ((uint16_t)f[4] << 8);
         unsigned area = (unsigned)f[6] * f[7];
-        if (count != 1 || id != s->id || x > 2302 || y > 1532 || !f[6] || !f[7] ||
+        if (count != 1 || id != s->id || !tp_f12_confident(f) || !f[6] || !f[7] ||
             s->samples >= KNUCKLE_MAX_SAMPLES ||
             abs((int)x - s->x) > KNUCKLE_MOVE_MAX ||
             abs((int)y - s->y) > KNUCKLE_MOVE_MAX) s->rejected = true;

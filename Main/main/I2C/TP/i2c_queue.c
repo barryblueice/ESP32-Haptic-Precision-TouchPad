@@ -1,6 +1,9 @@
 #include "I2C/TP/i2c_hid.h"
 #include "SYS/input_diagnostics.h"
 #include "I2C/TP/tp_coordinates.h"
+#include "I2C/TP/tp_raw_trace.h"
+#include "I2C/TP/tp_f12.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -32,10 +35,6 @@
 
 #define TAP_DEADZONE 30
 #define FILTER_ALPHA 0.5f
-
-#define PALM_MAJOR_LIMIT  0x10
-#define PALM_MINOR_LIMIT  0x10
-#define PALM_RATIO_LIMIT  2.0f
 
 #define SCAN_INTERVAL_PER_FINGER 80
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
@@ -80,12 +79,74 @@ static int32_t slot_filter_y[5] = {0};
 static uint16_t history_x[5] = {0};
 static uint16_t history_y[5] = {0};
 static uint16_t last_confidence[5] = {0};
+static uint8_t last_object_type[5];
+/* An edge candidate that included 04 must never replay an ordinary tap,
+ * even if the controller later changes that object to 01 before lifting. */
+static bool gesture_only_seen;
 
 static uint8_t consecutive_errors[5] = {0};
 
 static bool slot_active[5] = {false};
 static edge_gesture_t edge_state;
 static point_gesture_t point_state;
+
+static bool special_gesture_eligible(const uint8_t raw[8], bool already_active)
+{
+    /* A 04 contact may retain its claimed special gesture through 03.
+     * This never promotes a palm to a new gesture or ordinary HID input. */
+    return tp_f12_gesture_eligible(raw) ||
+        (gesture_only_seen && already_active && raw[0] == TP_F12_PALM &&
+         tp_f12_position_valid(raw));
+}
+
+/* At most one message per gate per contact sequence. Capture-side TPF events
+ * remain available even when the parser skips or buffers these packets. */
+enum { POINT_GATE_NONE, POINT_GATE_SOURCE, POINT_GATE_OUTPUT, POINT_GATE_BUFFER,
+       POINT_GATE_KNUCKLE, POINT_GATE_MODE, POINT_GATE_AGE };
+static void point_trace_gate(const input_frame_t *frame, unsigned gate)
+{
+    if (TP_RAW_TRACE_ENABLED < 2) return;
+    static uint32_t generation;
+    static unsigned seen;
+    unsigned mask = 0;
+    if (frame->bytes[0] == 64)
+        mask = tp_f12_present_mask(frame->bytes);
+    if (!mask || generation != frame->generation) seen = 0;
+    generation = frame->generation;
+    /* Knuckle classification can consume the contact only at its lift. */
+    if ((!mask && gate != POINT_GATE_KNUCKLE) || gate == POINT_GATE_NONE || (seen & (1U << gate))) return;
+    seen |= 1U << gate;
+    static const char *const reasons[] = {"none", "source_not_ready", "output_not_ready",
+        "knuckle_buffer", "knuckle_suppressed", "mode_disabled", "frame_too_old"};
+    ESP_LOGI("POINT_GESTURE", "gate t=%" PRIu32 " gen=%" PRIu32 " reason=%s mask=0x%02x transport=%u mode=%u",
+        frame->time_ms, frame->generation, reasons[gate], mask, current_mode, current_tp_mode);
+}
+
+static void point_trace_decision(const input_frame_t *frame, const point_gesture_t *before,
+    const tp_multi_msg_t *msg, const device_config_t *config, const point_result_t *result)
+{
+    if (TP_RAW_TRACE_ENABLED < 2 || before->state == point_state.state) return;
+    static const char *const states[] = {"idle", "active", "passthrough", "suppressed", "waiting"};
+    unsigned count = 0, id = 0;
+    for (unsigned i = 0; i < 5; ++i) if (msg->fingers[i].tip_switch) { ++count; id = i; }
+    const char *reason = !count ? "all_up" : result->initial ? "corner_match" :
+        result->handoff ? "point_to_edge" : count != 1 ? "multiple_contacts" :
+        ((before->state == POINT_ACTIVE || before->state == POINT_WAITING) && before->id != msg->fingers[id].contact_id) ?
+        "contact_changed" : !msg->fingers[id].confidence ? "untrusted_contact" : "outside_enabled_corners";
+    ESP_LOGI("POINT_GESTURE", "decision t=%" PRIu32 " gen=%" PRIu32 " %s->%s reason=%s count=%u",
+        frame->time_ms, frame->generation, states[before->state], states[point_state.state], reason, count);
+    if (!count) return;
+    const uint8_t *raw = frame->bytes + 4 + id * 8;
+    ESP_LOGI("POINT_GESTURE", "sample t=%" PRIu32 " id=%u x=%u y=%u raw_x=%u raw_y=%u gesture_eligible=%u Wx=%u Wy=%u rotation=%u corners_en_radius=TL:%u/%u,TR:%u/%u,BL:%u/%u,BR:%u/%u type=%02x(%s)",
+        frame->time_ms, id, msg->fingers[id].x, msg->fingers[id].y,
+        raw[1] | ((unsigned)raw[2] << 8), raw[3] | ((unsigned)raw[4] << 8),
+        msg->fingers[id].confidence, raw[6], raw[7], config->bytes[CFG_ROTATION],
+        config->bytes[CFG_POINTS], config->bytes[CFG_POINTS+2],
+        config->bytes[CFG_POINTS+4], config->bytes[CFG_POINTS+6],
+        config->bytes[CFG_POINTS+8], config->bytes[CFG_POINTS+10],
+        config->bytes[CFG_POINTS+12], config->bytes[CFG_POINTS+14], raw[0], tp_f12_type_name(raw[0]));
+}
+
 static knuckle_gesture_t knuckle_state;
 /* Bound both latency and memory: at most 16 withheld frames, plus the frame
  * deciding handoff. Replayed frames bypass knuckle detection exactly once. */
@@ -105,6 +166,7 @@ static void point_schedule(void)
 
 typedef struct {
     bool tracking_contact;
+    bool rejected_until_lift;
     bool button_down;
     bool click_anchor_valid;
     bool click_drag_unlocked;
@@ -189,6 +251,8 @@ static uint8_t ptp_middle_press_threshold(uint8_t press_threshold) {
 }
 
 static void ptp_reset_force_click(tp_multi_msg_t *msg) {
+    /* Keep rejected_until_lift across gesture/button cancellation. Only a
+     * physical all-up sample or full source reset may clear that latch. */
     ptp_force_click_state.tracking_contact = false;
     ptp_force_click_state.button_down = false;
     ptp_force_click_state.click_anchor_valid = false;
@@ -239,6 +303,17 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     msg->button_mask = 0;
     debug_counter++;
     should_log_sample = (debug_counter % 64U) == 0U;
+
+    /* A palm/unclassified object must neither press a button nor contribute
+     * Z to another finger's force. Confidence loss cancels until real lift. */
+    if (!active_finger_count) ptp_force_click_state.rejected_until_lift = false;
+    for (unsigned id = 0; id < 5; ++id)
+        if (msg->fingers[id].tip_switch && !msg->fingers[id].confidence)
+            ptp_force_click_state.rejected_until_lift = true;
+    if (ptp_force_click_state.rejected_until_lift) {
+        ptp_reset_force_click(msg);
+        return;
+    }
 
     /* The simulated mouse exposes a middle button through a two-finger press;
      * a PTP host keeps its own button handling, so only one finger there. */
@@ -462,6 +537,8 @@ static void reset_input_state(void)
     memset(history_x, 0, sizeof(history_x));
     memset(history_y, 0, sizeof(history_y));
     memset(last_confidence, 0, sizeof(last_confidence));
+    memset(last_object_type, 0, sizeof(last_object_type));
+    gesture_only_seen = false;
     memset(consecutive_errors, 0, sizeof(consecutive_errors));
     memset(slot_active, 0, sizeof(slot_active));
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
@@ -549,15 +626,16 @@ void i2c_queue_task(void *arg) {
             previous_format = -1;
             previous_mode = current_tp_mode;
         }
+        point_trace_gate(&frame, POINT_GATE_NONE);
         if (!buffered_timeout && (uint32_t)(esp_timer_get_time() / 1000) - frame.time_ms > REPORT_MAX_AGE_MS) {
+            point_trace_gate(&frame, POINT_GATE_AGE);
             input_source_recover("raw_age");
             continue;
         }
         uint8_t *tp_packet = frame.bytes;
         bool all_up = (tp_packet[3] & 7U) == 0;
         if (tp_packet[0] == 0x40) {
-            all_up = true;
-            for (unsigned i = 0; i < 5; ++i) if (tp_packet[4 + i * 8] & 1U) all_up = false;
+            all_up = tp_f12_present_mask(tp_packet) == 0;
         }
         uint32_t report_generation = frame.output_generation;
         if (frame.generation != input_source_generation()) continue;
@@ -566,6 +644,7 @@ void i2c_queue_task(void *arg) {
         last_all_up = all_up;
         if (!all_up && current_mode == WIRED_MODE) usbhid_remote_wakeup_request();
         if (!local_ready || (!publish && current_mode != _2_4_MODE)) {
+            point_trace_gate(&frame, !local_ready ? POINT_GATE_SOURCE : POINT_GATE_OUTPUT);
             knuckle_frame_count = 0;
             continue;
         }
@@ -591,6 +670,7 @@ void i2c_queue_task(void *arg) {
                 knock.screenshot = false;
             }
             if (publish && knock.suppress && knuckle_state.active && !knuckle_state.rejected) {
+                point_trace_gate(&frame, POINT_GATE_BUFFER);
                 knuckle_frames[knuckle_frame_count++] = frame;
                 continue;
             }
@@ -629,25 +709,26 @@ void i2c_queue_task(void *arg) {
                     uint16_t raw_y = tp_packet[offset + 3] | (tp_packet[offset + 4] << 8);
                     tp_rotate_coordinates(raw_x, raw_y, &rx, &ry);
                     uint8_t pressure_z = tp_packet[offset + 5];
-                    uint8_t major = tp_packet[offset + 6];
-                    uint8_t minor = tp_packet[offset + 7];
 
                     tp_msg.fingers[id].contact_id = id;
 
-                    tp_msg.fingers[id].tip_switch = finger_status & 0x01;
+                    tp_msg.fingers[id].tip_switch = tp_f12_present(finger_status);
+                    bool is_confident = tp_f12_confident(tp_packet + offset);
+                    if (finger_status == TP_F12_UNCLASSIFIED) {
+                        gesture_only_seen = true;
+                        ptp_force_click_state.rejected_until_lift = true;
+                    }
+                    if (TP_RAW_TRACE_ENABLED >= 2 &&
+                        (last_object_type[id] != finger_status ||
+                         (tp_msg.fingers[id].tip_switch && last_confidence[id] != is_confident)))
+                        ESP_LOGI("F12_CONTACT", "t=%" PRIu32 " id=%u type=%02x(%s) present=%u confidence=%u raw_x=%u raw_y=%u z=%u Wx=%u Wy=%u gesture_eligible=%u",
+                            frame.time_ms, id, finger_status, tp_f12_type_name(finger_status),
+                            tp_msg.fingers[id].tip_switch, is_confident, raw_x, raw_y, pressure_z,
+                            tp_packet[offset + 6], tp_packet[offset + 7],
+                            tp_f12_gesture_eligible(tp_packet + offset));
+                    last_object_type[id] = finger_status;
 
-                    if (finger_status & 0x01) {
-
-                        bool is_confident = raw_x <= 2302 && raw_y <= 1532;
-
-                        if (major > PALM_MAJOR_LIMIT || minor > PALM_MINOR_LIMIT) {
-                            is_confident = false;
-                        }
-
-                        float ratio = (minor > 0) ? (float)major / minor : 0;
-                        if (ratio > PALM_RATIO_LIMIT) {
-                            is_confident = false;
-                        }
+                    if (tp_msg.fingers[id].tip_switch) {
 
                         tp_msg.fingers[id].confidence = is_confident ? 0x01 : 0x00;
                         last_confidence[id] = tp_msg.fingers[id].confidence;
@@ -763,6 +844,7 @@ void i2c_queue_task(void *arg) {
                 // }
 
                 if (knock.suppress) {
+                    point_trace_gate(&frame, POINT_GATE_KNUCKLE);
                     edge_gesture_reset(&edge_state);
                     point_gesture_reset(&point_state);
                     point_schedule();
@@ -780,9 +862,12 @@ void i2c_queue_task(void *arg) {
                 }
 
                 bool ble_custom_gestures = false;
+                bool physical_all_up = tp_f12_present_mask(tp_packet) == 0;
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                 ble_custom_gestures = current_mode == BLE_MODE;
 #endif
+                if (!knock.suppress && current_tp_mode != PTP_MODE && !ble_custom_gestures)
+                    point_trace_gate(&frame, POINT_GATE_MODE);
                 if (!knock.suppress && (current_tp_mode == PTP_MODE || current_mode == WIRED_MODE || ble_custom_gestures)) {
                     device_config_t config; device_config_get(&config);
                     bool portrait = (config.bytes[CFG_ROTATION] & 1) != 0;
@@ -791,13 +876,17 @@ void i2c_queue_task(void *arg) {
                     tp_multi_msg_t logical = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch) {
                         logical.fingers[id].x = last_raw_x[id]; logical.fingers[id].y = last_raw_y[id];
+                        logical.fingers[id].confidence = special_gesture_eligible(tp_packet + 4 + 8 * id,
+                            point_state.state == POINT_ACTIVE && point_state.id == logical.fingers[id].contact_id);
                     }
                     point_result_t point = {0};
                     bool owned = point_state.owned;
                     if (current_tp_mode == PTP_MODE || ble_custom_gestures) {
+                        point_gesture_t before = point_state;
                         point = point_gesture_update(&point_state, &config, &logical,
                             xmax, ymax,
                             portrait ? 766 : 1149, portrait ? 1149 : 766, frame.time_ms);
+                        point_trace_decision(&frame, &before, &logical, &config, &point);
                         owned |= point_state.owned;
                         if (point.cancel) aux_output_cancel_gesture();
                         if (point.handoff) edge_gesture_reset(&edge_state);
@@ -805,23 +894,45 @@ void i2c_queue_task(void *arg) {
                             aux_output_hold(point.action, point.steps, report_generation, report_time_ms) : point.initial ?
                             aux_output_once(point.action, point.steps, report_generation, report_time_ms) :
                             aux_output_repeat(point.action, point.steps, report_generation, report_time_ms))) {
+                            ESP_LOGW("POINT_GESTURE", "output_failed t=%" PRIu32 " action=%u", frame.time_ms, point.action);
                             input_recover(); publish = false;
                         }
-                        if (publish && point.steps)
+                        if (publish && point.steps) {
+                            if (point.initial && TP_RAW_TRACE_ENABLED >= 2) {
+                                static const char *const corners[] = {"TL", "TR", "BL", "BR"};
+                                const uint8_t *contact = tp_packet + 4 + point_state.id * 8;
+                                uint16_t raw_x = contact[1] | ((uint16_t)contact[2] << 8);
+                                uint16_t raw_y = contact[3] | ((uint16_t)contact[4] << 8);
+                                ESP_LOGI("POINT_GESTURE", "trigger corner=%s id=%u x=%u y=%u raw_x=%u raw_y=%u rotation=%u t=%" PRIu32,
+                                    corners[point_state.point], point_state.id,
+                                    point_state.start_x, point_state.start_y, raw_x, raw_y,
+                                    config.bytes[CFG_ROTATION], frame.time_ms);
+                            }
                             input_source_gesture(frame.generation, true);
+                        }
                         point_schedule();
                     }
                     edge_result_t edge = {0};
-                    if (!point.suppress) edge = edge_gesture_update(&edge_state, &config, &logical,
-                        xmax, ymax);
+                    if (!point.suppress) {
+                        /* Point ownership cannot grant a fresh edge to a palm. */
+                        for (unsigned id = 0; id < 5; ++id) if (logical.fingers[id].tip_switch)
+                            logical.fingers[id].confidence = special_gesture_eligible(tp_packet + 4 + 8 * id,
+                                edge_gesture_captured(&edge_state) && edge_state.id == id);
+                        edge = edge_gesture_update(&edge_state, &config, &logical, xmax, ymax);
+                    }
                     edge.suppress |= point.suppress;
-                    if (owned) edge.tap = false;
+                    if (owned || gesture_only_seen) edge.tap = false;
                     if (edge.cancelled) aux_output_cancel_gesture();
                     if (publish && edge.steps && !usb_aux_steps(edge.action, edge.steps, report_generation, report_time_ms)) {
                         input_recover(); publish = false;
                     }
-                    if (publish && edge.steps)
+                    if (publish && edge.steps) {
+                        if (TP_RAW_TRACE_ENABLED >= 2)
+                            ESP_LOGI("EDGE_GESTURE", "step t=%" PRIu32 " id=%u x=%u y=%u edge=%u action=%u steps=%d",
+                                frame.time_ms, edge_state.id, logical.fingers[edge_state.id].x,
+                                logical.fingers[edge_state.id].y, edge_state.edge, edge.action, edge.steps);
                         input_source_gesture(frame.generation, false);
+                    }
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                     /* All simulated-mouse transports must discard motion and
                      * tap state claimed by a special gesture. A completed edge
@@ -857,7 +968,8 @@ void i2c_queue_task(void *arg) {
                         memset(tp_msg.fingers, 0, sizeof(tp_msg.fingers)); active_finger_count = 0;
                     }
                 }
-                if (point_state.owned) ptp_reset_force_click(&tp_msg);
+                if (physical_all_up) gesture_only_seen = false;
+                if (point_state.owned || gesture_only_seen) ptp_reset_force_click(&tp_msg);
                 else ptp_update_force_click_button(&tp_msg, active_finger_count);
                 tp_msg.actual_count = active_finger_count > 0 ? active_finger_count : 1;
                 input_report_t report = {.mode = input_mode(), .time_ms = report_time_ms,

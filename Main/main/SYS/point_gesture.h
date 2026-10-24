@@ -2,6 +2,7 @@
 #include "edge_gesture.h"
 
 enum { POINT_WHEEL_HOLD_DELAY_MS = 600, POINT_WHEEL_REPEAT_MS = 200 };
+enum { POINT_IDLE, POINT_ACTIVE, POINT_PASSTHROUGH, POINT_SUPPRESSED, POINT_WAITING };
 typedef struct {
     uint8_t state, id, point, action, step;
     bool repeat, convert, owned;

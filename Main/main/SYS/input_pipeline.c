@@ -4,6 +4,7 @@
 #include "rtos_queue.h"
 #include "I2C/TP/i2c_hid.h"
 #include "I2C/TP/tp_raw_trace.h"
+#include "I2C/TP/tp_f12.h"
 #include "I2C/SUB_DEV/cs40l25_surface.h"
 #include "esp_log.h"
 #include <string.h>
@@ -408,8 +409,7 @@ bool input_capture(const uint8_t *bytes, bool success, uint32_t generation,
     if (success) {
         bool active = (bytes[3] & 7U) != 0;
         if (bytes[0] == 0x40) {
-            active = false;
-            for (unsigned i = 0; i < 5; ++i) active |= (bytes[4 + i * 8] & 1U) != 0;
+            active = tp_f12_present_mask(bytes) != 0;
         }
         input_diag_capture(generation, active, read_done_us);
         taskENTER_CRITICAL(&lock);
@@ -434,7 +434,7 @@ bool input_capture(const uint8_t *bytes, bool success, uint32_t generation,
     if (first) first_frame_seen = true;
     TaskHandle_t p = parser;
     taskEXIT_CRITICAL(&lock);
-    if (first) ESP_LOGI("INPUT", "First controller input at %" PRIu32 " ms, length=%u", now_ms(), bytes[0]);
+    if (first) ESP_LOGD("INPUT", "First controller input at %" PRIu32 " ms, length=%u", now_ms(), bytes[0]);
 #if CONFIG_INPUT_LATENCY_DIAGNOSTICS
     input_diag_depth(uxQueueMessagesWaiting(tp_data_queue), 0);
 #endif
@@ -545,7 +545,7 @@ void input_report_ack(const input_report_t *report)
     if (report_buffer_current(&reports, report) && !reports.recovering && reports.recovery_ready &&
         !mode_pending && (ready_mask & (1U << reports.mode))) output_wait_up = false;
     taskEXIT_CRITICAL(&lock);
-    if (first) ESP_LOGI("INPUT", "First host input acknowledged at %" PRIu32 " ms, transport=%" PRId32, now_ms(), current_mode);
+    if (first) ESP_LOGD("INPUT", "First host input acknowledged at %" PRIu32 " ms, transport=%" PRId32, now_ms(), current_mode);
 }
 void input_submit_failed(void)
 {
@@ -580,7 +580,7 @@ void input_log_stats(void)
     last_source = source;
     last_errors = errors;
     last_gate = gate;
-    ESP_LOGW("INPUT", "recover=%" PRIu32 " raw_full=%" PRIu32 " read_fail=%" PRIu32
+    ESP_LOGD("INPUT", "recover=%" PRIu32 " raw_full=%" PRIu32 " read_fail=%" PRIu32
         " send_fail=%" PRIu32 " merged=%" PRIu32 " peak=%" PRIu32 " wait_ms=%" PRIu32
         " link=%u mode=%u recovering=%u all_up=%u releases=%u mode_pending=%u"
         " source_wait_up=%u recovery_ready=%u host_active=%u"

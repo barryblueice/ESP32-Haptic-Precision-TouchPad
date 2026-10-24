@@ -77,7 +77,7 @@ static bool check_vbst(const char *phase)
 {
     uint32_t value;
     if (!read_reg(BOOST_VBST_CTL_1_REG, &value)) return false;
-    ESP_LOGI(TAG, "%s VBST parameter=11000 mV target=0x%02X actual=0x%08" PRIX32
+    ESP_LOGD(TAG, "%s VBST parameter=11000 mV target=0x%02X actual=0x%08" PRIX32
              " external_boost=true", phase, (unsigned int)CS40L25_SURFACE_VBST_CTL, value);
     if ((value & 0xFFU) != CS40L25_SURFACE_VBST_CTL) {
         ESP_LOGE(TAG, "%s VBST parameter mismatch", phase);
@@ -132,7 +132,7 @@ static bool check_wave_count(void)
 {
     uint32_t count = 0;
     CHECK_BSP(bsp_dut_get_num_waves(&count));
-    ESP_LOGI(TAG, "DSP waves=%" PRIu32 " expected=%u", count, SURFACE_FW_NUM_WAVES);
+    ESP_LOGD(TAG, "DSP waves=%" PRIu32 " expected=%u", count, SURFACE_FW_NUM_WAVES);
     return count == SURFACE_FW_NUM_WAVES;
 }
 
@@ -154,7 +154,6 @@ bool surface_haptic_hw_initialize(void)
     ESP_LOGI(TAG, "Skip shared GPIO33 reset and ROM/BHM playback");
     CHECK_BSP(bsp_dut_boot(false));
     firmware_loaded = true;
-    bsp_dut_log_gain("post-boot");
     /* Service pending faults once. Power-up and the readiness loop below
      * already validate HALO, scratch and heartbeat; no blind 100 ms pause. */
     CHECK_BSP(surface_haptic_hw_process());
@@ -191,7 +190,6 @@ bool surface_haptic_hw_initialize(void)
     CHECK_BSP(bsp_dut_has_processed(&changed));
     CHECK_BSP(bsp_dut_update_haptic_config(0));
     CHECK_BSP(bsp_dut_enable_haptic_processing(true));
-    bsp_dut_log_gain("initialize");
     return check_vbst("initialize");
 }
 
@@ -204,7 +202,6 @@ bool surface_haptic_hw_wake(void)
     // Idle standby need not advance heartbeat; activity is checked on next playback.
     CHECK_BSP(bsp_dut_has_processed(&changed));
     CHECK_BSP(surface_haptic_hw_process());
-    bsp_dut_log_gain("wake");
     return check_vbst("wake");
 }
 

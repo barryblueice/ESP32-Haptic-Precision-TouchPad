@@ -29,6 +29,7 @@ typedef int esp_err_t;
 #define taskEXIT_CRITICAL(p) ((void)(p))
 #define ESP_ERROR_CHECK(e) ((void)(e))
 #define ESP_LOGI(...) mock_log(__VA_ARGS__)
+#define ESP_LOGD(...) mock_log(__VA_ARGS__)
 #define ESP_LOGW(...) mock_log(__VA_ARGS__)
 #define CFG_FEATURE_FLAGS 0
 #define CFG_FLAG_CUSTOM_GESTURE_HAPTICS 1
@@ -134,7 +135,7 @@ class UsbResumeTests(unittest.TestCase):
         (root/'input_pipeline.c').write_text(source,encoding='utf-8')
         for name in re.findall(r'^#include "([^"]+)"',source,re.M):
             p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('#include "mock.h"\n')
-        for src,dest in [('SYS/input_pipeline.h','pipeline_types.h'),('SYS/report_buffer.h','report_buffer.h'),('SYS/hid_msg.h','hid_msg.h'),('SYS/report_buffer.c','report_buffer.c'),('I2C/SUB_DEV/surface_haptic_settings.h','I2C/SUB_DEV/surface_haptic_settings.h')]:
+        for src,dest in [('I2C/TP/tp_f12.h','I2C/TP/tp_f12.h'),('SYS/input_pipeline.h','pipeline_types.h'),('SYS/report_buffer.h','report_buffer.h'),('SYS/hid_msg.h','hid_msg.h'),('SYS/report_buffer.c','report_buffer.c'),('I2C/SUB_DEV/surface_haptic_settings.h','I2C/SUB_DEV/surface_haptic_settings.h')]:
             p=root/dest;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes((MAIN/src).read_bytes())
         for name in ['stdio.h','esp_err.h','driver/i2c_master.h','freertos/FreeRTOS.h','freertos/queue.h','freertos/task.h']:
             p=root/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_text('#pragma once\n#include <stdint.h>\n')
