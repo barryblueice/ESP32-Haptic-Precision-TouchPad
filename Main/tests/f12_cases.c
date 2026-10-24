@@ -306,6 +306,47 @@ EXPORT int check_f12_point_repeat_survives_palm_but_multi_and_lift_stop_it(void)
     return 0;
 }
 
+EXPORT int check_f12_right_edge_waits_for_captured_contact_confidence(void)
+{
+    /* Actual failing sequence: rotation 2, right edge 5%, 1% step.
+     * First trusted sample is 153 ms after onset, at raw (12,620). */
+    f12_reset(false);config.bytes[CFG_ROTATION]=2;
+    config.bytes[CFG_EDGES+15]=1;config.bytes[CFG_EDGES+16]=3;
+    config.bytes[CFG_EDGE_REPEAT]=0x0b;
+    const unsigned samples[][5]={{0,490,55,4,9},{31,490,70,4,11},
+        {16,601,60,4,9},{12,620,58,4,8},{8,644,58,4,8},{0,845,10,4,5}};
+    for(unsigned i=0;i<6;++i) {
+        uint8_t p[64];f12_packet(p,1,samples[i][3],samples[i][4],samples[i][2]);
+        p[5]=samples[i][0];p[6]=samples[i][0]>>8;p[7]=samples[i][1];p[8]=samples[i][1]>>8;
+        if(i==3) now+=123;
+        f12_feed_packet(p);
+        if(i<3) CHECK(edge_state.state==EDGE_WAITING && !f12_actions);
+        if(i==3) CHECK(edge_state.state==EDGE_CANDIDATE && edge_state.start_y==620 && !f12_actions);
+        if(i==4) CHECK(edge_state.state==EDGE_CAPTURED && edge_state.edge==3 && f12_actions==1);
+    }
+    CHECK(edge_state.continue_outside && !f12_buttons);
+    f12_feed(0,0,0,0);CHECK(edge_state.state==EDGE_IDLE && !physical_active);
+    return 0;
+}
+
+EXPORT int check_f12_edge_waiting_does_not_rearm_after_identity_or_trusted_origin(void)
+{
+    for(unsigned change=0;change<4;++change) {
+        f12_reset(false);config.bytes[CFG_EDGES]=1;config.bytes[CFG_EDGES+1]=3;
+        uint8_t p[64];f12_packet(p,1,4,9,55);p[7]=0xe8;
+        f12_feed_packet(p);CHECK(edge_state.state==EDGE_WAITING);
+        p[11]=4;
+        if(change==0) { memcpy(p+12,p+4,8);memset(p+4,0,8); }
+        if(change==1) memcpy(p+12,p+4,8);
+        if(change==2) { p[7]=0;p[8]=3; } /* First trusted position is outside edges. */
+        if(change==3) { f12_feed(0,0,0,0);CHECK(edge_state.state==EDGE_IDLE && !f12_actions);continue; }
+        f12_feed_packet(p);CHECK(edge_state.state==EDGE_BLOCKED && !f12_actions);
+        f12_packet(p,1,4,4,55);p[7]=0xe8;p[5]=200;f12_feed_packet(p);
+        CHECK(edge_state.state==EDGE_BLOCKED && !f12_actions);
+    }
+    return 0;
+}
+
 EXPORT int check_f12_palm_continuation_keeps_edge_region_switch_and_identity_checks(void)
 {
     for(unsigned outside=0;outside<=1;++outside) {

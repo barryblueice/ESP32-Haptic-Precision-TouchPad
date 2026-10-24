@@ -1,7 +1,7 @@
 #include "edge_gesture.h"
 #include <stdlib.h>
 #include <string.h>
-enum { EDGE_IDLE, EDGE_CANDIDATE, EDGE_CAPTURED, EDGE_BLOCKED, EDGE_SUPPRESSED };
+enum { EDGE_IDLE, EDGE_CANDIDATE, EDGE_CAPTURED, EDGE_BLOCKED, EDGE_SUPPRESSED, EDGE_WAITING };
 void edge_gesture_reset(edge_gesture_t *s) { memset(s, 0, sizeof(*s)); }
 bool edge_gesture_captured(const edge_gesture_t *s) { return s->state == EDGE_CAPTURED; }
 static bool inside(unsigned edge, const uint8_t *record, uint16_t x, uint16_t y, uint16_t xmax, uint16_t ymax)
@@ -27,12 +27,24 @@ edge_result_t edge_gesture_update(edge_gesture_t *s, const device_config_t *c,
     if (s->state == EDGE_BLOCKED || s->state == EDGE_SUPPRESSED) {
         result.suppress = s->state == EDGE_SUPPRESSED; return result;
     }
-    if (count != 1 || !m->fingers[id].confidence ||
+    if (count != 1 ||
         (s->state != EDGE_IDLE && id != s->id)) {
         result.suppress = s->state == EDGE_CAPTURED;
         result.cancelled = result.suppress;
         s->state = result.suppress ? EDGE_SUPPRESSED : EDGE_BLOCKED; return result;
     }
+    if (!m->fingers[id].confidence) {
+        /* As with corners, initial untrusted samples have no valid origin.
+         * Wait for this slot's first trusted position; never replay movement
+         * from the untrusted interval. Already-started gestures still cancel. */
+        if (s->state == EDGE_IDLE || s->state == EDGE_WAITING) {
+            s->state = EDGE_WAITING; s->id = id; return result;
+        }
+        result.suppress = s->state == EDGE_CAPTURED;
+        result.cancelled = result.suppress;
+        s->state = result.suppress ? EDGE_SUPPRESSED : EDGE_BLOCKED; return result;
+    }
+    if (s->state == EDGE_WAITING) s->state = EDGE_IDLE;
     uint16_t x = m->fingers[id].x, y = m->fingers[id].y;
     if (s->state == EDGE_IDLE) {
         for (unsigned e = 0; e < 4; ++e) {
