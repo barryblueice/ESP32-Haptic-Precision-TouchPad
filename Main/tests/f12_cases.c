@@ -1,14 +1,23 @@
 static unsigned f12_actions, f12_buttons, f12_trusted_reports, f12_mouse_motion;
+static unsigned f12_mouse_downs;
+static unsigned f12_button_presses, f12_button_releases, f12_previous_buttons;
 static input_report_t f12_last_report;
 static void f12_drain(void)
 {
     input_report_t r;
     while (input_take_report(&r)) {
         if (!r.release) {
+            unsigned buttons=r.mode==PTP_MODE?r.data.ptp.buttons:r.data.mouse.buttons;
+            if(buttons && !f12_previous_buttons) ++f12_button_presses;
+            if(!buttons && f12_previous_buttons) ++f12_button_releases;
+            f12_previous_buttons=buttons;
             f12_last_report=r; f12_buttons |= r.mode==PTP_MODE?r.data.ptp.buttons:r.data.mouse.buttons;
             if (r.mode==PTP_MODE) {
                 for(unsigned i=0;i<5;++i) if((r.data.ptp.fingers[i].tip_conf_id & 3)==3) ++f12_trusted_reports;
-            } else if(r.data.mouse.x || r.data.mouse.y) ++f12_mouse_motion;
+            } else {
+                if(r.data.mouse.x || r.data.mouse.y) ++f12_mouse_motion;
+                if(r.data.mouse.buttons) ++f12_mouse_downs;
+            }
         }
         input_report_ack(&r);
     }
@@ -28,6 +37,8 @@ static void f12_reset(bool corner)
     if(corner) { config.bytes[CFG_POINTS]=1;config.bytes[CFG_POINTS+1]=5;config.bytes[CFG_POINTS+2]=15; }
     input_pipeline_init();reset_input_state();aux_output_reset(false);
     input_set_link(3);f12_drain();f12_actions=f12_buttons=f12_trusted_reports=f12_mouse_motion=0;f12_last_report=(input_report_t){0};
+    f12_mouse_downs=0;
+    f12_button_presses=f12_button_releases=f12_previous_buttons=0;
 }
 static void f12_packet(uint8_t p[64], uint8_t type, unsigned wx, unsigned wy, unsigned z)
 {
@@ -43,12 +54,126 @@ static void f12_feed_packet(const uint8_t p[64])
 static void f12_feed(uint8_t type, unsigned wx, unsigned wy, unsigned z)
 { uint8_t p[64];f12_packet(p,type,wx,wy,z);f12_feed_packet(p); }
 
+EXPORT int check_f12_captured_palm_labelled_finger_pad_clicks(void)
+{
+    const f12_captured_frame_t *traces[]={f12_captured_contact_3,f12_captured_contact_4};
+    const unsigned lengths[]={sizeof(f12_captured_contact_3)/sizeof(*traces[0]),
+                              sizeof(f12_captured_contact_4)/sizeof(*traces[0])};
+    for(unsigned n=0;n<2;++n) for(unsigned mode=0;mode<=1;++mode)
+    for(unsigned route=0;route<3;++route) for(unsigned level=2;level<=3;++level) {
+        f12_reset(false);current_tp_mode=mode;reports.mode=mode;current_mode=route;
+        config.bytes[CFG_ROTATION]=2;ptp_button_press_threshold=level;
+        for(unsigned i=0;i<lengths[n];++i) {
+            const f12_captured_frame_t *f=traces[n]+i;
+            uint8_t p[64];f12_packet(p,f->type,f->wx,f->wy,f->z);
+            p[5]=f->x;p[6]=f->x>>8;p[7]=f->y;p[8]=f->y>>8;
+            now=f->time-10;f12_feed_packet(p);
+            CHECK(!knuckle_frame_count && !knuckle_state.pending && !f12_actions);
+            if(f->type) CHECK(last_confidence[0]);
+        }
+        CHECK(!physical_active && !f12_previous_buttons);
+        /* Level 2 exercises force clicks; level 3 leaves tap recognition to
+         * the mouse parser or (for PTP) the host's trusted down/up stream. */
+        if(mode==MOUSE_MODE || level==2) CHECK(f12_button_presses==1 && f12_button_releases==1);
+        else CHECK(!f12_button_presses && f12_trusted_reports==lengths[n]-1);
+        if(mode==PTP_MODE) CHECK((f12_last_report.data.ptp.fingers[0].tip_conf_id&3)==1);
+    }
+    return 0;
+}
+
+EXPORT int check_f12_legacy_major_minor_boundaries(void)
+{
+    /* Historical byte6/byte7 ordering, including asymmetry and zero minor. */
+    const unsigned cases[][3]={{0,0,1},{0,16,1},{16,0,1},{4,11,1},{11,4,0},
+        {8,4,1},{9,4,0},{1,1,1},{6,6,1},{13,13,1},{16,16,1},{17,16,0},{16,17,0}};
+    for(unsigned type=0;type<256;++type) for(unsigned i=0;i<sizeof(cases)/sizeof(*cases);++i) {
+        uint8_t p[64];f12_packet(p,type,cases[i][0],cases[i][1],100);
+        CHECK(tp_f12_touch_confident(p+4)==((type==1 || type==3 || type==6) && cases[i][2]));
+        CHECK(tp_f12_confident(p+4)==((type==1 || type==6) && cases[i][2]));
+    }
+    uint8_t p[64];f12_packet(p,3,8,9,100);p[5]=255;p[6]=255;
+    CHECK(!tp_f12_touch_confident(p+4));
+    f12_packet(p,3,8,9,100);p[7]=255;p[8]=255;
+    CHECK(!tp_f12_touch_confident(p+4));return 0;
+}
+
+EXPORT int check_f12_03_uses_full_legacy_size_range(void)
+{
+    const unsigned widths[][2]={{1,1},{6,6},{13,13},{16,16},{16,0},{0,16},{4,11}};
+    for(unsigned mode=0;mode<=1;++mode) for(unsigned i=0;i<sizeof(widths)/sizeof(*widths);++i) {
+        f12_reset(false);current_tp_mode=mode;reports.mode=mode;
+        for(unsigned j=0;j<4;++j) f12_feed(3,widths[i][0],widths[i][1],200);
+        CHECK(last_confidence[0] && f12_button_presses==1);
+        f12_feed(0,0,0,0);CHECK(f12_button_releases==1);
+    }
+    /* There is no pad-only single-contact restriction. */
+    f12_reset(false);current_tp_mode=MOUSE_MODE;reports.mode=MOUSE_MODE;
+    uint8_t p[64];f12_packet(p,3,13,13,200);memcpy(p+12,p+4,8);
+    for(unsigned j=0;j<4;++j) f12_feed_packet(p);
+    CHECK(last_confidence[0] && last_confidence[1] && f12_buttons==4);
+    f12_feed(0,0,0,0);CHECK(f12_button_presses==1 && f12_button_releases==1);
+    return 0;
+}
+
+EXPORT int check_f12_filtered_contact_cancels_click_until_physical_lift(void)
+{
+    for(unsigned mode=0;mode<=1;++mode) for(unsigned fault=0;fault<4;++fault) {
+        f12_reset(false);current_tp_mode=mode;reports.mode=mode;
+        for(unsigned i=0;i<4;++i) f12_feed(3,8,9,200);
+        CHECK(f12_button_presses==1 && ptp_force_click_state.button_down);
+        uint8_t p[64];f12_packet(p,3,8,9,200);
+        if(fault==0) p[10]=17;
+        if(fault==1) { p[10]=11;p[11]=4; }
+        if(fault==2) p[4]=4;
+        if(fault==3) { p[5]=255;p[6]=255; }
+        f12_feed_packet(p);
+        CHECK(!ptp_force_click_state.button_down && f12_button_releases==1);
+        for(unsigned i=0;i<4;++i) f12_feed(3,8,9,200);
+        CHECK(last_confidence[0]==(fault!=2) && f12_button_presses==1 && !ptp_force_click_state.button_down);
+        f12_feed(0,0,0,0);
+        CHECK(f12_button_presses==1 && !physical_active);
+        for(unsigned i=0;i<4;++i) f12_feed(3,8,9,200);
+        CHECK(last_confidence[0] && f12_button_presses==2);
+        f12_feed(0,0,0,0);CHECK(f12_button_releases==2);
+    }
+    return 0;
+}
+
+EXPORT int check_f12_pad_never_claims_special_gestures_or_knuckle(void)
+{
+    f12_reset(true);config.bytes[CFG_EDGES]=1;config.bytes[CFG_EDGES+1]=3;
+    uint8_t p[64];f12_packet(p,3,8,9,55);p[7]=0xe8;
+    f12_feed_packet(p);p[5]=200;f12_feed_packet(p);
+    CHECK(last_confidence[0] && !f12_actions && !knuckle_frame_count && !knuckle_state.pending);
+    f12_feed(0,0,0,0);CHECK(!f12_actions);
+    /* An already owned 04 corner retains ownership when followed by a
+     * size-valid 03: no host click may leak through. */
+    f12_reset(true);f12_feed(4,8,9,200);
+    for(unsigned i=0;i<5;++i) f12_feed(3,8,9,200);
+    f12_feed(0,0,0,0);
+    CHECK(f12_actions==1 && !f12_buttons && !f12_trusted_reports);
+    return 0;
+}
+
+EXPORT int check_f12_finger_pad_type_transition_keeps_one_press(void)
+{
+    for(unsigned mode=0;mode<=1;++mode) {
+        f12_reset(false);current_tp_mode=mode;reports.mode=mode;
+        for(unsigned i=0;i<4;++i) f12_feed(1,8,9,200);
+        for(unsigned i=0;i<4;++i) f12_feed(3,8,9,200);
+        for(unsigned i=0;i<4;++i) f12_feed(1,8,9,200);
+        CHECK(f12_button_presses==1 && !f12_button_releases);
+        f12_feed(0,0,0,0);CHECK(f12_button_presses==1 && f12_button_releases==1);
+    }
+    return 0;
+}
+
 EXPORT int check_f12_all_object_codes_are_not_tip_bits(void)
 {
     for(unsigned type=1;type<256;++type) {
         f12_reset(true);f12_feed(type,4,4,200);
         CHECK(physical_active && slot_active[0]);
-        CHECK(last_confidence[0] == (type==1 || type==6));
+        CHECK(last_confidence[0] == (type==1 || type==3 || type==6));
         CHECK(f12_actions == (type==1 || type==4 || type==6));
         f12_feed(0,0,0,0);CHECK(!physical_active && !slot_active[0]);
     }
@@ -86,19 +211,64 @@ EXPORT int check_f12_waiting_classification_can_become_trusted_once(void)
     f12_feed(1,4,4,200);CHECK(f12_actions==1);
     f12_feed(1,4,4,200);CHECK(f12_actions==1);return 0;
 }
-EXPORT int check_f12_axis_ratio_is_symmetric(void)
+EXPORT int check_f12_legacy_axis_order_controls_gesture_admission(void)
 {
-    for(unsigned wx=0;wx<=20;++wx) for(unsigned wy=0;wy<=20;++wy) {
-        uint8_t p[64],q[64];f12_packet(p,1,wx,wy,100);f12_packet(q,1,wy,wx,100);
-        CHECK(tp_f12_confident(p+4)==tp_f12_confident(q+4));
-    }
     for(unsigned swap=0;swap<2;++swap) {
         f12_reset(true);f12_feed(1,swap?4:10,swap?10:4,200);
-        CHECK(physical_active && !last_confidence[0] && !f12_actions);
+        CHECK(physical_active && last_confidence[0]==swap && f12_actions==swap);
         f12_feed(0,0,0,0);f12_feed(1,swap?4:8,swap?8:4,200);
-        CHECK(last_confidence[0] && f12_actions==1);
+        CHECK(last_confidence[0] && f12_actions==swap+1);
     }
     return 0;
+}
+EXPORT int check_f12_finger_pad_tap_survives_shape_changes(void)
+{
+    /* Legacy major/minor is directional: swapped elongated samples fail. */
+    const unsigned widths[][2]={{4,4},{4,9},{4,11},{4,8},{4,5}};
+    for(unsigned type=1;type<=6;type+=5) for(unsigned swap=0;swap<2;++swap)
+    for(unsigned mode=0;mode<=1;++mode) for(unsigned round_start=0;round_start<2;++round_start) {
+        f12_reset(false);current_tp_mode=mode;reports.mode=mode;
+        for(unsigned i=round_start?0:1;i<5;++i) {
+            f12_feed(type,widths[i][swap],widths[i][1-swap],55);
+            CHECK(last_confidence[0]==(widths[i][swap]<=2*widths[i][1-swap]) && !f12_buttons);
+        }
+        f12_feed(0,0,0,0);
+        CHECK(!physical_active && !f12_actions && !f12_mouse_motion);
+        if(swap) { CHECK(!f12_buttons && !f12_mouse_downs);continue; }
+        if(mode==MOUSE_MODE) {
+            CHECK(f12_buttons==1 && f12_mouse_downs==1);
+            CHECK(!f12_last_report.data.mouse.buttons);
+            f12_feed(0,0,0,0);CHECK(f12_mouse_downs==1);
+        } else {
+            CHECK(f12_trusted_reports && !f12_buttons);
+            CHECK((f12_last_report.data.ptp.fingers[0].tip_conf_id & 3)==1);
+        }
+    }
+    return 0;
+}
+EXPORT int check_f12_finger_pad_force_click_and_size_cancellation(void)
+{
+    for(unsigned mode=0;mode<=1;++mode) {
+        f12_reset(false);current_tp_mode=mode;reports.mode=mode;
+        for(unsigned i=0;i<4;++i) f12_feed(1,4,11,200);
+        CHECK(f12_buttons==1 && ptp_force_click_state.button_down);
+        f12_feed(3,4,17,200);CHECK(!ptp_force_click_state.button_down);
+        f12_buttons=0;
+        for(unsigned i=0;i<4;++i) f12_feed(1,4,11,200);
+        f12_feed(0,0,0,0);CHECK(!f12_buttons && !physical_active);
+    }
+    return 0;
+}
+EXPORT int check_f12_finger_pad_keeps_size_and_coordinate_limits(void)
+{
+    for(unsigned swap=0;swap<2;++swap) {
+        uint8_t p[64];f12_packet(p,1,swap?4:17,swap?17:4,55);
+        CHECK(!tp_f12_confident(p+4));
+    }
+    uint8_t p[64];f12_packet(p,1,4,11,55);p[5]=255;p[6]=255;
+    CHECK(!tp_f12_confident(p+4));
+    f12_packet(p,1,4,11,55);p[7]=255;p[8]=255;
+    CHECK(!tp_f12_confident(p+4));return 0;
 }
 EXPORT int check_f12_unclassified_cannot_release_recovery_gate(void)
 {
@@ -125,7 +295,7 @@ EXPORT int check_f12_palm_blocks_knuckle_and_does_not_finish_candidate(void)
 }
 EXPORT int check_f12_force_click_rejects_types_and_cancels_until_lift(void)
 {
-    for(unsigned mode=0;mode<=1;++mode) for(unsigned type=3;type<=4;++type) {
+    for(unsigned mode=0;mode<=1;++mode) for(unsigned type=2;type<=4;type+=2) {
         f12_reset(false);current_tp_mode=mode;reports.mode=mode;
         for(unsigned i=0;i<6;++i) f12_feed(type,4,4,200);
         CHECK(!f12_buttons && !ptp_force_click_state.button_down);
@@ -301,15 +471,16 @@ EXPORT int check_f12_point_repeat_survives_palm_but_multi_and_lift_stop_it(void)
     f12_feed_packet(p);CHECK(point_state.state==POINT_SUPPRESSED && !point_gesture_repeating(&point_state));
     now+=600;f12_feed(4,4,9,55);CHECK(f12_actions==3);
     f12_feed(0,0,0,0);CHECK(point_state.state==POINT_IDLE && !physical_active);
-    f12_feed(3,4,9,55);CHECK(f12_actions==3 && !point_gesture_repeating(&point_state));
     CHECK(!f12_buttons && !f12_trusted_reports);
+    f12_feed(3,4,9,55);CHECK(f12_actions==3 && !point_gesture_repeating(&point_state));
+    CHECK(!f12_buttons && f12_trusted_reports==1);
     return 0;
 }
 
-EXPORT int check_f12_right_edge_waits_for_captured_contact_confidence(void)
+EXPORT int check_f12_right_edge_accepts_captured_finger_pad_from_onset(void)
 {
     /* Actual failing sequence: rotation 2, right edge 5%, 1% step.
-     * First trusted sample is 153 ms after onset, at raw (12,620). */
+     * Elongated type-01 samples must be trusted from the first frame. */
     f12_reset(false);config.bytes[CFG_ROTATION]=2;
     config.bytes[CFG_EDGES+15]=1;config.bytes[CFG_EDGES+16]=3;
     config.bytes[CFG_EDGE_REPEAT]=0x0b;
@@ -320,9 +491,9 @@ EXPORT int check_f12_right_edge_waits_for_captured_contact_confidence(void)
         p[5]=samples[i][0];p[6]=samples[i][0]>>8;p[7]=samples[i][1];p[8]=samples[i][1]>>8;
         if(i==3) now+=123;
         f12_feed_packet(p);
-        if(i<3) CHECK(edge_state.state==EDGE_WAITING && !f12_actions);
-        if(i==3) CHECK(edge_state.state==EDGE_CANDIDATE && edge_state.start_y==620 && !f12_actions);
-        if(i==4) CHECK(edge_state.state==EDGE_CAPTURED && edge_state.edge==3 && f12_actions==1);
+        CHECK(last_confidence[0]);
+        if(i==0) CHECK(edge_state.state==EDGE_CANDIDATE && edge_state.start_y==490 && !f12_actions);
+        if(i>=2) CHECK(edge_state.state==EDGE_CAPTURED && edge_state.edge==3 && f12_actions);
     }
     CHECK(edge_state.continue_outside && !f12_buttons);
     f12_feed(0,0,0,0);CHECK(edge_state.state==EDGE_IDLE && !physical_active);
@@ -333,7 +504,7 @@ EXPORT int check_f12_edge_waiting_does_not_rearm_after_identity_or_trusted_origi
 {
     for(unsigned change=0;change<4;++change) {
         f12_reset(false);config.bytes[CFG_EDGES]=1;config.bytes[CFG_EDGES+1]=3;
-        uint8_t p[64];f12_packet(p,1,4,9,55);p[7]=0xe8;
+        uint8_t p[64];f12_packet(p,1,4,17,55);p[7]=0xe8;
         f12_feed_packet(p);CHECK(edge_state.state==EDGE_WAITING);
         p[11]=4;
         if(change==0) { memcpy(p+12,p+4,8);memset(p+4,0,8); }

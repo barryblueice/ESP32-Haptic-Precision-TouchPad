@@ -33,6 +33,7 @@ for name in sources:
 code += '\n#undef TAG\n' + body(ROOT/'main/I2C/TP/i2c_queue.c').replace(
     'while (1) {', 'while (parser_budget-- > 0) {')
 cases = (ROOT/'tests/f12_cases.c').read_text(encoding='utf-8')
+code += '\n' + body(ROOT/'tests/f12_captured_pad_cases.h')
 code += '\n' + cases
 out = ROOT/'build/f12-host-tests'
 out.mkdir(parents=True, exist_ok=True)

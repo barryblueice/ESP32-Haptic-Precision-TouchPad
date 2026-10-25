@@ -76,7 +76,7 @@ static void raw_trace_task(void *arg)
     if (TP_RAW_TRACE_ENABLED == 3)
         printf("TPTRACE TM3651 F12 layout: bytes[0..1]=length_le bytes[2]=report_id(0C) bytes[3]=irq_status; "
                "sN uses parser_offset=4+8*N stride=8; TPFRAME preserves full packets on header/status changes; "
-               "01=finger 03=palm 04=unclassified 06=gloved_finger; byte6=Wx byte7=Wy; nonzero=present, only finger types eligible\n");
+               "01=finger 03=palm 04=unclassified 06=gloved_finger; byte6=Wx byte7=Wy; nonzero=present; ordinary 01/03/06 use legacy major/minor filtering\n");
     for (;;) {
         if (xQueueReceive(trace_queue, &frame, portMAX_DELAY) != pdTRUE) continue;
         unsigned length = frame.bytes[0] | ((unsigned)frame.bytes[1] << 8);

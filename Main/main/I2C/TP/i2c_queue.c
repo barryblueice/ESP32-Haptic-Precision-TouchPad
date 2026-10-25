@@ -105,7 +105,7 @@ enum { POINT_GATE_NONE, POINT_GATE_SOURCE, POINT_GATE_OUTPUT, POINT_GATE_BUFFER,
        POINT_GATE_KNUCKLE, POINT_GATE_MODE, POINT_GATE_AGE };
 static void point_trace_gate(const input_frame_t *frame, unsigned gate)
 {
-    if (TP_RAW_TRACE_ENABLED < 2) return;
+#if TP_RAW_TRACE_ENABLED >= 2
     static uint32_t generation;
     static unsigned seen;
     unsigned mask = 0;
@@ -120,12 +120,16 @@ static void point_trace_gate(const input_frame_t *frame, unsigned gate)
         "knuckle_buffer", "knuckle_suppressed", "mode_disabled", "frame_too_old"};
     ESP_LOGI("POINT_GESTURE", "gate t=%" PRIu32 " gen=%" PRIu32 " reason=%s mask=0x%02x transport=%u mode=%u",
         frame->time_ms, frame->generation, reasons[gate], mask, current_mode, current_tp_mode);
+#else
+    (void)frame; (void)gate;
+#endif
 }
 
 static void point_trace_decision(const input_frame_t *frame, const point_gesture_t *before,
     const tp_multi_msg_t *msg, const device_config_t *config, const point_result_t *result)
 {
-    if (TP_RAW_TRACE_ENABLED < 2 || before->state == point_state.state) return;
+#if TP_RAW_TRACE_ENABLED >= 2
+    if (before->state == point_state.state) return;
     static const char *const states[] = {"idle", "active", "passthrough", "suppressed", "waiting"};
     unsigned count = 0, id = 0;
     for (unsigned i = 0; i < 5; ++i) if (msg->fingers[i].tip_switch) { ++count; id = i; }
@@ -145,6 +149,9 @@ static void point_trace_decision(const input_frame_t *frame, const point_gesture
         config->bytes[CFG_POINTS+4], config->bytes[CFG_POINTS+6],
         config->bytes[CFG_POINTS+8], config->bytes[CFG_POINTS+10],
         config->bytes[CFG_POINTS+12], config->bytes[CFG_POINTS+14], raw[0], tp_f12_type_name(raw[0]));
+#else
+    (void)frame; (void)before; (void)msg; (void)config; (void)result;
+#endif
 }
 
 static knuckle_gesture_t knuckle_state;
@@ -304,8 +311,8 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     debug_counter++;
     should_log_sample = (debug_counter % 64U) == 0U;
 
-    /* A palm/unclassified object must neither press a button nor contribute
-     * Z to another finger's force. Confidence loss cancels until real lift. */
+    /* Untrusted objects must neither press a button nor contribute Z to
+     * another finger's force. Confidence loss cancels until real lift. */
     if (!active_finger_count) ptp_force_click_state.rejected_until_lift = false;
     for (unsigned id = 0; id < 5; ++id)
         if (msg->fingers[id].tip_switch && !msg->fingers[id].confidence)
@@ -713,19 +720,24 @@ void i2c_queue_task(void *arg) {
                     tp_msg.fingers[id].contact_id = id;
 
                     tp_msg.fingers[id].tip_switch = tp_f12_present(finger_status);
-                    bool is_confident = tp_f12_confident(tp_packet + offset);
+                    bool is_confident = tp_f12_touch_confident(tp_packet + offset);
+                    /* A 03 continuation of a gesture-only 04 contact must
+                     * not leak into host input when an edge candidate cancels. */
+                    if (gesture_only_seen && finger_status == TP_F12_PALM)
+                        is_confident = false;
                     if (finger_status == TP_F12_UNCLASSIFIED) {
                         gesture_only_seen = true;
                         ptp_force_click_state.rejected_until_lift = true;
                     }
-                    if (TP_RAW_TRACE_ENABLED >= 2 &&
-                        (last_object_type[id] != finger_status ||
-                         (tp_msg.fingers[id].tip_switch && last_confidence[id] != is_confident)))
+#if TP_RAW_TRACE_ENABLED >= 2
+                    if (last_object_type[id] != finger_status ||
+                        (tp_msg.fingers[id].tip_switch && last_confidence[id] != is_confident))
                         ESP_LOGI("F12_CONTACT", "t=%" PRIu32 " id=%u type=%02x(%s) present=%u confidence=%u raw_x=%u raw_y=%u z=%u Wx=%u Wy=%u gesture_eligible=%u",
                             frame.time_ms, id, finger_status, tp_f12_type_name(finger_status),
                             tp_msg.fingers[id].tip_switch, is_confident, raw_x, raw_y, pressure_z,
                             tp_packet[offset + 6], tp_packet[offset + 7],
                             tp_f12_gesture_eligible(tp_packet + offset));
+#endif
                     last_object_type[id] = finger_status;
 
                     if (tp_msg.fingers[id].tip_switch) {
@@ -894,11 +906,14 @@ void i2c_queue_task(void *arg) {
                             aux_output_hold(point.action, point.steps, report_generation, report_time_ms) : point.initial ?
                             aux_output_once(point.action, point.steps, report_generation, report_time_ms) :
                             aux_output_repeat(point.action, point.steps, report_generation, report_time_ms))) {
+#if TP_RAW_TRACE_ENABLED >= 2
                             ESP_LOGW("POINT_GESTURE", "output_failed t=%" PRIu32 " action=%u", frame.time_ms, point.action);
+#endif
                             input_recover(); publish = false;
                         }
                         if (publish && point.steps) {
-                            if (point.initial && TP_RAW_TRACE_ENABLED >= 2) {
+#if TP_RAW_TRACE_ENABLED >= 2
+                            if (point.initial) {
                                 static const char *const corners[] = {"TL", "TR", "BL", "BR"};
                                 const uint8_t *contact = tp_packet + 4 + point_state.id * 8;
                                 uint16_t raw_x = contact[1] | ((uint16_t)contact[2] << 8);
@@ -908,6 +923,7 @@ void i2c_queue_task(void *arg) {
                                     point_state.start_x, point_state.start_y, raw_x, raw_y,
                                     config.bytes[CFG_ROTATION], frame.time_ms);
                             }
+#endif
                             input_source_gesture(frame.generation, true);
                         }
                         point_schedule();

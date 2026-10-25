@@ -39,15 +39,34 @@ static inline bool tp_f12_position_valid(const uint8_t record[8])
     return x <= 2302 && y <= 1532;
 }
 
+#define PALM_MAJOR_LIMIT 0x10
+#define PALM_MINOR_LIMIT 0x10
+#define PALM_RATIO_LIMIT 2.0f
+
+static inline bool tp_f12_shape_valid(const uint8_t record[8])
+{
+    /* Restore the pre-5941104 filter exactly: these names designate packet
+     * axes, not sorted lengths. minor == 0 deliberately gives ratio zero. */
+    uint8_t major = record[6], minor = record[7];
+    if (!tp_f12_position_valid(record) ||
+        major > PALM_MAJOR_LIMIT || minor > PALM_MINOR_LIMIT)
+        return false;
+    float ratio = minor > 0 ? (float)major / minor : 0;
+    return ratio <= PALM_RATIO_LIMIT;
+}
+
 static inline bool tp_f12_confident(const uint8_t record[8])
 {
-    unsigned wx = record[6], wy = record[7];
-    /* Keep the existing coordinate envelope; geometry/rotation calibration
-     * is independent of this type-decoding fix. Wx/Wy are unsorted axes. */
-    if (!tp_f12_finger(record[0]) || !tp_f12_position_valid(record) || wx > 16 || wy > 16)
-        return false;
-    unsigned large = wx > wy ? wx : wy, small = wx < wy ? wx : wy;
-    return large <= 2U * small;
+    return tp_f12_finger(record[0]) && tp_f12_shape_valid(record);
+}
+
+/* Ordinary input historically admitted 03 via status & 1. Restore its
+ * normal size/ratio filtering without interpreting unknown types as bits.
+ * Keep 04 reserved for special gestures and 06 finger support intact. */
+static inline bool tp_f12_touch_confident(const uint8_t record[8])
+{
+    return (tp_f12_finger(record[0]) || record[0] == TP_F12_PALM) &&
+        tp_f12_shape_valid(record);
 }
 
 /* Unclassified objects are admitted only to local edge/corner recognition.
