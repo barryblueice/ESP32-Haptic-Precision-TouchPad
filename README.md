@@ -16,16 +16,12 @@ Another touchpad hacking project, based on ESP32-S3 + Surface Laptop Studio 1964
 
 Also include a Dell Goodix fingerprint module, in order to support fingerprint for Windows Hello.
 
-> [!IMPORTANT]
-> This project is basically an expanded and strengthened version of an existing project [ESP32 Precision TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad).<br>
-> Most of the functions will be developed by referring to the source code of previous projects.<br>
-> So the basic functions of these two projects are the same. This project has added more new features.
-
 > [!CAUTION]
-> Hardware & software only support the models of the touchpad mentioned above, untested touchpad models may be incompatible. <br>Use of such models can lead to driver failure or permanent hardware damage caused by short circuits!
+> Hardware & software only support Surface Laptop Studio 1964, untested touchpad models may be incompatible. <br>Use of such models can lead to driver failure or permanent hardware damage caused by short circuits!<br>
 
 > [!TIP]
-> This project utilized AI-assisted development during its development process.
+> This project utilized AI-assisted development during its development process.<br>
+> Thanks to OpenAI Codex, most of code is based on the reverse-engineering sample of SAM (Surface aggregator module) and CirrusLogic Waveform Firmware.
 
 ### Hardware opensource link: [Oshwhub - ESP32 Haptic Precision Touchpad](https://oshwhub.com/barryblueice/esp32-haptic-precision-touchpad)
 
@@ -66,48 +62,53 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 ### Touch Support
 - [x] Single Touch
 - [x] Multi Touch
-  - [x] Scroll Gesture
-  - [x] Single Tap
-  - [x] Multi Tap
+- [x] Edge-sliding custom gesture
+- [x] Edge-point custom gesture
 
 ### Physical Controls
-- [x] Physical Buttons (Left & Right Click)
+- [x] ~~Physical Buttons (Left & Right Click)~~<br>Physical Press Support (Supported by Haptic Motor & 6 Channel Pressure Sensors)
 
 ### Compatibility
 - [x] Add new HID port for Mouse Mode (for older systems/BIOS, e.g., Windows 7)
 - [x] PTP Simulated Mouse Mode
+- [ ] (Future Plan) Apple Magic Trackpad & Mac Original MagicPad Protocal Support
 
 ### Wireless Modes
 - [x] 2.4G Wireless
   - [x] Compatible with [ESP32-Precision-TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad)
 - [x] Bluetooth
   - [x] Mouse Mode
-  - [ ] PTP Mode
+  - [ ] ~~PTP Mode~~
 
 ### Haptic Feedback
 - [x] Hacking on Haptic Sensitivity
   - [x] CS40L25 SDK Support
   - [x] ROM Vibrate
-  - [x] Specific waveform firmware (experimental)
+  - [x] Specific waveform firmware
 - [x] Haptic Support
-  - [x] Click Sensitivity Adjustment (experimental)
-  - [x] Haptic Click & Intensity Adjustment (experimental)
-  - [ ] Haptic Feedback & Intensity Control (tentative)
+  - [x] Click Sensitivity Adjustment
+  - [x] Haptic Click & Intensity Adjustment
+  - [x] Custom Haptic vibration
+  - [ ] ~~Haptic Feedback & Intensity Control (tentative)~~
 
 # Current Issues:
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
+    So under BLE mode, mouse mode is supported only. Recommend to use PTP simulated mouse mode.
  Also, Windows Setting for PTP is unavailable under BLE mode.
  - Under BLE mode, PTP/Mouse Mode switching is unavailable, so BLE Mouse Mode will be default currently.
  - ~~Due to a firmware issue with the CS40L25, the vibration feedback when pressed could be strange.~~ <br>Vibration feedback has already fixed through reverse-engineering firmware & control logic by Surface SAM and CS40L25 firmware.
 
 # Current Support System (already tested):
 
- - Windows XP (Mouse Mode);
- - Windows 7 (Mouse Mode);
- - Windows 10/11 (PTP Mode);
- - Ubuntu 22.04 or newer (PTP Mode);
- - Oxygen OS 17 (based on Android 16) on PHK110 (PTP Mode);
- - HP / MSI BIOS (Mouse Mode)
+| System | PTP Mode Support | Mouse Mode Support | Notice
+ :-: | :-: | :-: | :-: |
+Windows 10/11 | ✔️ | ✔️ | Only Windows 11 support haptic feedback adjustment by system.<br> Windows 10 need [custom configurator software](https://github.com/barryblueice/R-SODIUM-Precision-TouchPad-Configurator)
+Windows 7 | ❌ | ✔️ | Windows 7 may not support BLE device.
+Windows XP | ❌ | ✔️ | BLE is not supported on Windows XP.
+Linux | ✔️ | ✔️ | Only KDE support haptic feedback adjustment, other desktop environment is not confirmed.
+Android | ✔️ | ✔️ | Oxygen OS 17 (based on Android 16) on PHK110
+Huawei Harmony OS | ✔️ | ✔️ | Tested on Huawei Mate XT 2
+Mac OS | ❌ | ✔️ | Mac OS needs more reverse-engineering. It does not support PTP protocol.
 
 ***
 
