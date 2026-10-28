@@ -94,7 +94,6 @@ Also include a Dell Goodix fingerprint module, in order to support fingerprint f
 # Current Issues:
  -  Under BLE mode, Windows has recieved HID report, but most of gestures are unavailable, only a few gesture like 4 fingers tap can trigger.<br>
     So under BLE mode, mouse mode is supported only. Recommend to use PTP simulated mouse mode.
- Also, Windows Setting for PTP is unavailable under BLE mode.
  - Under BLE mode, PTP/Mouse Mode switching is unavailable, so BLE Mouse Mode will be default currently.
  - ~~Due to a firmware issue with the CS40L25, the vibration feedback when pressed could be strange.~~ <br>Vibration feedback has already fixed through reverse-engineering firmware & control logic by Surface SAM and CS40L25 firmware.
 
@@ -123,3 +122,11 @@ Please go to [wiki page](https://github.com/barryblueice/ESP32-Haptic-Precision-
  - [ESP32 Precision TouchPad](https://github.com/barryblueice/ESP32-Precision-TouchPad) - Previous project about hacking ELAN & Goodix TouchPad.
  - [FluentGesture](https://github.com/barryblueice/FluentGesture) - Customizing gesture for Precision TouchPad.
  - [R-SODIUM Precision TouchPad Configurator](https://github.com/barryblueice/R-SODIUM-Precision-TouchPad-Configurator) - GUI Manager for R-SODIUM Precision TouchPad Product series.
+
+***
+
+# Sponsor Me
+
+~~Buy me a coffee please~~
+
+Just kidding, if there are more PR and stars to assist this project, that would be the greatest kind of sponsorship. :)
