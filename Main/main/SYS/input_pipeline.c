@@ -250,20 +250,25 @@ bool input_source_observe(uint32_t generation, bool all_up)
 
 void input_source_button(uint32_t generation, bool down)
 {
+    /* Parser-owned: only an edge queues haptics, so only an edge wakes the worker. */
+    static bool last_down;
     uint8_t setting = ptp_haptic_click_intensity_get();
     taskENTER_CRITICAL(&lock);
-    if (generation == source_generation && !transport_paused && !source_wait_up && !mode_pending)
-        cs40l25_surface_button_update(down, setting);
+    bool admitted = generation == source_generation && !transport_paused && !source_wait_up && !mode_pending;
+    if (admitted) cs40l25_surface_button_update(down, setting);
     taskEXIT_CRITICAL(&lock);
+    if (admitted && down != last_down) cs40l25_surface_kick();
+    last_down = down;
 }
 
 void input_source_gesture(uint32_t generation, bool point)
 {
     if (!(device_config_value(CFG_FEATURE_FLAGS) & CFG_FLAG_CUSTOM_GESTURE_HAPTICS)) return;
     taskENTER_CRITICAL(&lock);
-    if (generation == source_generation && !transport_paused && !source_wait_up && !mode_pending)
-        cs40l25_surface_gesture(point);
+    bool admitted = generation == source_generation && !transport_paused && !source_wait_up && !mode_pending;
+    if (admitted) cs40l25_surface_gesture(point);
     taskEXIT_CRITICAL(&lock);
+    if (admitted) cs40l25_surface_kick();
 }
 
 bool input_output_ready(uint32_t generation)

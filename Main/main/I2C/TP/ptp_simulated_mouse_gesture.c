@@ -41,16 +41,17 @@
 /* Keep centroid contact masks distinct from single-finger slot keys 0..4. */
 #define MOVE_ANCHOR_CENTROID 0x80U
 
-/* Tap / click. */
+/* Tap / click. Tap timing uses 32-bit capture milliseconds: the 16-bit HID
+ * scan time wraps every 6.5 s and would make stale taps look recent. */
 #define TAP_MAX_MOVE 60.0f
-#define TAP_MAX_TIME 3000U
+#define TAP_MAX_TIME_MS 300U
 /* The active contact count/mask must stay changed for this many frames before
  * it is adopted. A one-frame ghost finger then neither promotes a left tap to a
  * right click nor tears down an in-flight scroll. */
 #define CONTACT_COUNT_CONFIRM_FRAMES 2U
-#define DOUBLE_TAP_MAX_INTERVAL 3800U
+#define DOUBLE_TAP_MAX_INTERVAL_MS 380U
 #define DOUBLE_TAP_DRAG_MIN_MOVE 30.0f
-#define DOUBLE_TAP_DRAG_HOLD_TIME 1800U
+#define DOUBLE_TAP_DRAG_HOLD_TIME_MS 180U
 
 /* Two-finger scroll. */
 #define SCROLL_EURO_MIN_CUTOFF 1.2f
@@ -87,8 +88,8 @@ typedef struct {
     float tap_start_x[MAX_TOUCH_CONTACTS];
     float tap_start_y[MAX_TOUCH_CONTACTS];
     float tap_max_move_squared;
-    uint16_t tap_start_time;
-    uint16_t last_single_tap_time;
+    uint32_t tap_start_ms;
+    uint32_t last_single_tap_ms;
     uint8_t move_contact_index;
     uint8_t scroll_contact_mask;
     uint8_t tap_contact_mask;
@@ -137,6 +138,11 @@ void ptp_simulated_mouse_reset(void)
 static uint16_t scan_time_delta(uint16_t now, uint16_t then)
 {
     return (uint16_t)(now - then);
+}
+
+static uint32_t elapsed_ms(uint32_t now, uint32_t then)
+{
+    return now - then;
 }
 
 static float scan_dt_seconds(uint16_t now, uint16_t then)
@@ -336,12 +342,12 @@ static void update_tap_state(const tp_multi_msg_t *msg,
         m_state.tap_moved = false;
         m_state.tap_max_move_squared = 0.0f;
         m_state.tap_max_count = (uint8_t)active_count;
-        m_state.tap_start_time = msg->scan_time;
+        m_state.tap_start_ms = msg->time_ms;
         m_state.double_tap_drag_candidate =
             active_count == 1 &&
             m_state.has_last_single_tap &&
-            scan_time_delta(msg->scan_time, m_state.last_single_tap_time) <=
-                DOUBLE_TAP_MAX_INTERVAL;
+            elapsed_ms(msg->time_ms, m_state.last_single_tap_ms) <=
+                DOUBLE_TAP_MAX_INTERVAL_MS;
         tap_anchor_contacts(msg, active_mask);
         return;
     }
@@ -350,7 +356,7 @@ static void update_tap_state(const tp_multi_msg_t *msg,
         /* The caller only passes a debounced contact count, so a one-frame
          * ghost finger cannot promote the tap to a higher button. */
         m_state.tap_max_count = (uint8_t)active_count;
-        m_state.tap_start_time = msg->scan_time;
+        m_state.tap_start_ms = msg->time_ms;
         m_state.double_tap_drag_candidate = false;
         tap_anchor_contacts(msg, active_mask);
         return;
@@ -360,7 +366,7 @@ static void update_tap_state(const tp_multi_msg_t *msg,
     if (active_mask != m_state.tap_contact_mask) {
         m_state.tap_moved = true;
         m_state.double_tap_drag_candidate = false;
-        m_state.tap_start_time = msg->scan_time;
+        m_state.tap_start_ms = msg->time_ms;
         tap_anchor_contacts(msg, active_mask);
         return;
     }
@@ -369,12 +375,12 @@ static void update_tap_state(const tp_multi_msg_t *msg,
     if (max_move > m_state.tap_max_move_squared) {
         m_state.tap_max_move_squared = max_move;
     }
-    uint16_t elapsed = scan_time_delta(msg->scan_time, m_state.tap_start_time);
+    uint32_t elapsed = elapsed_ms(msg->time_ms, m_state.tap_start_ms);
 
     if (m_state.double_tap_drag_candidate &&
         active_count == 1 &&
         (max_move > DOUBLE_TAP_DRAG_MIN_MOVE * DOUBLE_TAP_DRAG_MIN_MOVE ||
-         elapsed >= DOUBLE_TAP_DRAG_HOLD_TIME)) {
+         elapsed >= DOUBLE_TAP_DRAG_HOLD_TIME_MS)) {
         m_state.drag_active = true;
         m_state.has_last_single_tap = false;
     }
@@ -415,10 +421,10 @@ static void handle_tap_release(const tp_multi_msg_t *msg,
     }
 
     uint8_t buttons = tap_button_mask(m_state.tap_max_count);
-    uint16_t elapsed = scan_time_delta(msg->scan_time, m_state.tap_start_time);
+    uint32_t elapsed = elapsed_ms(msg->time_ms, m_state.tap_start_ms);
     bool clean = !m_state.tap_moved &&
                  m_state.tap_max_move_squared <= TAP_MAX_MOVE * TAP_MAX_MOVE &&
-                 elapsed <= TAP_MAX_TIME &&
+                 elapsed <= TAP_MAX_TIME_MS &&
                  buttons != 0;
 
     if (m_state.drag_active) {
@@ -433,7 +439,7 @@ static void handle_tap_release(const tp_multi_msg_t *msg,
 
         if (m_state.tap_max_count == 1) {
             m_state.has_last_single_tap = true;
-            m_state.last_single_tap_time = msg->scan_time;
+            m_state.last_single_tap_ms = msg->time_ms;
         } else {
             m_state.has_last_single_tap = false;
         }
@@ -643,12 +649,12 @@ static void handle_dual_finger_scroll(const tp_multi_msg_t *msg,
 /* A completed edge candidate has already supplied its real down/up pair.
  * Emit exactly one queued click without routing the synthetic down through
  * live-contact debounce. The caller queues the release with input_publish. */
-void ptp_simulated_mouse_replay_tap(uint16_t scan_time, mouse_hid_report_t *out_report)
+void ptp_simulated_mouse_replay_tap(uint32_t time_ms, mouse_hid_report_t *out_report)
 {
     ptp_simulated_mouse_reset();
     *out_report = (mouse_hid_report_t){.buttons = 0x01};
     m_state.has_last_single_tap = true;
-    m_state.last_single_tap_time = scan_time;
+    m_state.last_single_tap_ms = time_ms;
 }
 
 bool ptp_simulated_mouse_click_needs_release(void)

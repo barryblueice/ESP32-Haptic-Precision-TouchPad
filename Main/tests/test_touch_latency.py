@@ -41,7 +41,7 @@ API void t_reset(void) {
     memset(&trajectory,0,sizeof(trajectory)); reset_special();
 }
 API void t_mouse_conf(int mask, int confidence, int x, int y, int time, int buttons, mouse_hid_report_t *out) {
-    tp_multi_msg_t msg={.button_mask=(uint8_t)buttons, .scan_time=(uint16_t)time};
+    tp_multi_msg_t msg={.button_mask=(uint8_t)buttons, .scan_time=(uint16_t)time, .time_ms=(uint32_t)time/10U};
     for(int i=0;i<5;++i) if(mask&(1<<i)) msg.fingers[i]=(tp_finger_t){
         .x=(uint16_t)(x+i*10),.y=(uint16_t)y,.tip_switch=1,.confidence=(confidence>>i)&1,.contact_id=(uint8_t)i};
     parse_ptp_simulated_mouse_report(&msg,out);
@@ -141,12 +141,12 @@ API void t_features(unsigned lift,float *out) { knuckle_features_finish(&knuckle
 API void t_feature_add(unsigned z,unsigned area,unsigned now) { knuckle_features_add(&knuckle.features,z,area,now); }
 API void t_special(int route,int tp_mode,int mask,int confidence,int x,int y,unsigned now,int online) {
     int current_mode=route,current_tp_mode=tp_mode,active_finger_count=0;
-    bool publish=online!=0,published_pair=false;
+    bool publish=online!=0,published_pair=false,emit_report=true;
     uint32_t report_generation=0,report_time_ms=now;
     struct { unsigned time_ms,read_done_us,generation; } frame={now,now*1000,0};
     knuckle_result_t knock={0};
     uint16_t last_raw_x[5]={0},last_raw_y[5]={0},slot_mouse_x[5]={0},slot_mouse_y[5]={0};
-    tp_multi_msg_t tp_msg={.scan_time=(uint16_t)(now*10)};
+    tp_multi_msg_t tp_msg={.scan_time=(uint16_t)(now*10),.time_ms=now};
     for(unsigned i=0;i<5;++i) if(mask&(1<<i)) {
         tp_msg.fingers[i]=(tp_finger_t){.x=x,.y=y,.tip_switch=1,.confidence=(confidence>>i)&1,.contact_id=i};
         last_raw_x[i]=slot_mouse_x[i]=x;last_raw_y[i]=slot_mouse_y[i]=y;
@@ -278,6 +278,18 @@ class TouchTests(unittest.TestCase):
         self.mouse(t=400);self.mouse(t=500)
         self.assertEqual(self.mouse(x=540,t=600).buttons,1)
         self.assertEqual(self.mouse(mask=0,t=700).buttons,0)
+    def test_stale_tap_after_scan_time_wrap_does_not_drag(self):
+        self.mouse(t=100);self.mouse(t=200);self.mouse(mask=0,t=300)
+        self.lib.t_tap_release()
+        # 16-bit scan time aliases to t=400 again, but ~6.5 s have elapsed.
+        wrap=65536
+        self.mouse(t=wrap+400);self.mouse(t=wrap+500)
+        self.assertEqual(self.mouse(x=540,t=wrap+600).buttons,0)
+        self.assertEqual(self.mouse(x=540,t=wrap+3000).buttons,0)
+    def test_long_hold_after_scan_time_wrap_is_not_a_tap(self):
+        self.mouse(t=100);self.mouse(t=200)
+        self.assertEqual(self.mouse(mask=0,t=65536+300).buttons,0)
+        self.assertEqual(self.lib.t_tap_release(),0)
     def test_ghost_second_finger_does_not_become_right_tap(self):
         self.mouse(t=100);self.mouse(t=200)
         self.mouse(mask=3,t=300);self.mouse(t=400)

@@ -40,20 +40,20 @@ typedef union {
 
 void sub_dev_init(void);
 
-uint8_t bq24195_read_reg(uint8_t reg_addr);
+esp_err_t bq24195_read_reg(uint8_t reg_addr, uint8_t *value);
 esp_err_t bq24195_write_reg(uint8_t reg_addr, uint8_t value);
 esp_err_t bq24195_enable_charging(void);
 float bq24195_get_battery_voltage(void);
-uint16_t max17048_read_reg16(uint8_t reg_addr);
+esp_err_t max17048_read_reg16(uint8_t reg_addr, uint16_t *value);
 float max17048_get_battery_voltage(void);
 float max17048_get_battery_soc(void);
-int get_battery_percentage();
+int get_battery_percentage(); /* -1 on read failure */
 void bq24195_dump_charge_config(void);
 
 void charging_state_monitor_task(void *pvParameters);
 
 esp_err_t mp28167_set_vref_mv(uint16_t mv);
-float mp28167_get_vref_mv();
+float mp28167_get_vref_mv(); /* negative on read failure */
 
 extern i2c_master_dev_handle_t sub_dev_mp28167_handle;
 extern i2c_master_dev_handle_t sub_dev_bq24195_handle;

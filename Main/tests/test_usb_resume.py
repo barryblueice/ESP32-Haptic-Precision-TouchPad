@@ -45,6 +45,7 @@ int xQueueReceive(QueueHandle_t,void *,unsigned);
 void cs40l25_surface_cancel_click(void);
 void cs40l25_surface_button_update(bool,uint8_t);
 void cs40l25_surface_gesture(bool);
+void cs40l25_surface_kick(void);
 unsigned cs40l25_surface_get_state(void);
 uint8_t ptp_haptic_click_intensity_get(void);
 uint8_t device_config_value(unsigned);
@@ -77,6 +78,7 @@ int xQueueReceive(QueueHandle_t h,void *p,unsigned t){(void)h;(void)t;if(!raw_co
 void cs40l25_surface_cancel_click(void){}
 void cs40l25_surface_button_update(bool b,uint8_t s){(void)b;(void)s;}
 void cs40l25_surface_gesture(bool p){(void)p;}
+void cs40l25_surface_kick(void){}
 unsigned cs40l25_surface_get_state(void){return 1;}
 uint8_t ptp_haptic_click_intensity_get(void){return 50;}
 uint8_t device_config_value(unsigned v){(void)v;return 0;}

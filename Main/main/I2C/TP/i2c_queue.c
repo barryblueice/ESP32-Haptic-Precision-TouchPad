@@ -34,14 +34,13 @@
 #define HISTORY_LEN 3
 
 #define TAP_DEADZONE 30
-#define FILTER_ALPHA 0.5f
 
-#define SCAN_INTERVAL_PER_FINGER 80
 #define FORCE_CLICK_PRESS_STABLE_FRAMES 2
 #define FORCE_CLICK_RELEASE_STABLE_FRAMES 2
 #define FORCE_CLICK_MOVE_DEADZONE 45
-/* Pressure is summed across both contacts. Require 90% of the single-finger
- * threshold per finger on a balanced press, reducing accidental middle clicks. */
+/* Pressure is summed across both contacts. 140% of the single-finger
+ * threshold means ~70% per finger on a balanced press, which still rejects
+ * accidental middle clicks from two resting fingers. */
 #define FORCE_CLICK_MIDDLE_PERCENT 140
 
 typedef enum {
@@ -54,8 +53,6 @@ typedef enum {
 static touch_state_t touch_state[5] = {0};
 
 static bool tap_frozen[5] = {false};
-
-uint16_t global_scan_time = 0;
 
 static uint16_t raw_x_history[5][HISTORY_LEN] = {0};
 static uint16_t raw_y_history[5][HISTORY_LEN] = {0};
@@ -303,13 +300,8 @@ static void ptp_apply_force_click_deadzone(tp_multi_msg_t *msg, int tracked_inde
 
 static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger_count) {
     int tracked_index = -1;
-    // uint8_t tracked_confidence = 0;
-    static uint32_t debug_counter = 0;
-    bool should_log_sample = false;
 
     msg->button_mask = 0;
-    debug_counter++;
-    should_log_sample = (debug_counter % 64U) == 0U;
 
     /* Untrusted objects must neither press a button nor contribute Z to
      * another finger's force. Confidence loss cancels until real lift. */
@@ -335,13 +327,6 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
     if (!mode_allows_click ||
         (active_finger_count != 1 &&
          !(two_finger_click && active_finger_count == 2))) {
-        if (should_log_sample) {
-            // ESP_LOGI(TAG,
-            //          "PTP force click bypass: mode=%u active_fingers=%d threshold_level=%u",
-            //          current_tp_mode,
-            //          active_finger_count,
-            //          ptp_button_press_threshold);
-        }
         ptp_reset_force_click(msg);
         return;
     }
@@ -380,7 +365,9 @@ static void ptp_update_force_click_button(tp_multi_msg_t *msg, int active_finger
                                           : active_finger_count >= 2) {
         press_threshold = ptp_middle_press_threshold(press_threshold);
     }
-    uint8_t release_threshold = (press_threshold > 12) ? (press_threshold - 12) : press_threshold;
+    /* Keep real hysteresis even for very light thresholds, else the button
+     * chatters around a single value. */
+    uint8_t release_threshold = (press_threshold > 12) ? (press_threshold - 12) : (press_threshold / 2);
     uint8_t effective_z;
     uint16_t current_x = msg->fingers[tracked_index].x;
     uint16_t current_y = msg->fingers[tracked_index].y;
@@ -517,6 +504,7 @@ void update_simulated_scan_time(tp_multi_msg_t *msg, uint32_t capture_ms) {
     /* Preserve physical contact duration when a buffered prefix is replayed
      * in one parser iteration. HID scan time is in 100 us units. */
     msg->scan_time = (uint16_t)(capture_ms * 10U);
+    msg->time_ms = capture_ms;
 }
 
 static void reset_input_state(void)
@@ -704,6 +692,11 @@ void i2c_queue_task(void *arg) {
             if (tp_packet[0] == 0x40) {
                 int active_finger_count = 0;
                 bool published_pair = false;
+                bool emit_report = true;
+                /* Choose the tap deadzone from the whole frame, not from the
+                 * lower-numbered slots processed so far. */
+                unsigned present_mask = tp_f12_present_mask(tp_packet);
+                bool multi_contact = (present_mask & (present_mask - 1U)) != 0;
 
                 update_simulated_scan_time(&tp_msg, frame.time_ms);
 
@@ -802,7 +795,7 @@ void i2c_queue_task(void *arg) {
                         int dx_from_origin = abs((int)rx - (int)origin_x[id]);
                         int dy_from_origin = abs((int)ry - (int)origin_y[id]);
 
-                        int active_dz = (active_finger_count > 0) ? (TAP_DEADZONE / 2) : TAP_DEADZONE;
+                        int active_dz = multi_contact ? (TAP_DEADZONE / 2) : TAP_DEADZONE;
 
                         if (dx_from_origin > active_dz || dy_from_origin > active_dz) {
                             tap_frozen[id] = false;
@@ -969,7 +962,7 @@ void i2c_queue_task(void *arg) {
                         } else {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                             if (publish) {
-                                ptp_simulated_mouse_replay_tap(tp_msg.scan_time, &down.data.mouse);
+                                ptp_simulated_mouse_replay_tap(tp_msg.time_ms, &down.data.mouse);
                                 if (!input_publish(report_generation, &down, true)) {
                                     ptp_simulated_mouse_reset();
                                     publish = false;
@@ -995,23 +988,25 @@ void i2c_queue_task(void *arg) {
 #if CONFIG_PTP_SIMULATED_MOUSE_MODE
                     /* Confidence/gesture ownership is unchanged; mouse motion
                      * uses raw rotated samples and rejects jumps in one place. */
-                    tp_multi_msg_t mouse_msg = tp_msg;
+                    tp_multi_msg_t sim_msg = tp_msg;
                     for (unsigned id = 0; id < 5; ++id) {
-                        mouse_msg.fingers[id].x = slot_mouse_x[id];
-                        mouse_msg.fingers[id].y = slot_mouse_y[id];
+                        sim_msg.fingers[id].x = slot_mouse_x[id];
+                        sim_msg.fingers[id].y = slot_mouse_y[id];
                     }
-                    parse_ptp_simulated_mouse_report(&mouse_msg, &report.data.mouse);
+                    parse_ptp_simulated_mouse_report(&sim_msg, &report.data.mouse);
                     /* Only force clicks drive haptics; taps and tap-drags are virtual buttons. */
                     input_source_button(frame.generation, tp_msg.button_mask != 0);
                     tap = ptp_simulated_mouse_click_needs_release();
 #else
-                    continue;
+                    /* A full-RMI frame cannot be expressed as a native mouse
+                     * report; drop it but still run the all-up cleanup below. */
+                    emit_report = false;
 #endif
                 } else {
                     input_source_button(frame.generation, tp_msg.button_mask != 0);
                     parse_ptp_report(&tp_msg, &report.data.ptp);
                 }
-                if (publish && !published_pair) input_publish(report_generation, &report, tap);
+                if (publish && !published_pair && emit_report) input_publish(report_generation, &report, tap);
                 if (!publish && all_up) {
                     /* Offline/recovery taps cannot seed the next host double-tap drag. */
                     ptp_report_reset();

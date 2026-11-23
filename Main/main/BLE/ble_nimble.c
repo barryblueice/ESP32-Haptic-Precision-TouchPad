@@ -450,7 +450,7 @@ esp_err_t ble_hid_init(void)
         return ESP_FAIL;
     }
     nimble_port_freertos_init(host_task);
-    if (xTaskCreatePinnedToCore(battery_task, "ble_battery", 2048, NULL, 5, NULL, 0) != pdPASS)
+    if (xTaskCreatePinnedToCore(battery_task, "ble_battery", 3072, NULL, 5, NULL, 0) != pdPASS)
         ESP_LOGW(TAG, "Battery notifications disabled: task allocation failed");
     return ESP_OK;
 }

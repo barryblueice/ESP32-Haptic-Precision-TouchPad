@@ -20,7 +20,6 @@ extern i2c_master_dev_handle_t dev_haptic_motor_handle;
 
 extern bool global_watchdog_start;
 extern esp_timer_handle_t timeout_watchdog_timer;
-extern uint16_t global_scan_time;
 
 extern uint16_t watchdog_x;
 extern uint16_t watchdog_y;
@@ -31,11 +30,9 @@ extern uint8_t click_midium_weight_threshold;
 extern uint8_t click_strong_weight_threshold;
 
 void touchpad_init(void);
-void read_touch_task(void *pvParameters);
 esp_err_t touchpad_mode_set(bool is_ptp_mode);
 void click_thresholds_load_from_nvs(void);
 void i2c_queue_task(void *arg);
-void watchdog_refresh(bool touch_active);
 void watchdog_timeout_callback(void* arg);
 void tp_modern_sleep_init(void);
 void tp_modern_sleep_record_activity(void);
@@ -50,6 +47,6 @@ void parse_ptp_simulated_mouse_report(const tp_multi_msg_t *msg, mouse_hid_repor
 bool ptp_simulated_mouse_click_needs_release(void);
 void ptp_simulated_mouse_reset(void);
 /* Completed edge tap; caller must queue the matching release. */
-void ptp_simulated_mouse_replay_tap(uint16_t scan_time, mouse_hid_report_t *out_report);
+void ptp_simulated_mouse_replay_tap(uint32_t time_ms, mouse_hid_report_t *out_report);
 
 #endif

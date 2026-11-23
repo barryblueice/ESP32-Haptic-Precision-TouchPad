@@ -47,8 +47,6 @@ void app_main(void) { surface_haptic_test_start(); }
 void app_main(void) {
 
     input_pipeline_init();
-    led_queue = xQueueCreate(10, sizeof(led_msg_t));
-    ESP_ERROR_CHECK(led_queue ? ESP_OK : ESP_ERR_NO_MEM);
 
     gpio_init();
 

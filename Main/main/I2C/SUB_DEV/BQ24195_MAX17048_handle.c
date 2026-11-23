@@ -10,6 +10,10 @@
 
 #define TAG "BQ24195_MAX17048"
 
+/* Runtime power-chip polling must never abort the firmware or hang forever on
+ * a stuck secondary bus; a failed sample is simply skipped. */
+#define SUB_I2C_TIMEOUT_MS 50
+
 static int bq24195_decode_iinlim_ma(uint8_t code)
 {
     static const int limits_ma[] = {100, 150, 500, 900, 1200, 1500, 2000, 3000};
@@ -31,24 +35,31 @@ static int bq24195_decode_iterm_ma(uint8_t reg03)
     return 128 + ((reg03 & 0x0F) * 128);
 }
 
-uint8_t bq24195_read_reg(uint8_t reg_addr)
+esp_err_t bq24195_read_reg(uint8_t reg_addr, uint8_t *value)
 {
     uint8_t data = 0;
-    ESP_ERROR_CHECK(i2c_master_transmit_receive(sub_dev_bq24195_handle, &reg_addr, 1, &data, 1, -1));
-    return data;
+    esp_err_t err = i2c_master_transmit_receive(sub_dev_bq24195_handle, &reg_addr, 1, &data, 1,
+                                                SUB_I2C_TIMEOUT_MS);
+    if (err == ESP_OK) *value = data;
+    return err;
 }
 
 esp_err_t bq24195_write_reg(uint8_t reg_addr, uint8_t value)
 {
     uint8_t payload[2] = {reg_addr, value};
-    return i2c_master_transmit(sub_dev_bq24195_handle, payload, sizeof(payload), -1);
+    return i2c_master_transmit(sub_dev_bq24195_handle, payload, sizeof(payload), SUB_I2C_TIMEOUT_MS);
 }
 
 esp_err_t bq24195_enable_charging(void)
 {
-    uint8_t reg01 = bq24195_read_reg(0x01);
+    uint8_t reg01;
+    esp_err_t err = bq24195_read_reg(0x01, &reg01);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "BQ24195 REG01 read failed: %s", esp_err_to_name(err));
+        return err;
+    }
     uint8_t new_reg01 = (reg01 & (uint8_t)~0x30U) | 0x10U | 0x01U;
-    esp_err_t err = bq24195_write_reg(0x01, new_reg01);
+    err = bq24195_write_reg(0x01, new_reg01);
 
     if (err == ESP_OK) {
         ESP_LOGI(TAG, "BQ24195 REG01: 0x%02X -> 0x%02X (CHG_CONFIG=01)", reg01, new_reg01);
@@ -64,28 +75,39 @@ float bq24195_get_battery_voltage(void)
     return max17048_get_battery_voltage();
 }
 
-uint16_t max17048_read_reg16(uint8_t reg_addr)
+esp_err_t max17048_read_reg16(uint8_t reg_addr, uint16_t *value)
 {
     uint8_t data[2] = {0};
-    ESP_ERROR_CHECK(i2c_master_transmit_receive(sub_dev_max17048_handle, &reg_addr, 1, data, 2, -1));
-    return ((uint16_t)data[0] << 8) | data[1];
+    esp_err_t err = i2c_master_transmit_receive(sub_dev_max17048_handle, &reg_addr, 1, data, 2,
+                                                SUB_I2C_TIMEOUT_MS);
+    if (err == ESP_OK) *value = ((uint16_t)data[0] << 8) | data[1];
+    return err;
 }
 
+/* Returns a negative value when the gauge cannot be read. */
 float max17048_get_battery_voltage(void)
 {
-    uint16_t raw = max17048_read_reg16(MAX17048_REG_VCELL);
+    uint16_t raw;
+    if (max17048_read_reg16(MAX17048_REG_VCELL, &raw) != ESP_OK) return -1.0f;
     return (float)raw * 78.125e-6f;
 }
 
+/* Returns a negative value when the gauge cannot be read. */
 float max17048_get_battery_soc(void)
 {
-    uint16_t raw = max17048_read_reg16(MAX17048_REG_SOC);
+    uint16_t raw;
+    if (max17048_read_reg16(MAX17048_REG_SOC, &raw) != ESP_OK) return -1.0f;
     return (float)raw / 256.0f;
 }
 
+/* 0..100, or -1 when the fuel gauge read failed. */
 int get_battery_percentage()
 {
     float soc = max17048_get_battery_soc();
+
+    if (soc < 0.0f) {
+        return -1;
+    }
 
     if (soc <= 0.0f) {
         return 0;
@@ -100,13 +122,18 @@ int get_battery_percentage()
 
 void bq24195_dump_charge_config(void)
 {
-    uint8_t reg00 = bq24195_read_reg(0x00);
-    uint8_t reg01 = bq24195_read_reg(0x01);
-    uint8_t reg02 = bq24195_read_reg(0x02);
-    uint8_t reg03 = bq24195_read_reg(0x03);
-    uint8_t reg08 = bq24195_read_reg(0x08);
-    uint8_t reg09_latched = bq24195_read_reg(0x09);
-    uint8_t reg09_current = bq24195_read_reg(0x09);
+    uint8_t reg00, reg01, reg02, reg03, reg08, reg09_latched, reg09_current;
+    esp_err_t err = bq24195_read_reg(0x00, &reg00);
+    if (err == ESP_OK) err = bq24195_read_reg(0x01, &reg01);
+    if (err == ESP_OK) err = bq24195_read_reg(0x02, &reg02);
+    if (err == ESP_OK) err = bq24195_read_reg(0x03, &reg03);
+    if (err == ESP_OK) err = bq24195_read_reg(0x08, &reg08);
+    if (err == ESP_OK) err = bq24195_read_reg(0x09, &reg09_latched);
+    if (err == ESP_OK) err = bq24195_read_reg(0x09, &reg09_current);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "BQ24195 register dump failed: %s", esp_err_to_name(err));
+        return;
+    }
 
     ESP_LOGI(TAG,
              "BQ24195 regs: REG00=0x%02X REG01=0x%02X REG02=0x%02X REG03=0x%02X REG08=0x%02X REG09(latched)=0x%02X REG09(current)=0x%02X",
@@ -143,19 +170,35 @@ void bq24195_dump_charge_config(void)
              reg09_current & 0x07);
 }
 
+typedef enum { LED_STATE_UNKNOWN = 0, LED_STATE_OFF, LED_STATE_ON, LED_STATE_BLINK } led_state_t;
+
+/* Issue LED commands only on change so a running blink keeps its phase and
+ * the timer service is not churned every second. */
+static void charging_led_set(gpio_num_t pin, led_state_t *current, led_state_t wanted)
+{
+    if (*current == wanted) return;
+    *current = wanted;
+    switch (wanted) {
+        case LED_STATE_ON:    led_send_command(pin, LED_CMD_ALWAYS, 0, 0, 0, false); break;
+        case LED_STATE_BLINK: led_send_command(pin, LED_CMD_BLINK, 500, 500, 0, true); break;
+        default:              led_send_command(pin, LED_CMD_STOP, 0, 0, 0, false); break;
+    }
+}
+
 void charging_state_monitor_task(void *pvParameters)
 {
-    static uint8_t last_chg_state = 0xFF;
-    static uint8_t pending_chg_state = 0xFF;
-    static uint8_t pending_chg_count = 0;
-    static uint8_t last_vbus_det_level = 0xFF;
-    static bool charge_done_latched = false;
+    (void)pvParameters;
+    uint8_t last_chg_state = 0xFF;
+    uint8_t pending_chg_state = 0xFF;
+    uint8_t pending_chg_count = 0;
+    uint8_t last_vbus_det_level = 0xFF;
+    bool charge_done_latched = false;
+    led_state_t led1 = LED_STATE_UNKNOWN, led2 = LED_STATE_UNKNOWN;
 
     while (1) {
-        battery_percentage = get_battery_percentage();
+        int level = get_battery_percentage();
+        if (level >= 0) battery_percentage = level;
         uint8_t vbus_det_level = gpio_get_level(VBUS_DET_GPIO);
-
-        // ESP_LOGI(TAG, "Battery percentage: %d%%", battery_percentage);
 
         if (last_vbus_det_level != vbus_det_level) {
             last_chg_state = 0xFF;
@@ -165,10 +208,10 @@ void charging_state_monitor_task(void *pvParameters)
             last_vbus_det_level = vbus_det_level;
         }
 
-        if (vbus_det_level == 1) {
-            bq24195_status_reg_t status = {
-                .val = bq24195_read_reg(0x08),
-            };
+        bq24195_status_reg_t status = {0};
+        if (vbus_det_level == 1 && bq24195_read_reg(0x08, &status.val) != ESP_OK) {
+            /* Skip this sample; keep the current LED state. */
+        } else if (vbus_det_level == 1) {
             uint8_t effective_chg_state = status.reg.chrg_stat;
 
             if (status.reg.chrg_stat == BQ24195_STATE_CHARGE_DONE ||
@@ -182,8 +225,7 @@ void charging_state_monitor_task(void *pvParameters)
                 effective_chg_state = BQ24195_STATE_CHARGE_DONE;
             }
 
-            gpio_set_level(GPIO_LED_1, LED_OFF);
-            led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
+            charging_led_set(GPIO_LED_1, &led1, LED_STATE_OFF);
 
             if (effective_chg_state == last_chg_state) {
                 pending_chg_state = 0xFF;
@@ -192,36 +234,15 @@ void charging_state_monitor_task(void *pvParameters)
                 pending_chg_state = effective_chg_state;
                 pending_chg_count = 1;
             } else if (++pending_chg_count >= 2) {
-                switch (effective_chg_state) {
-                    case BQ24195_STATE_CHARGE_DONE:
-                        led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
-                        gpio_set_level(GPIO_LED_2, LED_ON);
-                        break;
-                    case BQ24195_STATE_PRE_CHARGE:
-                    case BQ24195_STATE_FAST_CHARGE:
-                    default:
-                        gpio_set_level(GPIO_LED_2, LED_OFF);
-                        led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
-                        led_send_command(GPIO_LED_2, LED_CMD_BLINK, 500, 500, 0, true);
-                        break;
-                }
-
+                charging_led_set(GPIO_LED_2, &led2, effective_chg_state == BQ24195_STATE_CHARGE_DONE ?
+                                 LED_STATE_ON : LED_STATE_BLINK);
                 last_chg_state = effective_chg_state;
                 pending_chg_state = 0xFF;
                 pending_chg_count = 0;
             }
         } else {
-            gpio_set_level(GPIO_LED_2, LED_OFF);
-            led_send_command(GPIO_LED_2, LED_CMD_STOP, 1, 1, 0, false);
-
-            if (battery_percentage > 20) {
-                led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
-                gpio_set_level(GPIO_LED_1, LED_ON);
-            } else {
-                gpio_set_level(GPIO_LED_1, LED_OFF);
-                led_send_command(GPIO_LED_1, LED_CMD_STOP, 1, 1, 0, false);
-                led_send_command(GPIO_LED_1, LED_CMD_BLINK, 500, 500, 0, true);
-            }
+            charging_led_set(GPIO_LED_2, &led2, LED_STATE_OFF);
+            charging_led_set(GPIO_LED_1, &led1, battery_percentage > 20 ? LED_STATE_ON : LED_STATE_BLINK);
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000));

@@ -16,6 +16,7 @@
 static portMUX_TYPE lock = portMUX_INITIALIZER_UNLOCKED;
 static surface_haptic_runtime_t runtime;
 static bool started, sleep_requested;
+static TaskHandle_t worker_task;
 static uint32_t button_presses, button_releases;
 
 /* Called with the runtime lock held. Only invalidate bookkeeping here;
@@ -63,6 +64,14 @@ void cs40l25_surface_gesture(bool point)
     taskENTER_CRITICAL(&lock);
     surface_runtime_gesture(&runtime, point, now);
     taskEXIT_CRITICAL(&lock);
+}
+
+void cs40l25_surface_kick(void)
+{
+    taskENTER_CRITICAL(&lock);
+    TaskHandle_t task = worker_task;
+    taskEXIT_CRITICAL(&lock);
+    if (task) xTaskNotifyGive(task);
 }
 
 void cs40l25_surface_cancel_click(void)
@@ -116,6 +125,9 @@ static void worker(void *arg)
     (void)arg;
     if (!surface_haptic_hw_initialize()) {
         fault("initialization", 0);
+        taskENTER_CRITICAL(&lock);
+        worker_task = NULL;
+        taskEXIT_CRITICAL(&lock);
         vTaskDelete(NULL);
         return;
     }
@@ -236,9 +248,14 @@ static void worker(void *arg)
                 }
             }
         }
+        /* Producers kick the worker, so a click plays without waiting for the
+         * next poll. The 10 ms timeout keeps heartbeat/VBUS/sleep handling. */
         TickType_t ticks = pdMS_TO_TICKS(10);
-        vTaskDelay(ticks ? ticks : 1);
+        (void)ulTaskNotifyTake(pdTRUE, ticks ? ticks : 1);
     }
+    taskENTER_CRITICAL(&lock);
+    worker_task = NULL;
+    taskEXIT_CRITICAL(&lock);
     vTaskDelete(NULL);
 }
 
@@ -248,7 +265,12 @@ void cs40l25_surface_init(void)
     bool create = !started;
     started = true;
     taskEXIT_CRITICAL(&lock);
-    if (create && xTaskCreatePinnedToCore(worker, "surface_haptic", 8192, NULL, 8, NULL, 1) != pdPASS) {
+    TaskHandle_t task = NULL;
+    if (create && xTaskCreatePinnedToCore(worker, "surface_haptic", 8192, NULL, 8, &task, 1) != pdPASS) {
         fault("task allocation", 0);
+    } else if (create) {
+        taskENTER_CRITICAL(&lock);
+        worker_task = task;
+        taskEXIT_CRITICAL(&lock);
     }
 }

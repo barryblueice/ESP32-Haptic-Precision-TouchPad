@@ -23,7 +23,8 @@ typedef struct {
     tp_finger_t fingers[5];
     uint8_t actual_count;
     uint8_t button_mask;
-    uint16_t scan_time;
+    uint16_t scan_time;   /* HID scan time, 100 us units, wraps every 6.5 s */
+    uint32_t time_ms;     /* Capture time for gesture timing that must not wrap */
 } tp_multi_msg_t;
 
 typedef struct {

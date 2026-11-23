@@ -19,10 +19,17 @@
 
 #define TAG "IRQ_TP_INT"
 #define TP_I2C_INT_TASK_STACK_SIZE 6144
+/* Consecutive read failures back off exponentially (after the fixed 10 ms
+ * delay) so a stuck bus cannot trigger ~90 source recoveries per second. The
+ * IDF driver already resets its FSM on timeout; the shared reset GPIO (touch
+ * + haptic) makes a controller hard reset unsafe from this task. */
+#define TP_READ_BACKOFF_MAX_US 200000U
+#define TP_READ_FAIL_LOG_AT 10U
 
 static TaskHandle_t tp_task_handle = NULL;
 static uint8_t s_tp_packet[64];
 static esp_timer_handle_t drain_timer;
+static uint32_t read_failures;
 static void drain_timer_wake(void *arg)
 {
     (void)arg;
@@ -59,8 +66,19 @@ static void tp_drain_pending(void)
         }
         if (err != ESP_OK) {
             vTaskDelay(pdMS_TO_TICKS(10));
+            if (read_failures < UINT32_MAX) ++read_failures;
+            if (read_failures > 1) {
+                unsigned shift = read_failures - 2 < 5 ? read_failures - 2 : 5;
+                uint32_t backoff = 10000U << shift;
+                retry_us = backoff < TP_READ_BACKOFF_MAX_US ? backoff : TP_READ_BACKOFF_MAX_US;
+            }
+            if (read_failures == TP_READ_FAIL_LOG_AT)
+                ESP_LOGW(TAG, "Touch read failing repeatedly (%s); backing off", esp_err_to_name(err));
             break;
         }
+        if (read_failures >= TP_READ_FAIL_LOG_AT)
+            ESP_LOGI(TAG, "Touch read recovered after %u failures", (unsigned)read_failures);
+        read_failures = 0;
         if (length == 0 || length == 2 || length == UINT16_MAX) {
             /* RESET/no-data is not a queued touch report. A held-low INT must
              * not turn an empty controller into back-to-back 64-byte reads.

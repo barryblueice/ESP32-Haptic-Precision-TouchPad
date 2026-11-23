@@ -60,7 +60,9 @@ void sub_dev_init(void) {
 
     bq24195_enable_charging();
 
-    battery_percentage = get_battery_percentage();
+    int level = get_battery_percentage();
+    if (level >= 0) battery_percentage = level;
+    else ESP_LOGW(TAG, "battery gauge read failed; keeping %d %%", battery_percentage);
 
     ESP_LOGI(TAG, "battery level: %d %%", battery_percentage);
     ESP_LOGI(TAG, "battery voltage: %.3f V", max17048_get_battery_voltage());

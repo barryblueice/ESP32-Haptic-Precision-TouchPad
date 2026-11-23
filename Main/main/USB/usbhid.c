@@ -29,6 +29,7 @@
 #include "USB/usb_pump_state.h"
 #include "SYS/input_diagnostics.h"
 #include "USB/usb_config.h"
+#include "USB/usb_host_trace.h"
 #include "USB/usb_aux.h"
 #include "SYS/device_config.h"
 #include "SYS/connection.h"
@@ -429,6 +430,7 @@ static void tinyusb_event_cb(tinyusb_event_t *event, void *arg)
 }
 
 void usbhid_init(void) {
+    usb_host_trace_init();
     usb_descriptor_init();
     ESP_ERROR_CHECK(usb_config_init());
     tinyusb_config_t tusb_cfg = TINYUSB_DEFAULT_CONFIG();

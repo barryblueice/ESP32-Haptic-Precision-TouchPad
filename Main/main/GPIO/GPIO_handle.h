@@ -50,6 +50,4 @@ void gpio_init(void);
 void led_all_handle(uint8_t _state);
 BaseType_t led_send_command(gpio_num_t pin, led_mode_t mode, uint32_t interval_ms, uint32_t interval_ms_loop, uint32_t counts, bool loop);
 
-extern QueueHandle_t led_queue;
-
 #endif // GPIO_HANDLE_H

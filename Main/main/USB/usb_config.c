@@ -76,23 +76,25 @@ static void config_task(void *arg)
         current = cmd.epoch == epoch;
         if (current) { rstp_response(response, &request, status, payload, size); pending = true; completed = false; }
         taskEXIT_CRITICAL(&tx_lock);
-        if (!current) { connection_config_complete(); continue; }
-        input_wake_sender();
-        while (true) {
-            taskENTER_CRITICAL(&tx_lock);
-            current = cmd.epoch == epoch; bool done = completed;
-            taskEXIT_CRITICAL(&tx_lock);
-            if (!current) { connection_config_complete(); break; }
-            if (done) {
-                connection_config_complete();
-                if (status == RSTP_RESTART) {
-                    tud_disconnect();
-                    vTaskDelay(pdMS_TO_TICKS(50));
-                    esp_restart();
-                }
-                break;
+        if (current) {
+            input_wake_sender();
+            while (true) {
+                taskENTER_CRITICAL(&tx_lock);
+                current = cmd.epoch == epoch; bool done = completed;
+                taskEXIT_CRITICAL(&tx_lock);
+                if (!current || done) break;
+                ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
             }
-            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        }
+        connection_config_complete();
+        /* A saved restart-class write has already halted the parser at its
+         * boundary; losing the host before the ACK must not leave input dead. */
+        if (status == RSTP_RESTART) {
+            if (current) {
+                tud_disconnect();
+                vTaskDelay(pdMS_TO_TICKS(50));
+            }
+            esp_restart();
         }
     }
 }

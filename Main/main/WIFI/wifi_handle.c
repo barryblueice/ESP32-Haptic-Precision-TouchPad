@@ -127,6 +127,10 @@ void wifi_send_task(void *arg)
     unsigned kind = 0; /* 0 pointer, 1 heartbeat, 2 surface, 3 action, 4 settings ACK, 5 probe */
     uint32_t heartbeat_at = 0, surface_at = 0, sequence = 0;
     bool first_surface = true;
+    /* Settings replies to a receiver other than the configured one use a
+     * temporary ESP-NOW peer, removed once its single send completes. */
+    uint8_t temp_peer[6];
+    bool temp_peer_valid = false;
     while (true) {
         connection_lock();
         if (connection_selected(_2_4_MODE)) input_log_stats();
@@ -147,6 +151,7 @@ void wifi_send_task(void *arg)
             if ((kind == 0 || kind == 3) && !owner) { have_pending = false; kind = 1; }
             if (kind == 3) aux_output_event_complete(ok);
             else if (kind == 4) wireless_settings_reply_complete(ok);
+            if (kind == 4 && temp_peer_valid) { (void)esp_now_del_peer(temp_peer); temp_peer_valid = false; }
             else if (kind == 0) { if (ok) input_report_ack(&pending); have_pending = false; }
             if (!ok) {
                 if (connection_selected(_2_4_MODE)) input_submit_failed();
@@ -206,19 +211,31 @@ void wifi_send_task(void *arg)
                 if (kind == 4 && !esp_now_is_peer_exist(destination)) {
                     esp_now_peer_info_t peer = {.channel = ESPNOW_CHANNEL, .ifidx = WIFI_IF_STA};
                     memcpy(peer.peer_addr,destination,6);
-                    (void)esp_now_add_peer(&peer);
+                    if (esp_now_add_peer(&peer) == ESP_OK) { memcpy(temp_peer, destination, 6); temp_peer_valid = true; }
                 }
-                esp_err_t err = current ? esp_now_send(destination, packet, sizeof(packet)) : ESP_FAIL;
+                bool input_kind = kind == 0 || kind == 3;
+                uint32_t flight_epoch = connection_epoch();
+                esp_err_t err = ESP_FAIL;
+                if (current) {
+                    /* Register the flight first so a route drain cannot miss it,
+                     * then submit without holding the route lock: the Wi-Fi
+                     * driver may block and USB/BLE/parser share this mutex. */
+                    if (input_kind) connection_flight(_2_4_MODE, flight_epoch, true);
+                    connection_unlock();
+                    err = esp_now_send(destination, packet, sizeof(packet));
+                    connection_lock();
+                    if (err != ESP_OK && input_kind) connection_flight(_2_4_MODE, flight_epoch, false);
+                }
                 if (err == ESP_OK) {
                     in_flight = true;
                     if (kind == 1) heartbeat_at = now;
                     if (kind == 2) { surface_at = now; first_surface = false; }
-                    if (kind == 0 || kind == 3) {
+                    if (input_kind) {
                         prefer_aux = kind == 0;
-                        input_epoch = connection_epoch();
-                        connection_flight(_2_4_MODE, input_epoch, true);
+                        input_epoch = flight_epoch;
                     }
                 } else {
+                    if (kind == 4 && temp_peer_valid) { (void)esp_now_del_peer(temp_peer); temp_peer_valid = false; }
                     if (kind == 3) aux_output_unsubmitted();
                     if (kind == 4) wireless_settings_reply_complete(false);
                     if (current && (kind == 0 || kind == 3)) input_recover();

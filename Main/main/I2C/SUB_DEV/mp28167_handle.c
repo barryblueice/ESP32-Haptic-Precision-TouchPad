@@ -4,6 +4,7 @@
 #include "I2C/SUB_DEV/sub_dev.h"
 
 #define TAG "MP28167"
+#define MP28167_I2C_TIMEOUT_MS 50
 
 esp_err_t mp28167_set_vref_mv(uint16_t mv) {
     esp_err_t err;
@@ -18,19 +19,19 @@ esp_err_t mp28167_set_vref_mv(uint16_t mv) {
     uint8_t data_h[] = {MP28167_REG_VREF_H, v_h};
     uint8_t data_go[] = {MP28167_REG_VREF_GO, 0x01};
 
-    err = i2c_master_transmit(sub_dev_mp28167_handle, data_l, 2, -1);
+    err = i2c_master_transmit(sub_dev_mp28167_handle, data_l, 2, MP28167_I2C_TIMEOUT_MS);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to write VREF_L: 0x%x", err);
         return err;
     }
 
-    err = i2c_master_transmit(sub_dev_mp28167_handle, data_h, 2, -1);
+    err = i2c_master_transmit(sub_dev_mp28167_handle, data_h, 2, MP28167_I2C_TIMEOUT_MS);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to write VREF_H: 0x%x", err);
         return err;
     }
 
-    err = i2c_master_transmit(sub_dev_mp28167_handle, data_go, 2, -1);
+    err = i2c_master_transmit(sub_dev_mp28167_handle, data_go, 2, MP28167_I2C_TIMEOUT_MS);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to write VREF_GO: 0x%x", err);
         return err;
@@ -45,10 +46,17 @@ esp_err_t mp28167_set_vref_mv(uint16_t mv) {
 float mp28167_get_vref_mv() {
     uint8_t addr_h = MP28167_REG_VREF_H;
     uint8_t addr_l = MP28167_REG_VREF_L;
-    uint8_t val_h, val_l;
+    uint8_t val_h = 0, val_l = 0;
 
-    i2c_master_transmit_receive(sub_dev_mp28167_handle, &addr_h, 1, &val_h, 1, -1);
-    i2c_master_transmit_receive(sub_dev_mp28167_handle, &addr_l, 1, &val_l, 1, -1);
+    esp_err_t err = i2c_master_transmit_receive(sub_dev_mp28167_handle, &addr_h, 1, &val_h, 1,
+                                                MP28167_I2C_TIMEOUT_MS);
+    if (err == ESP_OK)
+        err = i2c_master_transmit_receive(sub_dev_mp28167_handle, &addr_l, 1, &val_l, 1,
+                                          MP28167_I2C_TIMEOUT_MS);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to read VREF: %s", esp_err_to_name(err));
+        return -1.0f;
+    }
 
     uint16_t v_raw = ((uint16_t)val_h << 3) | (val_l & 0x07);
     return v_raw * 0.8f;

@@ -86,6 +86,7 @@ static void cs40l25_surface_gesture(bool point) {
     if(ptp_haptic_click_intensity_get())surface_runtime_gesture(&haptic,point,now);
 }
 static surface_haptic_state_t cs40l25_surface_get_state(void) { return haptic.state; }
+static void cs40l25_surface_kick(void) { }
 static uint32_t bsp_dut_apply_haptic_mapping(uint8_t press,uint8_t release,uint32_t a,uint32_t b,bool gpio) {
     if(a||b||gpio)++hardware_errors;mapped_press=press;mapped_release=release;return BSP_STATUS_OK;
 }
@@ -112,3 +113,4 @@ typedef struct { uint8_t peer_addr[6]; int channel,ifidx; } esp_now_peer_info_t;
 #define WIFI_IF_STA 0
 static bool esp_now_is_peer_exist(const uint8_t *mac) { (void)mac;return true; }
 static int esp_now_add_peer(const esp_now_peer_info_t *peer) { (void)peer;return ESP_OK; }
+static int esp_now_del_peer(const uint8_t *mac) { (void)mac;return ESP_OK; }

@@ -48,6 +48,7 @@ set(srcs
 
     "USB/usb_descriptor.c"
     "USB/usbhid.c"
+    "USB/usb_host_trace.c"
 
     "SYS/hid_msg.c"
     "SYS/rtos_queue.c"
@@ -95,6 +96,19 @@ idf_component_register(
         esp_event
         esp_wifi
 )
+
+# Diagnostic-only observers; leave TinyUSB and the normal HID callbacks intact.
+option(USB_HOST_TRACE "Trace USB enumeration and HID requests on the UART console" ON)
+if(USB_HOST_TRACE)
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE USB_HOST_TRACE_ENABLED=1)
+    target_link_libraries(${COMPONENT_LIB} INTERFACE
+        "-Wl,--wrap=dcd_event_handler"
+        "-Wl,--wrap=dcd_edpt_stall"
+        "-Wl,--wrap=tud_hid_get_report_cb"
+        "-Wl,--wrap=tud_hid_set_report_cb")
+else()
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE USB_HOST_TRACE_ENABLED=0)
+endif()
 
 # Keep this image out of normal / Force firmware builds.
 if(CONFIG_SURFACE_SYNAPTICS_UPDATE_MODE)

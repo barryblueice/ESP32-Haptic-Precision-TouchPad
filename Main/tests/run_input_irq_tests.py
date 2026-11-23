@@ -30,6 +30,8 @@ typedef struct { uint64_t pin_bit_mask; int mode, intr_type, pull_up_en, pull_do
 #define TP_INT_GPIO 4
 #define IRAM_ATTR
 #define ESP_LOGI(...) ((void)0)
+#define ESP_LOGW(...) ((void)0)
+static const char *esp_err_to_name(int e) { (void)e; return "err"; }
 #define portYIELD_FROM_ISR() ((void)0)
 static unsigned errors, pending_reports, reads, captures, failed, notifications, delays, budget;
 static bool fail_read, edge_on_enable;
